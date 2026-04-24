@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --color-primary: #f97316; /* orange-500 */
+  --color-primary-dark: #ea580c; /* orange-600 */
+  --color-secondary: #2563eb; /* blue-600 */
+  --color-accent: #facc15; /* yellow-400 */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html, body {
+    @apply bg-slate-50 text-slate-900 antialiased overflow-x-hidden;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+  }
+  
+  #root {
+    width: 100%;
+    overflow-x: hidden;
+  }
+  
+  .leaflet-container {
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+}
+
+.map-container {
+  height: 400px;
+  width: 100%;
+  border-radius: 40px;
+  overflow: hidden;
+  position: relative;
+  border: 4px solid white;
+  box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+}
+
+.vibrant-card {
+  @apply bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-all hover:shadow-xl;
+}
+
+.heading-accent {
+  @apply font-black uppercase tracking-widest text-[10px] text-primary;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

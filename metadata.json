@@ -1,0 +1,8 @@
+{
+  "name": "Ma Livraison Express",
+  "description": "Plateforme de livraison de colis en temps réel au Burkina Faso.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

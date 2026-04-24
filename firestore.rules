@@ -1,0 +1,145 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function existing() { return resource.data; }
+    function incoming() { return request.resource.data; }
+    function isVerified() { return isSignedIn(); }
+    
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'mandemohamed68@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'])
+      ); 
+    }
+    
+    function isDriver() {
+      return isSignedIn() && (
+             isAdmin() ||
+             (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver')
+      );
+    }
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return (data.userId == request.auth.uid || isAdmin()) &&
+               data.role in ['client', 'driver', 'admin', 'superadmin'] &&
+               data.role.size() < 12 &&
+               data.role is string &&
+               data.name is string && data.name.size() <= 100 &&
+               data.email is string && data.email.size() <= 100;
+      }
+      
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming());
+      allow update: if (isSignedIn() && request.auth.uid == userId && 
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'status', 'accountStatus', 'currentLocation', 'updatedAt', 'phone', 'vehicleType', 'licensePlate', 'isVerified', 'withdrawalRequested', 'withdrawalAmount', 'rating', 'totalDeliveries', 'email', 'driverType', 'address', 'termsAcceptedAt']) &&
+                       (existing().email != 'mandemohamed68@gmail.com' || incoming().role == 'superadmin')) || isAdmin();
+      allow delete: if isAdmin() && existing().email != 'mandemohamed68@gmail.com';
+    }
+
+    match /settings/{settingId} {
+      allow read: if true; 
+      allow write: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId} {
+      function isValidDelivery(data) {
+        return data.status in ['pending', 'accepted', 'picked_up', 'delivered', 'cancelled'] &&
+               data.from.lat is number && data.from.lng is number &&
+               data.to.lat is number && data.to.lng is number;
+      }
+
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid == existing().clientId || 
+        request.auth.uid == existing().driverId || 
+        (existing().status == 'pending' && isDriver())
+      );
+      
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() && isValidId(deliveryId) && (incoming().clientId == request.auth.uid || isAdmin()) && isValidDelivery(incoming()) && incoming().status == 'pending';
+      allow delete: if isAdmin();
+      allow update: if isSignedIn() && isValidDelivery(incoming()) && (
+        isAdmin() ||
+        // Action: Client accepts a bid (sets driver and cost)
+        (request.auth.uid == existing().clientId &&
+         existing().status == 'pending' &&
+         incoming().status == 'accepted' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'cost', 'updatedAt', 'vehicleType', 'paymentMethod', 'isPaid', 'clientProposedPrice'])) ||
+        // Action: Driver accepts job directly at client price
+        (isDriver() && 
+         existing().status == 'pending' &&
+         incoming().status == 'accepted' &&
+         incoming().driverId == request.auth.uid &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'cost', 'updatedAt'])) ||
+        // Action: Driver updates status
+        (request.auth.uid == existing().driverId &&
+         incoming().status in ['accepted', 'picked_up', 'delivered'] &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'currentLocation', 'isWeatherPaused', 'sosAlert', 'sosReason'])) ||
+        // Action: Driver cancels job (returns to pending)
+        (request.auth.uid == existing().driverId &&
+         incoming().status == 'pending' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'updatedAt'])) ||
+        // Action: Client cancels
+        (request.auth.uid == existing().clientId &&
+         existing().status == 'pending' &&
+         incoming().status == 'cancelled' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        // Action: Client pays or rates
+        (request.auth.uid == existing().clientId &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['isPaid', 'rating', 'feedback', 'updatedAt'])) ||
+        // Action: Driver/Client updates chat-related or other permitted fields
+        ((request.auth.uid == existing().clientId || request.auth.uid == existing().driverId) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt']))
+      );
+    }
+
+
+    match /deliveries/{deliveryId}/messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.clientId ||
+        request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId
+      ) && incoming().senderId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId}/bids/{driverId} {
+      allow read: if isSignedIn();
+      
+      allow create, update: if isDriver() && 
+                    request.auth.uid == driverId && 
+                    get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.status == 'pending' &&
+                    incoming().price is number && incoming().price > 0 &&
+                    incoming().driverId == request.auth.uid;
+      
+      allow delete: if request.auth.uid == driverId || isAdmin();
+    }
+
+    function canTrack(dId) {
+      let delivery = get(/databases/$(database)/documents/deliveries/$(dId)).data;
+      return isSignedIn() && (
+        request.auth.uid == delivery.clientId || 
+        request.auth.uid == delivery.driverId || 
+        isAdmin()
+      );
+    }
+    
+    match /deliveries/{deliveryId}/tracking/{trackId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId;
+      allow delete: if isAdmin();
+    }
+  }
+}
