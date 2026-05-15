@@ -15,8 +15,8 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
-  // PORT 3000 is required for infrastructure ingress
-  const PORT = 3000;
+  // Utilisation du port 3005 pour éviter conflit avec Metabase sur 3000
+  const PORT = process.env.PORT || 3005;
 
   app.use(express.json());
 
@@ -30,80 +30,6 @@ async function startServer() {
     connectionLimit: 10,
     queueLimit: 0
   });
-
-  // Database initialization
-  const initDb = async () => {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                userId VARCHAR(255) PRIMARY KEY,
-                name VARCHAR(255),
-                email VARCHAR(255) UNIQUE,
-                phone VARCHAR(50),
-                role VARCHAR(20),
-                avatarUrl TEXT,
-                accountStatus VARCHAR(20) DEFAULT 'active',
-                isVerified BOOLEAN DEFAULT FALSE,
-                city VARCHAR(100),
-                walletBalance DECIMAL(15,2) DEFAULT 0,
-                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        `);
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS deliveries (
-                id VARCHAR(255) PRIMARY KEY,
-                clientId VARCHAR(255),
-                driverId VARCHAR(255),
-                status VARCHAR(20),
-                fromAddress TEXT,
-                toAddress TEXT,
-                fromLat DOUBLE,
-                fromLng DOUBLE,
-                toLat DOUBLE,
-                toLng DOUBLE,
-                cost DECIMAL(10,2),
-                packageSize VARCHAR(20),
-                description TEXT,
-                pickupTime DATETIME,
-                contactName VARCHAR(255),
-                contactPhone VARCHAR(50),
-                paymentStatus VARCHAR(20),
-                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        `);
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS app_config (
-                appName VARCHAR(255) DEFAULT 'LIVRA EXPRESS',
-                currency VARCHAR(10) DEFAULT 'FCFA',
-                supportPhone VARCHAR(20),
-                maintenanceMode BOOLEAN DEFAULT FALSE,
-                mode VARCHAR(20) DEFAULT 'production',
-                platformFeePercent DECIMAL(5,2) DEFAULT 15,
-                driverSharePercent DECIMAL(5,2) DEFAULT 85,
-                minDeliveryCost DECIMAL(10,2) DEFAULT 500,
-                insuranceFeePercent DECIMAL(5,2) DEFAULT 2,
-                tarifKm DECIMAL(10,2) DEFAULT 200,
-                tarifPoids DECIMAL(10,2) DEFAULT 50,
-                fraisFixes DECIMAL(10,2) DEFAULT 300,
-                minRatioClient DECIMAL(5,2) DEFAULT 0.7,
-                maxRatioLivreur DECIMAL(5,2) DEFAULT 2.0,
-                maxSimultaneousDeliveries INT DEFAULT 2,
-                promoEnabled BOOLEAN DEFAULT FALSE,
-                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        `);
-        await pool.query(`
-            INSERT IGNORE INTO users (userId, name, email, role, accountStatus, isVerified, createdAt, updatedAt)
-            VALUES ('super-admin-uid', 'Super Admin', 'mandemohamed68@gmail.com', 'superadmin', 'active', 1, NOW(), NOW())
-        `);
-        console.log("✅ Tables de base de données initialisées.");
-    } catch (err: any) {
-        console.error("❌ Erreur d'initialisation DB :", err.message);
-    }
-  };
-  await initDb();
 
   // Test de connexion SQL au démarrage
   try {
@@ -522,50 +448,17 @@ async function startServer() {
   // ==========================================
   // API CONFIG / SETTINGS
   // ==========================================
-  app.get("/api/settings/app_config", async (req, res) => {
-    try {
-      const [rows]: any = await pool.query('SELECT * FROM app_config LIMIT 1');
-      if (rows.length === 0) {
-        const defaults = { 
-            appName: "LIVRA EXPRESS", 
-            currency: "FCFA", 
-            supportPhone: "+22600000000", 
-            maintenanceMode: 0, 
-            mode: "production", 
-            updatedAt: new Date().toISOString(),
-            platformFeePercent: 15,
-            driverSharePercent: 85,
-            minDeliveryCost: 500,
-            insuranceFeePercent: 2,
-            tarifKm: 200,
-            tarifPoids: 50,
-            fraisFixes: 300,
-            minRatioClient: 0.7,
-            maxRatioLivreur: 2.0,
-            maxSimultaneousDeliveries: 2,
-            promoEnabled: 0
-        };
-        await pool.query('INSERT INTO app_config SET ?', [defaults]);
-        return res.json(defaults);
-      }
-      res.json(rows[0]);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/settings/app_config", async (req, res) => {
-    try {
-      const updates = req.body;
-      const keys = Object.keys(updates);
-      if (keys.length === 0) return res.json({ success: true });
-      const sql = `UPDATE app_config SET ${keys.map(k => `${k} = ?`).join(', ')}`;
-      const params = keys.map(k => updates[k]);
-      await pool.query(sql, params);
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
+  app.get("/api/settings/app_config", (req, res) => {
+    // Current hardcoded or fetch from DB if we move settings to DB later
+    // For now, return a default config if not found
+    res.json({
+        appName: "LIVRA EXPRESS",
+        currency: "FCFA",
+        supportPhone: "+22600000000",
+        maintenanceMode: false,
+        mode: "production",
+        updatedAt: new Date().toISOString()
+    });
   });
 
   app.listen(Number(PORT), "0.0.0.0", () => {
