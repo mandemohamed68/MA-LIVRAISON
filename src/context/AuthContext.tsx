@@ -77,23 +77,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     };
 
-    // Global Config Listener (Shared)
-    const unsubConfig = onSnapshot(doc(db, 'settings', 'app_config'), (snap) => {
-      if (snap.exists()) {
-        setAppConfig(snap.data() as AppConfig);
+    // Global Config Listener (SQL)
+    const fetchConfig = async () => {
+      try {
+        const config = await api.getInitialConfig();
+        setAppConfig(config);
+      } catch (error: any) {
+        console.warn("Config fetch failed:", error.message);
+        setAppConfig({ mode: 'test', updatedAt: new Date().toISOString() });
+      } finally {
+        configReady = true;
+        checkReady();
       }
-      configReady = true;
-      checkReady();
-    }, (error) => {
-      console.warn("Config listener failed (quota), using defaults:", error.message);
-      setAppConfig({ mode: 'test', updatedAt: new Date().toISOString() });
-      configReady = true;
-      checkReady();
-    });
+    };
+    fetchConfig();
 
     // Auth State Listener
-    let unsubProfile: (() => void) | null = null;
-    let unsubNotifications: (() => void) | null = null;
+    let notifsInterval: any = null;
 
     // Safety timeout to prevent getting stuck on splash screen
     const safetyTimeout = setTimeout(() => {
@@ -101,14 +101,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       configReady = true;
       authHandled = true;
       setIsAuthReady(true);
-    }, 4500); // 4.5s matches the LoadingScreen's approx timeline
+    }, 4500); 
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       setUser(authUser);
       
-      // Cleanup previous user listeners
-      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
-      if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
+      if (notifsInterval) clearInterval(notifsInterval);
 
       if (authUser) {
         try {
@@ -136,18 +134,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           setProfile(localProfile);
 
-          // Notifications Listener (Centralized - Firestore as backup/degraded mode)
-          const q = query(
-            collection(db, 'notifications'),
-            where('userId', '==', authUser.uid),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-          );
-
-          unsubNotifications = onSnapshot(q, (snapshot) => {
-            const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
-            setNotifications(notifs);
-          }, (err) => console.warn("Notifications listener error:", err.message));
+          // Notifications Polling (SQL)
+          const fetchNotifs = async () => {
+            try {
+              const data = await api.getNotifications(authUser.uid);
+              setNotifications(data);
+            } catch (err: any) {
+              console.warn("Notifications fetch error:", err.message);
+            }
+          };
+          fetchNotifs();
+          notifsInterval = setInterval(fetchNotifs, 15000); // 15s poll
         } catch (authError) {
           console.error("Error in auth session setup:", authError);
         }
@@ -161,10 +158,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       clearTimeout(safetyTimeout);
-      unsubConfig();
       unsubAuth();
-      if (unsubProfile) unsubProfile();
-      if (unsubNotifications) unsubNotifications();
+      if (notifsInterval) clearInterval(notifsInterval);
     };
   }, []);
 

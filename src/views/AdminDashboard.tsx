@@ -19,6 +19,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { cn } from '../lib/utils';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { useAuth, ADMIN_EMAILS } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LiveMap from '../components/LiveMap';
 import { sendNotification } from '../lib/notificationService';
@@ -128,27 +129,31 @@ export default function AdminDashboard() {
       return;
     }
 
-    const handleError = (collectionName: string) => (error: any) => {
-      console.warn(`Permission error on ${collectionName}:`, error.message);
-      // We don't want to crash, so we just log it. 
-      // If it's a critical failure, we could show a UI state.
+    const fetchData = async () => {
+      try {
+        const [deliveriesData, usersData] = await Promise.all([
+          api.getDeliveries(),
+          api.getUsers()
+        ]);
+        
+        // Mapping as done in other views
+        const mappedDeliveries = deliveriesData.map((d: any) => ({
+          ...d,
+          from: d.fromAddress ? { address: d.fromAddress, lat: d.fromLat, lng: d.fromLng } : d.from,
+          to: d.toAddress ? { address: d.toAddress, lat: d.toLat, lng: d.toLng } : d.to,
+        }));
+        
+        setDeliveries(mappedDeliveries);
+        setUsers(usersData);
+      } catch (error) {
+        console.error("Error fetching data from API:", error);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const unsubDeliveries = onSnapshot(
-      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc')), 
-      (snap) => {
-        setDeliveries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'deliveries')
-    );
-
-    const unsubUsers = onSnapshot(
-      collection(db, 'users'), 
-      (snap) => {
-        setUsers(snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile)));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'users')
-    );
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // 30s poll
 
     const unsubCommission = onSnapshot(
       doc(db, 'settings', 'commissions'), 
@@ -208,8 +213,7 @@ export default function AdminDashboard() {
 
     return () => {
       clearTimeout(timeout);
-      unsubDeliveries();
-      unsubUsers();
+      clearInterval(interval);
       unsubCommission();
       unsubSectors();
       unsubAnnouncements();
@@ -1018,10 +1022,10 @@ export default function AdminDashboard() {
                       <button 
                         onClick={async () => {
                           try {
-                            await updateDoc(doc(db, 'users', u.userId), { 
+                            await api.updateUser(u.userId, { 
                               accountStatus: 'active',
                               verificationStatus: 'verified',
-                              isVerified: true,
+                              isVerified: 1,
                               updatedAt: new Date().toISOString()
                             });
                             await sendNotification(
@@ -1054,7 +1058,7 @@ export default function AdminDashboard() {
                            onClick={async () => {
                              const action = u.accountStatus === 'suspended' ? 'active' : 'suspended';
                              try {
-                               await updateDoc(doc(db, 'users', u.userId), { 
+                               await api.updateUser(u.userId, { 
                                  accountStatus: action,
                                  updatedAt: new Date().toISOString()
                                });

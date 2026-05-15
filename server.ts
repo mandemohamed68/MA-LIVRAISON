@@ -55,6 +55,32 @@ async function startServer() {
   // 1. GESTION DES UTILISATEURS (Remplace Firestore 'users')
   // ==========================================
 
+  app.get("/api/users", async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM users ORDER BY createdAt DESC');
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/users/:id", async (req, res) => {
+    try {
+      const updates = req.body;
+      const keys = Object.keys(updates);
+      if (keys.length === 0) return res.json({ success: true });
+
+      const setClause = keys.map(k => `${k} = ?`).join(', ');
+      const values = keys.map(k => updates[k]);
+      values.push(req.params.id);
+
+      await pool.query(`UPDATE users SET ${setClause} WHERE userId = ?`, values);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/users/:id", async (req, res) => {
     try {
       const [rows]: any = await pool.query('SELECT * FROM users WHERE userId = ?', [req.params.id]);
@@ -150,8 +176,87 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/deliveries/:id", async (req, res) => {
+    try {
+      await pool.query('DELETE FROM deliveries WHERE id = ?', [req.params.id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ==========================================
-  // 3. INTÉGRATION SAPPAY (Conservée)
+  // 3. GESTION DES MESSAGES (CHAT)
+  // ==========================================
+
+  app.get("/api/deliveries/:id/messages", async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM messages WHERE deliveryId = ? ORDER BY createdAt ASC', [req.params.id]);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/deliveries/:id/messages", async (req, res) => {
+    try {
+      const { senderId, text, isAdmin } = req.body;
+      await pool.query('INSERT INTO messages (deliveryId, senderId, text, isAdmin) VALUES (?, ?, ?, ?)', 
+        [req.params.id, senderId, text, isAdmin || false]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // 3.B GESTION DES OFFRES (BIDS)
+  // ==========================================
+
+  app.get("/api/deliveries/:id/bids", async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM bids WHERE deliveryId = ? ORDER BY price ASC', [req.params.id]);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/deliveries/:id/bids", async (req, res) => {
+    try {
+      const { driverId, driverName, price, timeEstimateMins } = req.body;
+      await pool.query('INSERT INTO bids (deliveryId, driverId, driverName, price, timeEstimateMins) VALUES (?, ?, ?, ?, ?)', 
+        [req.params.id, driverId, driverName, price, timeEstimateMins]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // 4. GESTION DES NOTIFICATIONS
+  // ==========================================
+
+  app.get("/api/notifications/:userId", async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50', [req.params.userId]);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    try {
+      await pool.query('UPDATE notifications SET isRead = TRUE WHERE id = ?', [req.params.id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // 5. INTÉGRATION SAPPAY (Conservée)
   // ==========================================
   const SAPPAY_BASE_PUBLIC = "https://api.prod.sappay.net/api/public";
   const SAPPAY_BASE_CHECKOUT = "https://api.prod.sappay.net/api/checkout";
@@ -340,7 +445,21 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  // ==========================================
+  // API CONFIG / SETTINGS
+  // ==========================================
+  app.get("/api/settings/app_config", (req, res) => {
+    // Current hardcoded or fetch from DB if we move settings to DB later
+    // For now, return a default config if not found
+    res.json({
+        appName: "LIVRA EXPRESS",
+        currency: "FCFA",
+        supportPhone: "+22600000000",
+        maintenanceMode: false
+    });
+  });
+
+  app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

@@ -11,17 +11,6 @@ import {
 } from "react-leaflet";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
-import { db } from "../lib/firebase";
-import {
-  collection,
-  addDoc,
-  doc,
-  getDoc,
-  query,
-  where,
-  onSnapshot,
-} from "firebase/firestore";
-import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
 import {
   Navigation,
   ArrowLeft,
@@ -256,70 +245,37 @@ export default function CreateDelivery() {
   >("cash");
 
   useEffect(() => {
-    getDoc(doc(db, "settings", "commissions")).then((snap) => {
-      if (snap.exists())
-        setCommissionSettings(snap.data() as CommissionSettings);
+    // Initial Config (SQL)
+    api.getInitialConfig().then((config) => {
+      // In our simple SQL setup, we merge commissions into central config or have a separate endpoint
+      // For now we'll mock the commissions if not found or try to get them
+      setCommissionSettings({ baseCommission: 0.1, minCommission: 200, updatedAt: new Date().toISOString() });
     });
 
-    let unsubRecent: (() => void) | undefined;
-
-    // Pre-fill senderPhone per user request
-    if (profile?.userId) {
-      if (!senderPhone && profile.phone) {
-        setSenderPhone(profile.phone);
+    const fetchData = async () => {
+      try {
+        const drivers = await api.getUsers();
+        const driversList = drivers.filter((d: any) => d.role === 'driver' || d.role === 'admin' || d.role === 'superadmin');
+        const available = driversList.filter((d: any) => d.status === 'online' && d.accountStatus !== 'suspended').length;
+        const busy = driversList.filter((d: any) => d.status === 'busy' && d.accountStatus !== 'suspended').length;
+        setDriversAvailable(available);
+        setDriversBusy(busy);
+      } catch (e) {
+        console.error("Error fetching drivers:", e);
       }
-      const deliveriesRef = collection(db, "deliveries");
-      const qRecent = query(
-        deliveriesRef,
-        where("clientId", "==", profile.userId)
-      );
+    };
 
-      unsubRecent = onSnapshot(
-        qRecent,
-        (snap) => {
-          if (!snap.empty) {
-            const docs = snap.docs.map((d) => d.data());
-            // Sort by createdAt manually since we might not have the index
-            const sorted = docs.sort(
-              (a, b) =>
-                new Date(b.createdAt || 0).getTime() -
-                new Date(a.createdAt || 0).getTime()
-            );
-          }
-        },
-        (error) =>
-          handleFirestoreError(error, OperationType.LIST, "deliveries (recent)")
-      );
-    }
+    fetchData();
+    const interval = setInterval(fetchData, 15000);
 
     detectLocation();
 
-    // Check for online drivers
-    const unsub = onSnapshot(
-      query(
-        collection(db, "users"),
-        where("role", "in", ["driver", "admin", "superadmin"])
-      ),
-      (snap) => {
-        const drivers = snap.docs.map((d) => d.data());
-        // A driver is available if they are online and NOT suspended
-        // We include those with pending_approval if they have at least gone online
-        const available = drivers.filter(
-          (d) => (d.status === "online") && d.accountStatus !== "suspended"
-        ).length;
-        const busy = drivers.filter(
-          (d) => d.status === "busy" && d.accountStatus !== "suspended"
-        ).length;
+    // Pre-fill senderPhone
+    if (profile?.phone && !senderPhone) {
+      setSenderPhone(profile.phone);
+    }
 
-        setDriversAvailable(available);
-        setDriversBusy(busy);
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, "users")
-    );
-    return () => {
-      unsub();
-      if (unsubRecent) unsubRecent();
-    };
+    return () => clearInterval(interval);
   }, [profile?.userId]);
 
   const handleApplyPromo = () => {

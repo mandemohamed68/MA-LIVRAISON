@@ -8,9 +8,23 @@ const API_BASE = ''; // Empty string means Same-Origin (relative to the current 
 
 export const api = {
   // --- USERS ---
+  async getUsers() {
+    const res = await fetch(`${API_BASE}/api/users`);
+    return res.json();
+  },
+
   async getUser(userId: string) {
     const res = await fetch(`${API_BASE}/api/users/${userId}`);
     if (!res.ok) throw new Error('User not found');
+    return res.json();
+  },
+
+  async updateUser(userId: string, updates: any) {
+    const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
     return res.json();
   },
 
@@ -54,6 +68,62 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
     });
+    return res.json();
+  },
+
+  async deleteDelivery(id: string) {
+    const res = await fetch(`${API_BASE}/api/deliveries/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  // --- CHAT ---
+  async getMessages(deliveryId: string) {
+    const res = await fetch(`${API_BASE}/api/deliveries/${deliveryId}/messages`);
+    return res.json();
+  },
+
+  async sendMessage(deliveryId: string, messageData: { senderId: string; text: string; isAdmin?: boolean }) {
+    const res = await fetch(`${API_BASE}/api/deliveries/${deliveryId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(messageData)
+    });
+    return res.json();
+  },
+
+  // --- BIDS ---
+  async getBids(deliveryId: string) {
+    const res = await fetch(`${API_BASE}/api/deliveries/${deliveryId}/bids`);
+    return res.json();
+  },
+
+  async placeBid(deliveryId: string, bidData: { driverId: string; driverName: string; price: number; timeEstimateMins: number }) {
+    const res = await fetch(`${API_BASE}/api/deliveries/${deliveryId}/bids`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bidData)
+    });
+    return res.json();
+  },
+
+  // --- NOTIFICATIONS ---
+  async getNotifications(userId: string) {
+    const res = await fetch(`${API_BASE}/api/notifications/${userId}`);
+    return res.json();
+  },
+
+  async markNotificationRead(id: number) {
+    const res = await fetch(`${API_BASE}/api/notifications/${id}/read`, {
+      method: 'PATCH'
+    });
+    return res.json();
+  },
+
+  // --- CONFIG ---
+  async getInitialConfig() {
+    const res = await fetch(`${API_BASE}/api/settings/app_config`);
     return res.json();
   }
 };

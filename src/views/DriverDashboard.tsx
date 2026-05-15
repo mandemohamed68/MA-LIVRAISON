@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { DeliveryRequest, CommissionSettings } from '../types';
 import { Compass, History as HistoryIcon, Wallet, User, Navigation, Package, DollarSign, Zap, CheckCircle, ShieldCheck, MapPin, X, ArrowRight, ArrowLeft, ChevronRight, Menu, List, Check, Info, Camera, Target, FileText, FileCheck, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -277,27 +278,33 @@ export default function DriverDashboard() {
 
     const watchId = requestGeolocation();
 
-    const unsubPending = onSnapshot(query(collection(db, 'deliveries'), where('status', '==', 'pending')), (snap) => {
-      let jobs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
-      if (!isOnline) {
-           setPendingJobs([]);
-      } else {
-           setPendingJobs(jobs);
-      }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (pending)'));
+    const fetchData = async () => {
+      try {
+        const [pendingData, myDeliveriesData] = await Promise.all([
+          api.getDeliveries({ status: 'pending' }),
+          api.getDeliveries({ driverId: profile.userId })
+        ]);
 
-    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId)), (snap) => {
-      const allMyJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryRequest));
-      const activeList = allMyJobs.filter(j => ['accepted', 'picked_up'].includes(j.status));
-      const deliveredList = allMyJobs.filter(j => j.status === 'delivered');
-      
-      setActiveJobs(activeList);
-      setDeliveredJobs(deliveredList);
-      setLoading(false);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'deliveries (active)');
-      setLoading(false);
-    });
+        if (!isOnline) {
+          setPendingJobs([]);
+        } else {
+          setPendingJobs(pendingData);
+        }
+
+        const activeList = myDeliveriesData.filter((j: any) => ['accepted', 'picked_up'].includes(j.status));
+        const deliveredList = myDeliveriesData.filter((j: any) => j.status === 'delivered');
+
+        setActiveJobs(activeList);
+        setDeliveredJobs(deliveredList);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching deliveries:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // 30s poll
 
     const timeout = setTimeout(() => {
       setLoading(false);
@@ -305,9 +312,8 @@ export default function DriverDashboard() {
 
     return () => {
       clearTimeout(timeout);
+      clearInterval(interval);
       if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
-      unsubPending();
-      unsubActive();
     };
   }, [profile]);
 
