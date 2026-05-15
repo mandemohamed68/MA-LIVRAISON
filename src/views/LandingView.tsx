@@ -8,7 +8,7 @@ import { UserRole } from '../types';
 import { LoadingScreen } from '../components/LoadingScreen';
 import logoUrl from '../assets/logo.png';
 
-type AuthMode = 'login' | 'register' | 'phone';
+type AuthMode = 'login' | 'register' | 'phone' | 'forgot';
 
 const compressImage = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -66,7 +66,7 @@ const compressImage = async (file: File): Promise<string> => {
 
 export default function LandingView() {
   const { 
-    user, profile, loading: authLoading, login, loginWithEmail, registerWithEmail, loginWithPhone, 
+    user, profile, loading: authLoading, login, loginWithEmail, registerWithEmail, resetPassword, loginWithPhone, 
     updateProfile, isMasterAdmin 
   } = useAuth();
   const navigate = useNavigate();
@@ -108,6 +108,19 @@ export default function LandingView() {
     setError('');
     setLocalLoading(true);
     try {
+      if (authMode === 'forgot') {
+        if (!email) {
+          setError("Veuillez saisir votre adresse email.");
+          setLocalLoading(false);
+          return;
+        }
+        await resetPassword(email);
+        alert("Un email de réinitialisation a été envoyé à " + email);
+        setAuthMode('login');
+        setLocalLoading(false);
+        return;
+      }
+
       if (isRegistering) {
         if (role === 'driver') {
           if (!termsAccepted) {
@@ -577,23 +590,50 @@ export default function LandingView() {
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                 />
               </div>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
-                <input 
-                  required
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Mot de passe"
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
-                />
-              </div>
+              {authMode !== 'forgot' && (
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
+                  <input 
+                    required
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Mot de passe"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+              )}
+              
+              {!isRegistering && authMode === 'login' && (
+                <div className="flex justify-end px-1">
+                  <button 
+                    type="button"
+                    onClick={() => setAuthMode('forgot')}
+                    className="text-[9px] font-black text-slate-400 hover:text-orange-600 uppercase tracking-widest transition-colors italic"
+                  >
+                    Mot de passe oublié ?
+                  </button>
+                </div>
+              )}
+
+              {authMode === 'forgot' && (
+                <div className="flex justify-end px-1">
+                  <button 
+                    type="button"
+                    onClick={() => setAuthMode('login')}
+                    className="text-[9px] font-black text-slate-400 hover:text-orange-600 uppercase tracking-widest transition-colors italic"
+                  >
+                    Retour à la connexion
+                  </button>
+                </div>
+              )}
+
               <button 
                 type="submit"
                 disabled={localLoading}
                 className="w-full bg-slate-900 hover:bg-orange-600 text-white rounded-xl py-4 font-black text-[10px] uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center gap-2 group mt-2"
               >
-                {localLoading ? "Chargement..." : "Se connecter"}
+                {localLoading ? "Chargement..." : authMode === 'forgot' ? "Envoyer le lien" : "Se connecter"}
                 <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
             </form>

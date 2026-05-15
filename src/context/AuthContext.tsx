@@ -9,7 +9,8 @@ import {
   signInWithEmailAndPassword,
   RecaptchaVerifier,
   signInWithPhoneNumber,
-  ConfirmationResult
+  ConfirmationResult,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, query, collection, where, orderBy, limit } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -32,6 +33,7 @@ interface AuthContextType {
   login: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string, role: UserRole, extra?: Partial<UserProfile>) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   loginWithPhone: (phone: string, recaptchaContainerId: string) => Promise<ConfirmationResult>;
   logout: () => Promise<void>;
   updateRole: (role: UserRole) => Promise<void>;
@@ -191,17 +193,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      const isAdm = ADMIN_EMAILS.includes(email);
+      const assignedRole = isAdm ? 'superadmin' : role;
+      
       const newProfile: UserProfile = {
         userId: cred.user.uid,
         name,
         email,
-        role,
+        role: assignedRole,
         createdAt: new Date().toISOString(),
-        accountStatus: role === 'driver' ? 'pending_approval' : 'active',
+        accountStatus: assignedRole === 'driver' ? 'pending_approval' : 'active',
         ...extra
       };
       await api.syncUser(newProfile);
       setProfile(newProfile);
+      setLoading(false);
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
       setLoading(false);
     } catch (err) {
       setLoading(false);
@@ -236,7 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider value={{ 
       user, profile, loading, isAuthReady, isMasterAdmin, language, setLanguage, t, 
       appConfig, notifications,
-      login, loginWithEmail, registerWithEmail, loginWithPhone,
+      login, loginWithEmail, registerWithEmail, resetPassword, loginWithPhone,
       logout, updateRole, updateProfile 
     }}>
       {children}
