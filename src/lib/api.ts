@@ -125,5 +125,14 @@ export const api = {
   async getInitialConfig() {
     const res = await fetch(`${API_BASE}/api/settings/app_config`);
     return res.json();
+  },
+
+  async updateConfig(updates: any) {
+    const res = await fetch(`${API_BASE}/api/settings/app_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    return res.json();
   }
 };

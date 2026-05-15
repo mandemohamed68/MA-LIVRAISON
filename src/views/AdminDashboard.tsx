@@ -59,7 +59,7 @@ export default function AdminDashboard() {
     if (!configForm) return;
     setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'settings', 'app_config'), {
+      await api.updateConfig({
         ...configForm,
         updatedAt: new Date().toISOString()
       });
@@ -255,15 +255,15 @@ export default function AdminDashboard() {
     if (!commission) return;
     setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'settings', 'commissions'), {
+      await api.updateConfig({
         ...commission,
         updatedAt: new Date().toISOString(),
         updatedBy: profile?.userId || 'admin'
       });
-      console.log('Paramètres mis à jour avec succès !');
+      alert('Paramètres mis à jour avec succès !');
     } catch (error) {
       console.error('Error updating commission:', error);
-      console.log('Erreur lors de la mise à jour.');
+      alert('Erreur lors de la mise à jour.');
     } finally {
       setIsSaving(false);
     }
@@ -271,9 +271,9 @@ export default function AdminDashboard() {
 
   const handleToggleMode = async () => {
     if (!appConfig) return;
-    const newMode = appConfig.mode === 'test' ? 'prod' : 'test';
+    const newMode = appConfig.mode === 'test' ? 'production' : 'test';
     try {
-      await updateDoc(doc(db, 'settings', 'app_config'), {
+      await api.updateConfig({
         mode: newMode,
         updatedAt: new Date().toISOString()
       });
