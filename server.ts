@@ -2,16 +2,12 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
-import { initLocalDb, setupApiRoutes } from "./src/lib/serverLocalDb.js";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
-
-  // Initialize Local SQLite Database
-  initLocalDb();
 
   app.use(express.json());
 
@@ -25,10 +21,6 @@ async function startServer() {
     }
     next();
   });
-
-  // Setup generic NoSQL emulator routes
-  setupApiRoutes(app);
-
 
   // SAPPAY API Integration
   const SAPPAY_BASE_PUBLIC = "https://api.prod.sappay.net/api/public";

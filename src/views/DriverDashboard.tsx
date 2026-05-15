@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from '../lib/firebase';
+import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest, CommissionSettings } from '../types';

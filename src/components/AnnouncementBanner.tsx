@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Megaphone, Info, AlertTriangle, CheckCircle } from 'lucide-react';
-import { collection, query, where, onSnapshot } from '../lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { AppAnnouncement } from '../types';

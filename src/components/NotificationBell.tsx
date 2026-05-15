@@ -3,7 +3,7 @@ import { Bell, Info, Package, CheckCircle, Truck, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, orderBy, onSnapshot, deleteDoc, doc, updateDoc, writeBatch } from '../lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AppNotification } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { doc, onSnapshot, updateDoc, collection, deleteDoc } from '../lib/firebase';
+import { doc, onSnapshot, updateDoc, collection, deleteDoc } from 'firebase/firestore';
 import { DeliveryRequest, UserProfile } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';

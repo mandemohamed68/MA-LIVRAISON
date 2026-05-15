@@ -9,7 +9,7 @@ import {
   Timestamp,
   doc,
   updateDoc 
-} from '../lib/firebase';
+} from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { db } from '../lib/firebase';
 import { ChatMessage, UserProfile } from '../types';

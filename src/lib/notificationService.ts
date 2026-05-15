@@ -1,4 +1,4 @@
-import { collection, addDoc } from './firebase';
+import { collection, addDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { AppNotification } from '../types';
 

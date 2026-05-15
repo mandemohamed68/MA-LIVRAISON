@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp } from '../lib/firebase';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { initializeApp, deleteApp } from '../lib/firebase';
-import { getAuth, createUserWithEmailAndPassword } from '../lib/firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { DeliveryRequest, UserProfile, UserRole, CommissionSettings, AppConfig, DistancePricingRule, Sector, AppAnnouncement } from '../types';
 import { 

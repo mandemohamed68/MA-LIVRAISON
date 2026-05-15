@@ -10,8 +10,8 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult
-} from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from '../lib/firebase';
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile, UserRole, AppConfig } from '../types';
 import { AppLanguage, translations } from '../lib/translations';

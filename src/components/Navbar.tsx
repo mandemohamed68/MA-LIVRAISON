@@ -7,7 +7,7 @@ import NotificationBell from './NotificationBell';
 import { cn } from '../lib/utils';
 import { AppLanguage } from '../lib/translations';
 import { db } from '../lib/firebase';
-import { doc, onSnapshot } from '../lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { AppConfig } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import logoUrl from '../assets/logo.png';
