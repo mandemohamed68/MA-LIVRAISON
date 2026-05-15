@@ -9,20 +9,28 @@ Pour exécuter cette plateforme sur votre propre réseau (par exemple dans votre
 1.  Assurez-vous d'avoir installé **Node.js** (version 18+ recommandée) depuis https://nodejs.org.
 2.  Téléchargez (exportez) le projet sur votre machine (fichier ZIP) et extrayez-le.
 3.  Ouvrez un terminal ou invite de commandes dans le dossier extrait.
-4.  Exécutez la commande pour installer les dépendances (nécessaire à la première utilisation) :
+4.  Installez **PM2** globalement sur votre machine (optionnel mais recommandé pour que l'app tourne en arrière-plan) :
+    ```bash
+    npm install -g pm2
+    ```
+5.  Exécutez la commande pour installer les dépendances du projet :
     ```bash
     npm install
     ```
-5.  Construisez l'application en mode production :
+6.  Construisez l'application en mode production :
     ```bash
     npm run build
     ```
-6.  Lancez le serveur d'application local :
+7.  Lancez le serveur avec PM2 (qui utilisera la configuration `ecosystem.config.cjs` et le PORT 3005) :
     ```bash
-    npm start
+    pm2 start ecosystem.config.cjs
     ```
-    *Note: Ce serveur va distribuer l'application web, héberger l'API locale, et exposer la base de données SQLite (`local.db`).*
-7.  L'application sera accessible sur `http://localhost:3000`. Si vous souhaitez l'exposer à votre réseau local (téléphones, autres PC de votre bureau), remplacez `localhost` par l'adresse IP de votre machine (ex: `http://192.168.1.50:3000`).
+    Si vous devez redémarrer l'application à l'avenir (ou après des modifications), tapez simplement :
+    ```bash
+    pm2 restart all
+    ```
+    *(Si vous ne souhaitez pas utiliser PM2, vous pouvez juste faire `PORT=3005 npm start`)*
+8.  L'application sera accessible sur `http://localhost:3005`. Si vous souhaitez l'exposer à votre réseau local (téléphones, autres PC de votre bureau), remplacez `localhost` par l'adresse IP de votre machine (ex: `http://192.168.1.50:3005`).
 
 ## 2. Accès hors ligne et Base de données
 - Tout votre historique (livraisons, devis, utilisateurs) sera sauvegardé dans le fichier **`local.db`** présent à la racine du projet. 

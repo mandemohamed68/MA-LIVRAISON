@@ -2,12 +2,17 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
+import { initLocalDb, setupApiRoutes } from "./src/lib/serverLocalDb.js";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Pour le déploiement local, vous pouvez utiliser le port 3005 (ex: PORT=3005 npm run start)
+  const PORT = process.env.PORT || 3000;
+
+  // Initialize Local SQLite Database
+  initLocalDb();
 
   app.use(express.json());
 
@@ -21,6 +26,9 @@ async function startServer() {
     }
     next();
   });
+
+  // Database API endpoints
+  setupApiRoutes(app);
 
   // SAPPAY API Integration
   const SAPPAY_BASE_PUBLIC = "https://api.prod.sappay.net/api/public";
