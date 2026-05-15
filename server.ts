@@ -3,15 +3,44 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
 
+import mysql from "mysql2/promise";
+
 dotenv.config();
+
+/**
+ * SERVEUR EXPRESS DE PRODUCTION - MODE SQL
+ * ---------------------------------------
+ * Remplace Firestore par MariaDB/MySQL pour les données (Utilisateurs, Livraisons).
+ */
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Utilisation du port 3005 pour éviter conflit avec Metabase sur 3000
+  const PORT = process.env.PORT || 3005;
 
   app.use(express.json());
 
-  // Permettre les requêtes CORS depuis l'application mobile (Capacitor) vers l'API Express
+  // Configuration de la base de données SQL
+  const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'livra_user',
+    password: process.env.DB_PASS || 'password',
+    database: process.env.DB_NAME || 'livra_db',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  });
+
+  // Test de connexion SQL au démarrage
+  try {
+    const conn = await pool.getConnection();
+    console.log("✅ Connecté avec succès à la base de données SQL.");
+    conn.release();
+  } catch (err: any) {
+    console.error("❌ Erreur critique de connexion SQL :", err.message);
+  }
+
+  // Permettre les requêtes CORS
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
@@ -22,7 +51,108 @@ async function startServer() {
     next();
   });
 
-  // SAPPAY API Integration
+  // ==========================================
+  // 1. GESTION DES UTILISATEURS (Remplace Firestore 'users')
+  // ==========================================
+
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const [rows]: any = await pool.query('SELECT * FROM users WHERE userId = ?', [req.params.id]);
+      if (rows.length === 0) return res.status(404).json({ error: "User not found" });
+      res.json(rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/users", async (req, res) => {
+    try {
+      const { userId, name, email, role, phone, avatarUrl, accountStatus } = req.body;
+      const query = `
+        INSERT INTO users (userId, name, email, role, phone, avatarUrl, accountStatus, updatedAt) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE 
+        name = VALUES(name), email = VALUES(email), role = VALUES(role), 
+        phone = VALUES(phone), avatarUrl = VALUES(avatarUrl), 
+        accountStatus = VALUES(accountStatus), updatedAt = NOW()
+      `;
+      await pool.query(query, [userId, name, email, role, phone || null, avatarUrl || null, accountStatus || 'active']);
+      res.json({ success: true, message: "User profile synchronized" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // 2. GESTION DES LIVRAISONS (Remplace Firestore 'deliveries')
+  // ==========================================
+
+  app.get("/api/deliveries", async (req, res) => {
+    try {
+      const { clientId, driverId, status } = req.query;
+      let q = 'SELECT * FROM deliveries WHERE 1=1';
+      let params = [];
+      
+      if (clientId) { q += ' AND clientId = ?'; params.push(clientId); }
+      if (driverId) { q += ' AND driverId = ?'; params.push(driverId); }
+      if (status) { q += ' AND status = ?'; params.push(status); }
+      
+      q += ' ORDER BY createdAt DESC LIMIT 100';
+
+      const [rows] = await pool.query(q, params);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/deliveries/:id", async (req, res) => {
+    try {
+      const [rows]: any = await pool.query('SELECT * FROM deliveries WHERE id = ?', [req.params.id]);
+      if (rows.length === 0) return res.status(404).json({ error: "Delivery not found" });
+      res.json(rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/deliveries", async (req, res) => {
+    try {
+      const data = req.body;
+      const query = `
+        INSERT INTO deliveries 
+        (id, clientId, driverId, status, fromAddress, toAddress, fromLat, fromLng, toLat, toLng, cost, packageSize, description, pickupTime, contactName, contactPhone, paymentStatus, createdAt, updatedAt) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `;
+      await pool.query(query, [
+        data.id, data.clientId, data.driverId || null, data.status || 'pending', 
+        data.fromAddress, data.toAddress, data.fromLat, data.fromLng, data.toLat, data.toLng,
+        data.cost, data.packageSize, data.description, data.pickupTime, data.contactName, data.contactPhone,
+        data.paymentStatus || 'pending'
+      ]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/deliveries/:id", async (req, res) => {
+    try {
+      const updates = req.body;
+      const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+      const values = [...Object.values(updates), req.params.id];
+      
+      const query = `UPDATE deliveries SET ${fields}, updatedAt = NOW() WHERE id = ?`;
+      await pool.query(query, values);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
+  // 3. INTÉGRATION SAPPAY (Conservée)
+  // ==========================================
   const SAPPAY_BASE_PUBLIC = "https://api.prod.sappay.net/api/public";
   const SAPPAY_BASE_CHECKOUT = "https://api.prod.sappay.net/api/checkout";
 

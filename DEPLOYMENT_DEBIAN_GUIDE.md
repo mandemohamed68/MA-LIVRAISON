@@ -197,3 +197,48 @@ sudo nginx -t
 sudo systemctl restart nginx
 sudo ufw allow 3006/tcp
 ```
+
+## 9. Mise à jour via Git (Update Flow)
+
+Lorsque vous faites des modifications dans l'éditeur AI Studio et que vous voulez les voir sur votre serveur local :
+
+1.  **Sur votre serveur local**, allez dans le dossier :
+    ```bash
+    cd /var/www/MA-LIVRAISON
+    ```
+2.  **Récupérez les changements :**
+    ```bash
+    git pull origin main
+    ```
+3.  **Réinstallez les dépendances :**
+    ```bash
+    npm install
+    ```
+4.  **Reconstruisez le projet :**
+    ```bash
+    npm run build
+    ```
+5.  **Redémarrez le service :**
+    ```bash
+    pm2 restart livra-express
+    ```
+
+## 10. Initialisation de la Base de Données SQL
+
+Pour que le serveur fonctionne, vous devez créer les tables. 
+1. Connectez-vous à votre base de données :
+   ```bash
+   mysql -u livra_user -p livra_db
+   ```
+2. Copiez et collez le contenu du fichier `schema.sql` qui se trouve à la racine du projet.
+
+## 11. Configuration du fichier .env
+Vérifiez que votre fichier `/var/www/MA-LIVRAISON/.env` contient les bonnes informations :
+```env
+DB_HOST=localhost
+DB_USER=livra_user
+DB_PASS=mm@27071986@
+DB_NAME=livra_db
+PORT=3005
+NODE_ENV=production
+```

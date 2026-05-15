@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, query, collection, where, orderBy, limit } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { api } from '../lib/api';
 import { UserProfile, UserRole, AppConfig, AppNotification } from '../types';
 import { AppLanguage, translations } from '../lib/translations';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
@@ -111,17 +112,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (authUser) {
         try {
-          // Profile setup...
-          const userRef = doc(db, 'users', authUser.uid);
-          const userDoc = await getDoc(userRef).catch(err => {
-            console.error("Quota error or other on getDoc:", err);
-            return null;
-          });
+          // PROFILE SETUP (SQL LOCAL)
+          let localProfile: UserProfile | null = null;
+          try {
+            localProfile = await api.getUser(authUser.uid);
+          } catch (e) {
+            console.log("SQL Profile not found, checking fallback or creating...");
+          }
           
-          if (userDoc && !userDoc.exists()) {
+          if (!localProfile) {
             const isAdm = authUser.email ? ADMIN_EMAILS.includes(authUser.email) : false;
             const role: UserRole = isAdm ? 'superadmin' : 'client';
-            const newProfile: UserProfile = {
+            localProfile = {
               userId: authUser.uid,
               name: isAdm ? 'Administrateur' : (authUser.displayName || 'Utilisateur'),
               email: authUser.email || '',
@@ -129,35 +131,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               accountStatus: 'active',
               createdAt: new Date().toISOString(),
             };
-            await setDoc(userRef, newProfile).catch(e => console.error("Error creating profile:", e));
-            setProfile(newProfile);
-          } else if (userDoc) {
-            setProfile(userDoc.data() as UserProfile);
-          } else {
-            // Quota reached or other failure, but we have authUser
-            // Fallback for Master Admin if Firestore is failing
-            if (authUser.email && ADMIN_EMAILS.includes(authUser.email)) {
-              console.log("Firestore failing, but user is known admin. Setting fallback admin profile.");
-              setProfile({
-                userId: authUser.uid,
-                name: 'Administrateur (Mode Dégradé)',
-                email: authUser.email,
-                role: 'superadmin',
-                accountStatus: 'active',
-                createdAt: new Date().toISOString()
-              });
-            }
+            await api.syncUser(localProfile).catch(e => console.error("Error creating profile in SQL:", e));
           }
+          
+          setProfile(localProfile);
 
-          unsubProfile = onSnapshot(userRef, (snap) => {
-            if (snap.exists()) {
-              setProfile(snap.data() as UserProfile);
-            }
-          }, (error) => {
-            console.warn("Profile listener error (likely quota):", error.message);
-          });
-
-          // Notifications Listener (Centralized)
+          // Notifications Listener (Centralized - Firestore as backup/degraded mode)
           const q = query(
             collection(db, 'notifications'),
             where('userId', '==', authUser.uid),
@@ -168,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unsubNotifications = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification));
             setNotifications(notifs);
-          }, (err) => console.warn("Notifications listener error (likely quota):", err.message));
+          }, (err) => console.warn("Notifications listener error:", err.message));
         } catch (authError) {
           console.error("Error in auth session setup:", authError);
         }
@@ -225,7 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         accountStatus: role === 'driver' ? 'pending_approval' : 'active',
         ...extra
       };
-      await setDoc(doc(db, 'users', cred.user.uid), newProfile);
+      await api.syncUser(newProfile);
       setProfile(newProfile);
       setLoading(false);
     } catch (err) {
@@ -244,15 +223,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => signOut(auth);
 
   const updateRole = async (role: UserRole) => {
-    if (!user) return;
-    await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
-    setProfile(prev => prev ? { ...prev, role } : null);
+    if (!user || !profile) return;
+    const updated = { ...profile, role };
+    await api.syncUser(updated);
+    setProfile(updated);
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
-    if (!user) return;
-    await setDoc(doc(db, 'users', user.uid), data, { merge: true });
-    setProfile(prev => prev ? { ...prev, ...data } : null);
+    if (!user || !profile) return;
+    const updated = { ...profile, ...data };
+    await api.syncUser(updated);
+    setProfile(updated);
   };
 
   return (

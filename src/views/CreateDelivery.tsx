@@ -10,6 +10,7 @@ import {
   useMap,
 } from "react-leaflet";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../lib/api";
 import { db } from "../lib/firebase";
 import {
   collection,
@@ -415,28 +416,30 @@ export default function CreateDelivery() {
         // Since we are in the flow, we won't block the delivery but ideally we update Firestore
       }
 
-      const newDelivery = await addDoc(collection(db, "deliveries"), {
+      const deliveryData = {
+        id: crypto.randomUUID(), // Utiliser un UUID pour SQL
         clientId: profile.userId,
         clientName: profile.name,
-        from: { ...from, precision: fromPrecision },
-        to: { ...to, precision: toPrecision },
+        fromAddress: from.address,
+        toAddress: to.address,
+        fromLat: from.lat,
+        fromLng: from.lng,
+        toLat: to.lat,
+        toLng: to.lng,
         senderPhone: senderPhone || profile.phone || "",
         recipientPhone,
         vehicleType,
-        packageDetails: { size, weightStr: weight, notes },
-        baseCost: estimatedCost,
-        clientProposedPrice: Number(proposedPrice),
+        packageSize: size,
+        description: notes,
         cost: Number(proposedPrice),
-        isUrgent,
-        urgentFee: isUrgent ? 500 : 0,
-        paymentMethod: selectedPaymentMethod,
-        isPaid: false,
+        isUrgent: isUrgent ? 1 : 0,
+        paymentStatus: 'pending',
         status: "pending",
-        deliveryCode: pinCode, // This is our safety PIN
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      navigate(`/delivery/${newDelivery.id}`);
+        pickupTime: new Date().toISOString(),
+      };
+
+      await api.createDelivery(deliveryData);
+      navigate(`/delivery/${deliveryData.id}`);
     } catch (e) {
       console.error(e);
       alert("Erreur création");
