@@ -1,240 +1,214 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest, CommissionSettings } from '../types';
-import { MapPin, Truck, CheckCircle, Navigation, Package, DollarSign, XCircle, BellRing, AlertCircle, ShieldCheck, Zap, Info } from 'lucide-react';
+import { Compass, History as HistoryIcon, Wallet, User, Navigation, Package, DollarSign, Zap, CheckCircle, ShieldCheck, MapPin, X, ArrowRight, ArrowLeft, ChevronRight, Menu, List, Check, Info, Camera, Target, FileText, FileCheck, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { cn } from '../lib/utils';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { cn, calculateDistance } from '../lib/utils';
+import { LoadingScreen } from '../components/LoadingScreen';
+import { sendNotification } from '../lib/notificationService';
+import AnnouncementBanner from '../components/AnnouncementBanner';
+import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
+import { Chat } from '../components/Chat';
 
-// Icons setup
-// @ts-ignore
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-// @ts-ignore
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-// @ts-ignore
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+const mockChartData = [
+  { name: 'Lun', amount: 15000 },
+  { name: 'Mar', amount: 20000 },
+  { name: 'Mer', amount: 25000 },
+  { name: 'Jeu', amount: 5000 },
+  { name: 'Ven', amount: 35000 },
+  { name: 'Sam', amount: 45000 },
+  { name: 'Dim', amount: 12000 },
+];
 
-export default function DriverDashboard() {
-  const { profile } = useAuth();
-  const [pendingJobs, setPendingJobs] = useState<DeliveryRequest[]>([]);
-  const [activeJob, setActiveJob] = useState<DeliveryRequest | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
-  
-  const [biddingOn, setBiddingOn] = useState<string | null>(null);
-  const [bidPrice, setBidPrice] = useState<number | ''>('');
-  const [bidTime, setBidTime] = useState<number | ''>('');
-  const [bidReason, setBidReason] = useState('');
-  const [submittedBids, setSubmittedBids] = useState<string[]>([]);
-  const [commissionSettings, setCommissionSettings] = useState<CommissionSettings | null>(null);
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      const snap = await getDoc(doc(db, 'settings', 'commissions'));
-      if (snap.exists()) {
-        setCommissionSettings(snap.data() as CommissionSettings);
-      }
-    };
-    fetchSettings();
-  }, []);
-
-  useEffect(() => {
-    if (!profile) {
-      // If we've waited and there's no profile, stop loading (might show error or null state)
-      // but only after Auth state is definitely not loading
-      setLoading(false);
-      return;
-    }
-
-    // Track user location
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLocation(coords);
-        // Update driver location in Firestore
-        if (profile.role === 'driver') {
-          updateDoc(doc(db, 'users', profile.userId), { 
-            currentLocation: coords,
-            updatedAt: new Date().toISOString()
-          });
-        }
-      },
-      (err) => console.error(err),
-      { enableHighAccuracy: true }
-    );
-
-    // Listen for pending jobs (No vehicle filter anymore)
-    const qPending = query(
-      collection(db, 'deliveries'),
-      where('status', '==', 'pending')
-    );
-
-    const unsubPending = onSnapshot(qPending, 
-      (snapshot) => {
-        setPendingJobs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
-      },
-      (error) => {
-        console.warn("Driver pending jobs listener error:", error.message);
-      }
-    );
-
-    // Listen for active job assigned to this driver
-    const qActive = query(
-      collection(db, 'deliveries'),
-      where('driverId', '==', profile.userId),
-      where('status', 'in', ['accepted', 'picked_up'])
-    );
-
-    const unsubActive = onSnapshot(qActive, 
-      (snapshot) => {
-        const job = snapshot.docs[0];
-        setActiveJob(job ? ({ id: job.id, ...job.data() } as DeliveryRequest) : null);
-        setLoading(false);
-      },
-      (error) => {
-        console.warn("Driver active job listener error:", error.message);
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      navigator.geolocation.clearWatch(watchId);
-      unsubPending();
-      unsubActive();
-    };
-  }, [profile]);
-
-  const submitBid = async (deliveryId: string, directPrice?: number) => {
-    if (!profile) return;
-    
-    // If directPrice is provided, it means "Accepter au prix client" - direct assignment
-    if (directPrice) {
-      try {
-        await updateDoc(doc(db, 'deliveries', deliveryId), {
-          status: 'accepted',
-          driverId: profile.userId,
-          driverName: profile.name,
-          cost: directPrice,
-          updatedAt: new Date().toISOString()
-        });
-        setToastMessage("Course acceptée !");
-      } catch (e) {
-        console.error("Direct accept error:", e);
-        setToastMessage("Erreur lors de l'acceptation");
-      }
-      return;
-    }
-
-    // Normal bidding process
-    const finalPrice = Number(bidPrice);
-    const finalTime = Number(bidTime);
-
-    if (!finalPrice || !finalTime) {
-      setToastMessage("Veuillez remplir le prix et le temps");
-      return;
-    }
-
-    // Validate against max ratio
-    const delivery = pendingJobs.find(d => d.id === deliveryId);
-    if (delivery && delivery.baseCost && commissionSettings) {
-      const maxPrice = delivery.baseCost * (commissionSettings.maxRatioLivreur || 2.0);
-      if (finalPrice > maxPrice) {
-        setToastMessage(`Prix trop élevé (Max: ${Math.round(maxPrice)} FCFA)`);
-        return;
-      }
-    }
-
-    try {
-      await setDoc(doc(db, 'deliveries', deliveryId, 'bids', profile.userId), {
-        deliveryId,
-        driverId: profile.userId,
-        driverName: profile.name,
-        vehicleType: profile.vehicleType || 'moto',
-        price: finalPrice,
-        timeEstimateMins: finalTime,
-        reason: bidReason,
-        createdAt: new Date().toISOString()
-      });
-      setSubmittedBids(prev => [...prev, deliveryId]);
-      setBiddingOn(null);
-      setBidPrice('');
-      setBidTime('');
-      setBidReason('');
-      setToastMessage("Offre envoyée !");
-    } catch (e) {
-      console.error(e);
-      setToastMessage("Erreur d'offre");
-    }
-  };
-
-  const [earnings, setEarnings] = useState(0);
-  const [avgRating, setAvgRating] = useState(0);
-  const [totalRatings, setTotalRatings] = useState(0);
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
-  const [withdrawMethod, setWithdrawMethod] = useState<'mobile_money' | 'cash'>('mobile_money');
-  const [withdrawPhone, setWithdrawPhone] = useState('');
-
-  useEffect(() => {
-    if (!profile?.userId) return;
-    const qEarnings = query(
-      collection(db, 'deliveries'),
-      where('driverId', '==', profile.userId),
-      where('status', '==', 'delivered')
-    );
-    const unsubEarnings = onSnapshot(qEarnings, (snap) => {
-      const delivered = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
-      const unpaid = delivered.filter(d => !d.paidToDriver);
-      const total = unpaid.reduce((sum, d) => sum + (d.cost || 0), 0);
-      setEarnings(total * (commissionSettings?.driverSharePercent || 85) / 100);
-
-      const rated = delivered.filter(d => (d.rating || 0) > 0);
-      if (rated.length > 0) {
-        const sumRating = rated.reduce((acc, d) => acc + (d.rating || 0), 0);
-        setAvgRating(Number((sumRating / rated.length).toFixed(1)));
-        setTotalRatings(rated.length);
-      }
-    });
-    return () => unsubEarnings();
-  }, [profile, commissionSettings]);
-
-  const handleWithdrawal = async () => {
-    if (!profile || earnings < 500) {
-       setToastMessage("Solde insuffisant (min. 500)");
+const compressImage = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (file.type === 'application/pdf') {
+       if (file.size > 1000000) {
+          reject(new Error("Le fichier PDF est trop volumineux (maximum 1 Mo). Veuillez réduire sa taille ou envoyer une photo."));
+          return;
+       }
+       const reader = new FileReader();
+       reader.onloadend = () => resolve(reader.result as string);
+       reader.onerror = reject;
+       reader.readAsDataURL(file);
        return;
     }
-    
-    if (withdrawMethod === 'mobile_money' && !withdrawPhone) {
-      setToastMessage("Veuillez saisir un numéro");
-      return;
-    }
 
-    setIsWithdrawing(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        const MAX_DIM = 800; // Smaller dimension for lighter payload
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height *= MAX_DIM / width;
+            width = MAX_DIM;
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width *= MAX_DIM / height;
+            height = MAX_DIM;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+           ctx.drawImage(img, 0, 0, width, height);
+           const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // 50% quality JPEG
+           resolve(dataUrl);
+        } else {
+           resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => reject(new Error("Erreur de lecture de l'image"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+
+function ChangeView({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center && !isNaN(center[0]) && !isNaN(center[1])) map.flyTo(center, 15, { duration: 1.5 });
+  }, [center, map]);
+  return null;
+}
+
+export default function DriverDashboard() {
+  const { profile, signOut, updateProfile } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const queryParams = new URLSearchParams(location.search);
+  const queryTab = queryParams.get('tab');
+  
+  const [currentTab, setCurrentTab] = useState<'radar' | 'history' | 'wallet' | 'profile'>(
+    (queryTab as 'radar' | 'history' | 'wallet' | 'profile') || 'radar'
+  );
+  
+  useEffect(() => {
+    if (queryTab) {
+      setCurrentTab(queryTab as 'radar' | 'history' | 'wallet' | 'profile');
+    } else {
+      setCurrentTab('radar');
+    }
+  }, [queryTab]);
+  
+  const [pendingJobs, setPendingJobs] = useState<DeliveryRequest[]>([]);
+  const [activeJobs, setActiveJobs] = useState<DeliveryRequest[]>([]);
+  const [deliveredJobs, setDeliveredJobs] = useState<DeliveryRequest[]>([]);
+  
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatDeliveryId, setChatDeliveryId] = useState<string | null>(null);
+  
+  const [commissionSettings, setCommissionSettings] = useState<CommissionSettings | null>(null);
+  const [toastMessage, setToastMessage] = useState('');
+  const [isOnline, setIsOnline] = useState(profile?.status === 'online' || profile?.status === 'busy');
+
+  const filteredPendingJobs = useMemo(() => {
+    if (!profile) return [];
+    return pendingJobs.filter(job => !job.rejectedBy?.includes(profile.userId));
+  }, [pendingJobs, profile]);
+  
+  useEffect(() => {
+    if (!profile || (profile.role !== 'driver' && profile.role !== 'admin' && profile.role !== 'superadmin')) return;
+
+    // Determine current logical online state (from local state)
+    // If local state says online, refine based on quota
+    const maxSimultaneous = commissionSettings?.maxSimultaneousDeliveries || 2;
+    const newStatus = !isOnline ? 'offline' : (activeJobs.length >= maxSimultaneous ? 'busy' : 'online');
+    
+    if (newStatus !== profile.status) {
+      updateProfile({
+        status: newStatus
+      }).catch(() => {});
+    }
+  }, [activeJobs.length, isOnline, profile]);
+
+  // Radar State
+  const [radarMode, setRadarMode] = useState<'search' | 'focus'>('search');
+  const [isListView, setIsListView] = useState(false);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [verificationForm, setVerificationForm] = useState({
+    guarantorName: '',
+    guarantorPhone: '',
+    cniFront: null as string | null,
+    criminalRecord: null as string | null
+  });
+
+  const handleVerificationSubmit = async () => {
+    if (!profile) return;
+    setIsProcessingAction(true);
     try {
       await updateDoc(doc(db, 'users', profile.userId), {
-        withdrawalRequested: true,
-        withdrawalAmount: earnings,
-        withdrawalMethod: withdrawMethod,
-        withdrawalPhone: withdrawPhone || profile.phone || '',
+        verificationStatus: 'pending',
+        guarantorName: verificationForm.guarantorName,
+        guarantorPhone: verificationForm.guarantorPhone,
+        identityCardUrl: verificationForm.cniFront,
+        criminalRecordUrl: verificationForm.criminalRecord,
         updatedAt: new Date().toISOString()
       });
-      setToastMessage("Demande envoyée !");
-      setShowWithdrawalModal(false);
+      setIsVerificationModalOpen(false);
+      setToastMessage("Dossier soumis avec succès !");
     } catch (e) {
       console.error(e);
-      setToastMessage("Erreur réseau");
-    } finally {
-      setIsWithdrawing(false);
+      setToastMessage("Erreur lors de la soumission");
     }
+    setIsProcessingAction(false);
   };
+  const [selectedPendingJob, setSelectedPendingJob] = useState<DeliveryRequest | null>(null);
+  
+  // Bid State
+  const [bidPrice, setBidPrice] = useState<number | ''>('');
+  const [bidTime, setBidTime] = useState<number | ''>('');
+  const [bidReason, setBidReason] = useState<string>('');
+  
+  // Focus State
+  const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  
+  // Active Action State
+  const [showKeypadFor, setShowKeypadFor] = useState<'pickup' | 'delivery' | null>(null);
+  const [enteredCode, setEnteredCode] = useState('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
-  const [codeInput, setCodeInput] = useState('');
-  const [pickupCodeInput, setPickupCodeInput] = useState('');
+  // Withdraw state
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  
+  const [activeDriverCount, setActiveDriverCount] = useState(0);
+  
+  useEffect(() => {
+    // Real-time listener for competition count
+    const unsub = onSnapshot(query(
+      collection(db, 'users'),
+      where('role', '==', 'driver'),
+      where('status', 'in', ['online', 'busy'])
+    ), (snap) => {
+      setActiveDriverCount(snap.size);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users (driver count)'));
+    return () => unsub();
+  }, []);
 
-  const [toastMessage, setToastMessage] = useState('');
   useEffect(() => {
     if (toastMessage) {
       const t = setTimeout(() => setToastMessage(''), 4000);
@@ -242,563 +216,1214 @@ export default function DriverDashboard() {
     }
   }, [toastMessage]);
 
-  const updateStatus = async (status: 'picked_up' | 'delivered') => {
-    if (!activeJob) return;
-    
-    if (status === 'picked_up') {
-      if (pickupCodeInput !== activeJob.pickupCode) {
-        setToastMessage("Code d'enlèvement incorrect !");
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const snap = await getDoc(doc(db, 'settings', 'commissions'));
+      if (snap.exists()) setCommissionSettings(snap.data() as CommissionSettings);
+    };
+    fetchSettings();
+  }, []);
+
+  const requestGeolocation = () => {
+    if (!("geolocation" in navigator)) {
+      setGpsError("Non supporté");
+      return;
+    }
+
+    setLoading(true);
+    let lastUpdate = 0;
+    let lastCoords: { lat: number, lng: number } | null = null;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(coords);
+        setGpsError(null);
+        setLoading(false);
+        const now = Date.now();
+        
+        // Critical: Distance check to avoid redundant writes if stationary
+        let significantMove = true;
+        if (lastCoords) {
+          const distance = calculateDistance(lastCoords.lat, lastCoords.lng, coords.lat, coords.lng);
+          significantMove = distance > 0.02; // More than 20 meters
+        }
+
+        if (profile?.role === 'driver' && (now - lastUpdate > 60000 || (significantMove && now - lastUpdate > 30000))) { 
+          lastUpdate = now;
+          lastCoords = coords;
+          updateDoc(doc(db, 'users', profile.userId), { 
+            currentLocation: coords, 
+            updatedAt: new Date().toISOString() 
+          }).catch(() => {});
+        }
+      },
+      (err) => {
+        setLoading(false);
+        if (err.code === 1) setGpsError("GPS refusé. Activez-le dans les paramètres.");
+        else if (err.code === 2) setGpsError("GPS indisponible");
+        else if (err.code === 3) setGpsError("Timeout GPS");
+        else setGpsError("Erreur GPS");
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    );
+    return id;
+  };
+
+  useEffect(() => {
+    if (!profile) {
+      setLoading(false);
+      return;
+    }
+
+    const watchId = requestGeolocation();
+
+    const unsubPending = onSnapshot(query(collection(db, 'deliveries'), where('status', '==', 'pending')), (snap) => {
+      let jobs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
+      if (!isOnline) {
+           setPendingJobs([]);
+      } else {
+           setPendingJobs(jobs);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (pending)'));
+
+    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId)), (snap) => {
+      const allMyJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryRequest));
+      const activeList = allMyJobs.filter(j => ['accepted', 'picked_up'].includes(j.status));
+      const deliveredList = allMyJobs.filter(j => j.status === 'delivered');
+      
+      setActiveJobs(activeList);
+      setDeliveredJobs(deliveredList);
+      setLoading(false);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'deliveries (active)');
+      setLoading(false);
+    });
+
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
+    return () => {
+      clearTimeout(timeout);
+      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+      unsubPending();
+      unsubActive();
+    };
+  }, [profile]);
+
+  // Keep track of previous active jobs length to only auto-switch when a new job is accepted
+  const prevActiveJobsLength = useRef(0);
+  
+  useEffect(() => {
+    if (activeJobs.length > 0) {
+      if (activeJobs.length > prevActiveJobsLength.current) {
+        setRadarMode('focus');
+      }
+      if (!focusedJobId || !activeJobs.find(j => j.id === focusedJobId)) {
+        setFocusedJobId(activeJobs[0].id);
+      }
+    } else {
+      setRadarMode('search');
+      setFocusedJobId(null);
+    }
+    prevActiveJobsLength.current = activeJobs.length;
+  }, [activeJobs, focusedJobId]);
+
+  const handleRejectJob = async (jobId: string) => {
+    if (!profile) return;
+    try {
+      const jobRef = doc(db, 'deliveries', jobId);
+      const jobSnap = await getDoc(jobRef);
+      if (jobSnap.exists()) {
+        const jobData = jobSnap.data() as DeliveryRequest;
+        const rejectedBy = jobData.rejectedBy || [];
+        if (!rejectedBy.includes(profile.userId)) {
+          await updateDoc(jobRef, {
+            rejectedBy: [...rejectedBy, profile.userId],
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
+      setSelectedPendingJob(null);
+      setToastMessage("Mission refusée");
+    } catch (e) {
+      console.error("Error rejecting job:", e);
+      setToastMessage("Erreur lors du refus");
+    }
+  };
+
+  useEffect(() => {
+    // Route fetching for focused active job
+    if (radarMode === 'focus' && focusedJobId && userLocation) {
+      const job = activeJobs.find(j => j.id === focusedJobId);
+      if (job) {
+        const target = job.status === 'accepted' ? job.from : job.to;
+        fetch(`https://router.project-osrm.org/route/v1/driving/${userLocation.lng},${userLocation.lat};${target.lng},${target.lat}?overview=full&geometries=geojson`)
+          .then(res => {
+            if (!res.ok) throw new Error("Network response was not ok");
+            return res.json();
+          })
+          .then(data => {
+            if (data.routes?.[0]) {
+              setRouteCoords(data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]));
+            }
+          })
+          .catch((e) => {
+             console.log("Routing error", e);
+             setRouteCoords([[userLocation.lat, userLocation.lng], [target.lat, target.lng]]);
+          });
+      }
+    } else {
+      setRouteCoords([]);
+    }
+  }, [radarMode, focusedJobId, userLocation, activeJobs]);
+
+  const focusedJob = useMemo(() => activeJobs.find(j => j.id === focusedJobId), [activeJobs, focusedJobId]);
+  
+  const earnings = useMemo(() => {
+    // Tous les gains (les courses complétées online, c'est ce que la plateforme doit au livreur)
+    const onlineJobs = deliveredJobs.filter(d => d.paymentMethod !== 'cash');
+    const totalEarnings = onlineJobs.reduce((sum, d) => sum + (d.cost || 0), 0) * (commissionSettings?.driverSharePercent || 85) / 100;
+    // On soustrait l'historique des retraits
+    return totalEarnings - (profile?.totalWithdrawn || 0);
+  }, [deliveredJobs, commissionSettings, profile?.totalWithdrawn]);
+
+  const dailyEarnings = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const dailyTotal = deliveredJobs
+        .filter(job => {
+          const updatedAtStr = job.updatedAt && (typeof (job.updatedAt as any).toDate === 'function' ? (job.updatedAt as any).toDate().toISOString() : job.updatedAt);
+          const createdAtStr = job.createdAt && (typeof (job.createdAt as any).toDate === 'function' ? (job.createdAt as any).toDate().toISOString() : job.createdAt);
+          return (updatedAtStr?.startsWith(today)) || (createdAtStr?.startsWith(today));
+        })
+        .reduce((acc, job) => acc + (job.clientProposedPrice || job.cost || 0), 0);
+    const share = commissionSettings?.driverSharePercent || 85;
+    return Math.floor((dailyTotal * share) / 100);
+  }, [deliveredJobs, commissionSettings]);
+
+  const submitBid = async (jobId: string, isDirectAccept = false) => {
+    if (!profile) return;
+    const maxSimultaneous = commissionSettings?.maxSimultaneousDeliveries || 2;
+    if (activeJobs.length >= maxSimultaneous) {
+      setToastMessage(`Maximum ${maxSimultaneous} missions simultanées !`);
+      return;
+    }
+    const job = pendingJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    if (isDirectAccept) {
+      try {
+        await updateDoc(doc(db, 'deliveries', jobId), {
+          status: 'accepted',
+          driverId: profile.userId,
+          driverName: profile.name,
+          cost: job.clientProposedPrice || job.cost,
+          updatedAt: new Date().toISOString()
+        });
+        await sendNotification(job.clientId, "Livreur assigné", `${profile.name} a accepté la course. Veuillez payer pour générer les codes.`, 'success', `/client`);
+        setToastMessage("Mission acceptée !");
+        setSelectedPendingJob(null);
+      } catch (e) {
+        setToastMessage("Erreur d'acceptation");
+      }
+      return;
+    }
+
+    // Bid logic
+    const price = Number(bidPrice);
+    const time = Number(bidTime);
+    if (!price || !time) { setToastMessage("Remplissez prix et temps"); return; }
+
+    try {
+      await setDoc(doc(db, 'deliveries', jobId, 'bids', profile.userId), {
+        deliveryId: jobId,
+        driverId: profile.userId,
+        driverName: profile.name,
+        price,
+        timeEstimateMins: time,
+        reason: bidReason,
+        createdAt: new Date().toISOString()
+      });
+      await sendNotification(job.clientId, "Nouvelle offre", `${profile.name} propose ${price} FCFA.`, 'info', '/client');
+      setToastMessage("Offre envoyée !");
+      setSelectedPendingJob(null);
+      setBidPrice(''); setBidTime(''); setBidReason('');
+    } catch(e) { setToastMessage("Erreur réseau"); }
+  };
+
+  const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
+  const [withdrawalAmountInput, setWithdrawalAmountInput] = useState('');
+
+  const handleWithdrawal = async () => {
+    const amount = Number(withdrawalAmountInput);
+    if (!profile || earnings < 500) { setToastMessage("Solde insuffisant"); return; }
+    if (!amount || amount < 500 || amount > earnings) { setToastMessage("Montant invalide"); return; }
+    setIsWithdrawing(true);
+    try {
+      await updateDoc(doc(db, 'users', profile.userId), {
+        withdrawalRequested: true,
+        withdrawalAmount: amount,
+        withdrawalMethod: 'mobile_money',
+        withdrawalPhone: profile.phone || '',
+        withdrawalRequestedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      setToastMessage("Demande envoyée !");
+      setIsWithdrawalModalOpen(false);
+      setWithdrawalAmountInput('');
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  const processJobAction = async () => {
+    if (!focusedJob || !showKeypadFor) return;
+    setIsProcessingAction(true);
+
+    if (showKeypadFor === 'pickup') {
+      if (enteredCode !== focusedJob.pickupCode) {
+        setToastMessage("Code d'enlèvement invalide !");
+        setEnteredCode('');
+        setIsProcessingAction(false);
         return;
       }
-    }
-    
-    if (status === 'delivered') {
-      if (codeInput !== activeJob.deliveryCode) {
-        setToastMessage("Code de livraison incorrect !");
+      const data: any = { status: 'picked_up', updatedAt: new Date().toISOString() };
+      if (proofImage) data.proofImage = proofImage;
+      await updateDoc(doc(db, 'deliveries', focusedJob.id), data);
+      await sendNotification(focusedJob.clientId, "Colis récupéré", "Votre colis est en route.", 'success', `/delivery/${focusedJob.id}`);
+      setToastMessage("Colis récupéré !");
+      setShowKeypadFor(null);
+    } 
+    else if (showKeypadFor === 'delivery') {
+      if (enteredCode !== focusedJob.deliveryCode) {
+        setToastMessage("Code de livraison invalide !");
+        setEnteredCode('');
+        setIsProcessingAction(false);
         return;
       }
+      const data: any = { status: 'delivered', updatedAt: new Date().toISOString() };
+      if (proofImage) data.proofImage = proofImage;
+      await updateDoc(doc(db, 'deliveries', focusedJob.id), data);
+      await sendNotification(focusedJob.clientId, "Colis livré", "Succès de la livraison !", 'success', `/delivery/${focusedJob.id}`);
+      setToastMessage("Livraison terminée !");
+      setShowKeypadFor(null);
     }
+
+    setProofImage(null);
+    setEnteredCode('');
+    setIsProcessingAction(false);
+  };
+
+  const cancelJob = async (jobId: string) => {
+    // Proceed directly for iframe compatibility without confirm
+    await updateDoc(doc(db, 'deliveries', jobId), {
+      status: 'pending', driverId: null, driverName: null, updatedAt: new Date().toISOString()
+    });
+  };
+
+  const toggleOnline = async () => {
+    if (!profile) return;
+    
+    // Check if account is actually active for missions
+    if (profile.accountStatus === 'pending_approval' || profile.verificationStatus !== 'verified') {
+      setToastMessage("Attention: Votre dossier est incomplet. Finalisez votre KYC pour recevoir des missions.");
+    }
+
+    const currentIsOnline = profile.status === 'online' || profile.status === 'busy';
+    const newLogicalOnline = !currentIsOnline;
+    setIsOnline(newLogicalOnline);
+    
+    const newStatus = newLogicalOnline ? (activeJobs.length >= (commissionSettings?.maxSimultaneousDeliveries || 2) ? 'busy' : 'online') : 'offline';
     
     try {
-      await updateDoc(doc(db, 'deliveries', activeJob.id), {
-        status,
-        updatedAt: new Date().toISOString()
+      await updateProfile({
+         status: newStatus,
+         updatedAt: new Date().toISOString()
       });
-      setCodeInput('');
-      setPickupCodeInput('');
-    } catch(err) {
-      setToastMessage("Erreur réseau");
+      setToastMessage(newStatus !== 'offline' ? "Vous êtes EN LIGNE" : "Vous êtes HORS LIGNE");
+    } catch (err) {
+      console.error("Failed to update status", err);
+      setToastMessage("Erreur de connexion. Réessayez.");
+      setIsOnline(currentIsOnline); // Revert UI
     }
   };
 
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-
-  const cancelJob = async () => {
-    if (!activeJob) return;
-    if (showCancelConfirm) {
-      await updateDoc(doc(db, 'deliveries', activeJob.id), {
-        status: 'pending',
-        driverId: null,
-        driverName: null,
-        updatedAt: new Date().toISOString()
-      });
-      setCodeInput('');
-      setPickupCodeInput('');
-      setShowCancelConfirm(false);
-    } else {
-      setShowCancelConfirm(true);
-      setTimeout(() => setShowCancelConfirm(false), 3000);
+  const getPaymentLogo = (method?: string | null) => {
+    if (!method) return null;
+    const id = method.replace('_ussd', '').toLowerCase();
+    const validMethods = ['orange', 'moov', 'telecel', 'coris'];
+    if (validMethods.includes(id)) {
+      return `/payments/${id}.png`;
     }
-  };
-
-  const ChangeView = ({ center }: { center: [number, number] }) => {
-    const map = useMap();
-    useEffect(() => {
-      if (center && !isNaN(center[0]) && !isNaN(center[1])) {
-        map.flyTo(center, 15, { duration: 1.5 });
-      }
-    }, [center, map]);
     return null;
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center p-8">
-    <div className="w-16 h-16 border-8 border-orange-500 border-t-white rounded-full animate-spin shadow-[0_0_30px_rgba(249,115,22,0.8)]" />
-  </div>;
-
   return (
-    <div className="min-h-screen bg-slate-950 font-sans selection:bg-orange-500/30 selection:text-orange-200 pb-20">
-      
-      {/* Top Navigation Cockpit */}
-      <div className="bg-slate-900 border-b border-slate-800 px-6 py-6 sm:px-8 mb-8 sticky top-0 z-50 shadow-2xl">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500">Système Connecté</span>
-            </div>
-            <h1 className="text-3xl md:text-5xl font-black text-white tracking-tighter uppercase italic leading-none flex items-center gap-4">
-              Terminal <span className="text-orange-500">Livreur.</span>
-            </h1>
-          </div>
+    <div className="relative flex-1 bg-slate-50 flex flex-col font-sans overflow-hidden">
+      {loading && (
+        <div className="fixed top-0 left-0 right-0 z-[100] h-1 overflow-hidden bg-indigo-100">
+          <motion.div 
+            initial={{ x: '-100%' }}
+            animate={{ x: '100%' }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+            className="h-full w-1/3 bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+          />
+        </div>
+      )}
+      <AnnouncementBanner userRole="driver" />
+      {/* Dynamic Main Content */}
+      <div className="flex-1 relative overflow-hidden bg-slate-100">
+        <AnimatePresence mode="wait">
           
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-              {toastMessage && (
-                <div className="absolute top-full right-0 mt-4 bg-orange-500 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl z-50">
-                  {toastMessage}
-                </div>
-              )}
-              
-              {/* Reliability Score Card */}
-              <div className="flex items-center gap-4 px-6 py-3 bg-slate-800 rounded-3xl border border-slate-700 shadow-xl group hover:border-emerald-500/50 transition-all">
-                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
-                   <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                   <p className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Reliability Score</p>
-                   <div className="flex items-center gap-2">
-                     <p className="text-xl font-black text-white italic">{avgRating || '5.0'}</p>
-                     <div className="flex gap-0.5">
-                       {[1, 2, 3, 4, 5].map(s => (
-                         <div key={s} className={cn("w-1 h-3 rounded-full", (avgRating || 5) >= s ? "bg-emerald-500" : "bg-slate-700")} />
-                       ))}
+          {/* RADAR / ACTIVE VIEW */}
+          {currentTab === 'radar' && (
+             <motion.div key="radar" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0">
+                {/* MAP BACKGROUND */}
+                <div className="absolute inset-0 z-0 bg-slate-200">
+                   {gpsError && (
+                     <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-rose-500 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl flex items-center gap-2">
+                       <ShieldCheck className="w-4 h-4" /> {gpsError}
+                       <button 
+                         onClick={() => requestGeolocation()} 
+                         className="ml-2 bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded-full transition-colors"
+                       >
+                         Réessayer
+                       </button>
                      </div>
+                   )}
+
+                   <MapContainer center={[12.3714, -1.5197]} zoom={13} className="h-full w-full" zoomControl={false} ref={(r) => { if (r) (window as any).driverMap = r; }}>
+                     <TileLayer url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains={['mt0', 'mt1', 'mt2', 'mt3']} />
+                     
+                     {radarMode === 'search' && filteredPendingJobs.map(job => {
+                        const isHighValue = (job.clientProposedPrice || job.cost || 0) >= 2000;
+                        const isUrgent = job.isUrgent;
+                        const pulseBg = isUrgent ? 'bg-rose-500/30' : (isHighValue ? 'bg-orange-500/30' : 'bg-indigo-500/30');
+                        const bgColor = isUrgent ? 'bg-rose-500' : (isHighValue ? 'bg-orange-500' : 'bg-indigo-500');
+                        return (
+                          <Marker key={job.id} position={[job.from.lat, job.from.lng]} 
+                            eventHandlers={{ click: () => setSelectedPendingJob(job) }}
+                            icon={new L.DivIcon({ className: 'custom-pulse', html: `<div class="relative w-8 h-8"><div class="absolute inset-0 ${pulseBg} rounded-full animate-ping"></div><div class="relative w-8 h-8 ${bgColor} rounded-full border-2 border-white shadow-lg flex items-center justify-center text-white">${isUrgent ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-2 10h9L7 22l2-10H1L13 2z"/></svg>' : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>'}</div></div>`, iconAnchor: [16,16] })}
+                          />
+                        );
+                     })}
+
+                     {radarMode === 'focus' && focusedJob && (
+                        <>
+                           <Marker position={[focusedJob.from.lat, focusedJob.from.lng]} icon={new L.DivIcon({ className: '', html: `<div class="w-6 h-6 bg-slate-900 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white text-[10px] font-black">A</div>`, iconAnchor: [12,12] })} />
+                           <Marker position={[focusedJob.to.lat, focusedJob.to.lng]} icon={new L.DivIcon({ className: '', html: `<div class="w-6 h-6 bg-indigo-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white text-[10px] font-black">B</div>`, iconAnchor: [12,12] })} />
+                        </>
+                     )}
+
+                     {routeCoords.length > 0 && radarMode === 'focus' && <Polyline positions={routeCoords} color="#4f46e5" weight={5} opacity={0.8} />}
+                     
+                     {userLocation && (
+                        <Marker position={[userLocation.lat, userLocation.lng]} icon={new L.DivIcon({ className: '', html: `<div class="relative w-10 h-10"><div class="absolute inset-0 bg-blue-500/20 rounded-full animate-ping"></div><div class="relative w-10 h-10 bg-blue-600 rounded-full border-4 border-white shadow-xl flex items-center justify-center text-white"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg></div></div>`, iconAnchor: [20,20] })} />
+                     )}
+                     
+                     {userLocation && radarMode === 'search' && <ChangeView center={[userLocation.lat, userLocation.lng]} />}
+                     {focusedJob && radarMode === 'focus' && <ChangeView center={focusedJob.status === 'accepted' ? [focusedJob.from.lat, focusedJob.from.lng] : [focusedJob.to.lat, focusedJob.to.lng]} />}
+                   </MapContainer>
+
+                   {/* Map Controls */}
+                   <div className="absolute top-36 sm:top-28 right-4 z-[25] flex flex-col gap-3 pointer-events-auto">
+                     <button onClick={() => setIsListView(!isListView)} className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg border border-slate-100 flex items-center justify-center text-slate-700 hover:text-indigo-600 transition-colors">
+                        {isListView ? <Compass className="w-4 h-4 sm:w-5 sm:h-5" /> : <List className="w-4 h-4 sm:w-5 sm:h-5" />}
+                     </button>
+                     <button onClick={() => { if(userLocation) (window as any).driverMap?.flyTo([userLocation.lat, userLocation.lng], 15) }} className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg border border-slate-100 flex items-center justify-center text-slate-700 hover:text-indigo-600 transition-colors">
+                        <Navigation className="w-4 h-4 sm:w-5 sm:h-5" />
+                     </button>
+                     {radarMode === 'focus' && focusedJob && (
+                        <button onClick={() => { 
+                          const target = focusedJob.status === 'accepted' ? [focusedJob.from.lat, focusedJob.from.lng] : [focusedJob.to.lat, focusedJob.to.lng];
+                          (window as any).driverMap?.flyTo(target, 15);
+                        }} className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg border border-indigo-100 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 transition-all shadow-indigo-100">
+                           <Target className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </button>
+                     )}
+                   </div>
+                </div>
+
+                      <div className="absolute inset-0 z-20 pointer-events-none p-4">
+                   {/* Top HUD Layout */}
+                   <div className="flex justify-between items-start gap-2">
+                       {/* Left HUD: Status */}
+                       <div className="flex flex-col gap-2 max-w-[180px]">
+                           {activeJobs.length > 0 && radarMode === 'focus' ? (
+                                <div className="bg-slate-900/90 backdrop-blur-xl p-2 rounded-2xl border border-slate-800 shadow-2xl flex items-center gap-2 pointer-events-auto">
+                                   <div className="flex bg-slate-800 rounded-xl p-1 overflow-x-auto no-scrollbar">
+                                     {activeJobs.length > 1 ? (
+                                       activeJobs.map((j, i) => (
+                                         <button key={j.id} onClick={() => setFocusedJobId(j.id)} className={cn("px-3 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all whitespace-nowrap", focusedJobId === j.id ? "bg-indigo-500 text-white shadow-md" : "text-slate-400 hover:text-white")}>
+                                           M#{i+1}
+                                         </button>
+                                       ))
+                                     ) : (
+                                       <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                                         <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
+                                         Active
+                                       </div>
+                                     )}
+                                   </div>
+                                   <button onClick={() => setRadarMode('search')} className="w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center text-white hover:bg-white/20 flex-shrink-0" title="Radar">
+                                       <Compass className="w-3.5 h-3.5" />
+                                   </button>
+                                </div>
+                             ) : (
+                                <div className="bg-white/90 backdrop-blur-xl p-3 rounded-2xl border border-slate-200 shadow-lg pointer-events-auto">
+                                    <div className="flex items-center gap-3 justify-between">
+                                       <div>
+                                          <p className={cn("text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5", profile?.status === 'online' ? "text-emerald-500" : (profile?.status === 'busy' ? "text-orange-500" : "text-slate-400"))}>
+                                             <span className={cn("w-1.5 h-1.5 rounded-full", profile?.status === 'online' ? "bg-emerald-500 animate-pulse" : (profile?.status === 'busy' ? "bg-orange-500" : "bg-slate-300"))} /> 
+                                             {profile?.status === 'online' ? "En Ligne" : (profile?.status === 'busy' ? "Occupé" : "Hors Ligne")}
+                                          </p>
+                                          <h2 className="text-xs font-black italic tracking-tight text-slate-900 mt-0.5">Livra EXPRESS</h2>
+                                       </div>
+                                       <button onClick={toggleOnline} className={cn("p-2 rounded-xl transition-all shadow-sm", isOnline ? "bg-slate-900 text-white" : "bg-emerald-500 text-white")}>
+                                           <Zap className="w-3.5 h-3.5" />
+                                       </button>
+                                    </div>
+                                </div>
+                             )}
+                             
+                             {/* Verification Warning Floating below status */}
+                             {profile?.verificationStatus !== 'verified' && (
+                                <motion.button 
+                                  initial={{ x: -20, opacity: 0 }} 
+                                  animate={{ x: 0, opacity: 1 }} 
+                                  onClick={() => { setCurrentTab('profile'); navigate('/driver?tab=profile'); }}
+                                  className="bg-orange-500 p-3 rounded-2xl flex items-center gap-3 shadow-lg pointer-events-auto border-2 border-white/20"
+                                >
+                                   <ShieldCheck className="w-4 h-4 text-white" />
+                                   <div className="text-left">
+                                      <p className="text-[8px] font-black uppercase tracking-widest text-orange-100 leading-none">Dossier Incomplet</p>
+                                      <p className="text-[9px] font-bold text-white mt-1">Finalisez KYC</p>
+                                   </div>
+                                </motion.button>
+                             )}
+                       </div>
+
+                       {/* Right HUD: Earnings */}
+                       <div className="flex flex-col gap-3 items-end">
+                            <motion.div 
+                              initial={{ x: 20, opacity: 0 }} 
+                              animate={{ x: 0, opacity: 1 }}
+                              className="bg-white/90 backdrop-blur-md border border-slate-200 p-3 px-4 rounded-2xl flex items-center gap-3 shadow-lg pointer-events-auto shadow-emerald-500/5"
+                            >
+                               <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                                  <DollarSign className="w-4 h-4" />
+                               </div>
+                               <div>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Gains</p>
+                                  <p className="text-sm font-black text-slate-900 leading-none">{dailyEarnings} F</p>
+                               </div>
+                               <div className="pl-3 border-l border-slate-100 flex flex-col items-center">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mb-0.5" />
+                                  <span className="text-[7px] font-black text-emerald-500">LIVE</span>
+                               </div>
+                            </motion.div>
+                       </div>
+                   </div>
+
+                   {/* Footer Info (Active Mission) */}
+                   <div className="mt-auto pointer-events-none pb-24">
+                       <div className="pointer-events-auto px-4 w-full max-w-sm mx-auto relative">
+                          {/* FOCUS MODE BOTTOM SHEET */}
+                          {radarMode === 'focus' && focusedJob && !showKeypadFor && (
+                             <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={cn("rounded-3xl p-5 shadow-2xl border relative z-[60]", focusedJob.status === 'picked_up' ? "bg-indigo-50 border-indigo-100" : "bg-white border-slate-100")}>
+                                {focusedJob.status === 'accepted' ? (
+                                   <>
+                                  <div className="flex justify-between items-start mb-4">
+                                     <div className="flex-1">
+                                        <div className="flex gap-2 items-center mb-1">
+                                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Étape 1 : Collecte</p>
+                                          <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest">#{focusedJob.id.slice(-4).toUpperCase()}</span>
+                                          {userLocation && (
+                                             <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[8px] font-black">
+                                                {calculateDistance(userLocation.lat, userLocation.lng, focusedJob.from.lat, focusedJob.from.lng).toFixed(1)} km
+                                             </span>
+                                          )}
+                                        </div>
+                                        <h3 className="text-base font-black text-slate-900 leading-tight line-clamp-1">{focusedJob.from.address}</h3>
+                                        {focusedJob.from.precision && (
+                                           <div className="mt-1 flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[10px] font-bold w-fit">
+                                              <span>📍 {focusedJob.from.precision}</span>
+                                           </div>
+                                        )}
+                                        <div className="flex items-center gap-2 mt-1">
+                                           <p className="text-[10px] font-bold text-slate-500 truncate">{focusedJob.clientName}</p>
+                                           <span className="text-[10px] text-slate-300">•</span>
+                                           <p className="text-[9px] font-bold text-slate-400 uppercase">Trajet: {calculateDistance(focusedJob.from.lat, focusedJob.from.lng, focusedJob.to.lat, focusedJob.to.lng).toFixed(1)} km</p>
+                                        </div>
+                                     </div>
+                                     <div className="flex gap-2">
+                                    <button 
+                                       onClick={() => {
+                                          setChatDeliveryId(focusedJob.id);
+                                          setChatOpen(true);
+                                       }}
+                                       className="w-12 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center hover:bg-indigo-100 transition-all active:scale-95"
+                                       title="Chat avec client"
+                                    >
+                                       <MessageSquare className="w-5 h-5" />
+                                    </button>
+                                    {focusedJob.isPaid ? (
+                                      <button onClick={() => setShowKeypadFor('pickup')} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
+                                         Récupéré <Package className="w-4 h-4" />
+                                      </button>
+                                    ) : (
+                                      <div className="flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-orange-100 italic">
+                                         Attente paiement client
+                                      </div>
+                                    )}
+                                    <button 
+                                       onClick={() => {
+                                         const target = focusedJob.status === 'accepted' ? focusedJob.from : focusedJob.to;
+                                         window.open(`https://www.google.com/maps/dir/?api=1&destination=${target.lat},${target.lng}`, '_blank');
+                                       }} 
+                                       className="w-12 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center hover:bg-indigo-100 transition-all active:scale-95"
+                                       title="Ouvrir GPS"
+                                    >
+                                       <Navigation className="w-5 h-5" />
+                                    </button>
+                                    <button onClick={() => cancelJob(focusedJob.id)} className="w-12 h-14 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center hover:text-rose-500 transition-all active:scale-95">
+                                       <X className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                               </div>
+                            </>
+                         ) : (
+                               <>
+                                  <div className="flex justify-between items-start mb-4">
+                                     <div className="flex-1">
+                                        <div className="flex gap-2 items-center mb-1">
+                                          <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600">Étape 2 : Livraison</p>
+                                          <span className="bg-indigo-200 text-indigo-700 px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest">#{focusedJob.id.slice(-4).toUpperCase()}</span>
+                                        </div>
+                                        <h3 className="text-base font-black text-slate-900 leading-tight line-clamp-1">{focusedJob.to.address}</h3>
+                                        {focusedJob.to.precision && (
+                                           <div className="mt-1 flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-0.5 rounded text-[10px] font-bold w-fit">
+                                              <span>📍 {focusedJob.to.precision}</span>
+                                           </div>
+                                        )}
+                                        <a href={`tel:${focusedJob.recipientPhone}`} className="text-[10px] font-bold text-slate-500 mt-1 line-clamp-1 hover:text-indigo-600 transition-colors">📞 {focusedJob.recipientPhone || 'Inconnu'}</a>
+                                     </div>
+                                     <div className="bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black italic shadow-md shrink-0 ml-2">
+                                        {focusedJob.cost} F
+                                     </div>
+                                  </div>
+                                  <button onClick={() => setShowKeypadFor('delivery')} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
+                                     Livraison Complète <CheckCircle className="w-4 h-4" />
+                                  </button>
+                               </>
+                            )}
+                         </motion.div>
+                      )}
+
+                      {/* COMPACT CENTERED KEYPAD MODAL */}
+                      {showKeypadFor && (
+                         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 overflow-y-auto">
+                            <motion.div 
+                               initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                               animate={{ scale: 1, opacity: 1, y: 0 }} 
+                               className="bg-white rounded-2xl w-full max-w-[340px] p-6 shadow-2xl relative my-auto"
+                            >
+                               <button onClick={() => { setShowKeypadFor(null); setEnteredCode(''); }} className="absolute top-4 right-4 w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all active:scale-95"><X className="w-4 h-4" /></button>
+                               
+                               <div className="text-center mb-6">
+                                  <div className={cn("w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-inner", showKeypadFor === 'delivery' ? 'bg-indigo-50 text-indigo-600' : 'bg-orange-50 text-orange-600')}>
+                                     {showKeypadFor === 'delivery' ? <CheckCircle className="w-6 h-6" /> : <Package className="w-6 h-6" />}
+                                  </div>
+                                  <h2 className="text-xl font-black text-slate-900 tracking-tight">Code {showKeypadFor === 'pickup' ? 'Collecte' : 'Livraison'}</h2>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Saisissez le code fourni par le client</p>
+                               </div>
+
+                               <div className="relative mb-6">
+                                  <input 
+                                     ref={codeInputRef}
+                                     type="text"
+                                     value={enteredCode}
+                                     onChange={(e) => setEnteredCode(e.target.value.toUpperCase())}
+                                     placeholder="EX: 7GZ4"
+                                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-center text-2xl font-black tracking-[0.2em] text-slate-900 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none uppercase"
+                                     maxLength={8}
+                                     autoFocus
+                                  />
+                               </div>
+                               
+                               <div className="space-y-4">
+                                  <input 
+                                     type="file" 
+                                     accept="image/*" 
+                                     capture="environment" 
+                                     id="proofImageInput"
+                                     className="hidden"
+                                     onChange={async (e) => {
+                                       const file = e.target.files?.[0];
+                                       if (file) {
+                                         try {
+                                           setToastMessage("Compression de l'image...");
+                                           const base64 = await compressImage(file);
+                                           setProofImage(base64);
+                                           setToastMessage("");
+                                         } catch (err: any) {
+                                           setToastMessage(err.message || "Erreur lors de la compression");
+                                         }
+                                       }
+                                     }}
+                                  />
+                                  {!proofImage ? (
+                                     <label htmlFor="proofImageInput" className="bg-slate-50 border-2 border-dashed border-slate-200 w-full rounded-2xl py-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-all text-slate-400 group">
+                                       <Camera className="w-6 h-6 group-hover:text-slate-600" />
+                                       <span className="text-[10px] font-black uppercase tracking-widest group-hover:text-slate-700">Preuve Photo (Optionnelle)</span>
+                                     </label>
+                                  ) : (
+                                     <div className="relative w-full h-32 rounded-2xl overflow-hidden border-2 border-indigo-100 group">
+                                       <img src={proofImage} alt="Proof" className="w-full h-full object-cover" />
+                                       <button onClick={() => setProofImage(null)} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><X className="w-6 h-6" /></button>
+                                     </div>
+                                  )}
+
+                                  <button 
+                                     onClick={processJobAction} 
+                                     disabled={enteredCode.length < 4 || isProcessingAction} 
+                                     className={cn(
+                                       "w-full py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 shadow-xl", 
+                                       showKeypadFor === 'delivery' ? 'bg-indigo-600 text-white shadow-indigo-600/30 hover:bg-indigo-700' : 'bg-slate-900 text-white shadow-slate-900/30 hover:bg-black',
+                                       (enteredCode.length < 4 || isProcessingAction) && 'opacity-30'
+                                     )}
+                                  >
+                                     {isProcessingAction ? 'Traitement...' : 'Confirmer Validation'}
+                                  </button>
+                               </div>
+                            </motion.div>
+                         </div>
+                      )}
+
+                      {/* SEARCH MODE BOTTOM SHEET (Selected Job) */}
+                      {radarMode === 'search' && selectedPendingJob && (
+                        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 z-[60]">
+                           <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <div className="flex gap-2">
+                                  <span className="px-3 py-1 bg-orange-100 text-orange-600 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                    Course Express
+                                  </span>
+                                  <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                    #{selectedPendingJob.id.slice(-6).toUpperCase()}
+                                  </span>
+                                  {userLocation && (
+                                    <span className="px-3 py-1 bg-indigo-50 text-indigo-500 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                      {calculateDistance(userLocation.lat, userLocation.lng, selectedPendingJob.from.lat, selectedPendingJob.from.lng).toFixed(1)} km
+                                    </span>
+                                  )}
+                                </div>
+                                <h3 className="text-3xl font-black italic tracking-tighter text-slate-900 mt-2">{selectedPendingJob.clientProposedPrice || selectedPendingJob.cost} <span className="text-[14px]">FCFA</span>
+                                    <span className="ml-4 text-sm font-bold text-slate-400 not-italic tracking-normal">({calculateDistance(selectedPendingJob.from.lat, selectedPendingJob.from.lng, selectedPendingJob.to.lat, selectedPendingJob.to.lng).toFixed(1)} km)</span>
+                                 </h3>
+                              </div>
+                              <button onClick={() => setSelectedPendingJob(null)} className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500"><X className="w-4 h-4" /></button>
+                           </div>
+                           
+                           <div className="space-y-3 mb-6 relative pl-3">
+                              <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-slate-200" />
+                              <div className="relative z-10 pl-5">
+                                 <div className="absolute left-[-2px] top-1.5 w-2 h-2 rounded-full bg-slate-400" />
+                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Collecte</p>
+                                 <p className="text-sm font-bold text-slate-900 truncate">{selectedPendingJob.from.address}</p>
+                                 {selectedPendingJob.senderPhone && <a href={`tel:${selectedPendingJob.senderPhone}`} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline block mt-1">📞 Appeler Client</a>}
+                              </div>
+                              <div className="relative z-10 pl-5">
+                                 <div className="absolute left-[-2px] top-1.5 w-2 h-2 rounded-full bg-orange-500" />
+                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Livraison</p>
+                                 <p className="text-sm font-bold text-slate-900 truncate">{selectedPendingJob.to.address}</p>
+                              </div>
+                           </div>
+
+                           <div className="flex gap-2">
+                              <button onClick={() => submitBid(selectedPendingJob.id, true)} className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-800 shadow-xl shadow-slate-900/20 active:scale-95 transition-all">
+                                 Accepter
+                              </button>
+                              <button onClick={() => {
+                                 setBidPrice(selectedPendingJob.clientProposedPrice || selectedPendingJob.cost || '');
+                                 setRadarMode('search'); // keep search mode
+                              }} className="flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-orange-100 active:scale-95 transition-all text-center">
+                                 Négocier
+                              </button>
+                              <button onClick={() => handleRejectJob(selectedPendingJob.id)} className="w-12 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-100 active:scale-95 transition-all" title="Refuser">
+                                 <X className="w-5 h-5" />
+                              </button>
+                           </div>
+                           {/* Quick Bid Inline Expansion */}
+                           {bidPrice !== '' && (
+                              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                  <input type="number" placeholder="FCFA" value={bidPrice} onChange={e => setBidPrice(Number(e.target.value) || '')} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold" />
+                                  <input type="number" placeholder="Min" value={bidTime} onChange={e => setBidTime(Number(e.target.value) || '')} className="w-20 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-center" />
+                                </div>
+                                <select value={bidReason} onChange={e => setBidReason(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold">
+                                  <option value="">Sélectionner un motif...</option>
+                                  <option value="Distance trop longue">Distance trop longue</option>
+                                  <option value="Trafic dense dans la zone">Trafic dense dans la zone</option>
+                                  <option value="Charge encombrante/lourde">Charge encombrante/lourde</option>
+                                  <option value="Heure de pointe">Heure de pointe</option>
+                                  <option value="Autre">Autre</option>
+                                </select>
+                                <button onClick={() => submitBid(selectedPendingJob.id)} className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest mt-2">Envoyer l'offre</button>
+                              </motion.div>
+                           )}
+                        </motion.div>
+                      )}
+
                    </div>
                 </div>
               </div>
 
-              <div className="hidden sm:flex flex-col items-end">
-              <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">VEHICULE ACTIF</p>
-              <div className="flex items-center gap-3 px-5 py-3 bg-slate-800 text-white rounded-2xl border border-slate-700">
-                <Truck className="w-4 h-4 text-orange-500" />
-                <span className="text-xs font-black uppercase tracking-widest">{profile?.vehicleType || 'MOTO'}</span>
-              </div>
-            </div>
-            
-            <div className="flex justify-between items-center bg-slate-950 border border-slate-800 px-6 py-4 rounded-3xl shadow-inner relative group overflow-hidden sm:min-w-[300px]">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-[30px] -mr-10 -mt-10 pointer-events-none" />
-              <div>
-                <p className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Portefeuille ({commissionSettings?.driverSharePercent || 85}%)</p>
-                <p className="text-3xl font-black text-orange-500 tracking-tighter leading-none italic">{earnings.toLocaleString('fr-FR')} <span className="text-xs text-white opacity-50 not-italic">FCFA</span></p>
-              </div>
-              <button 
-                onClick={() => setShowWithdrawalModal(true)}
-                disabled={isWithdrawing || earnings < 500 || profile?.withdrawalRequested}
-                className="ml-6 px-5 py-3 bg-white text-slate-900 hover:bg-orange-500 hover:text-white disabled:bg-slate-800 disabled:text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl active:scale-95"
-              >
-                {profile?.withdrawalRequested ? 'En attente' : 'Retirer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Withdrawal Modal */}
-      <AnimatePresence>
-        {showWithdrawalModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowWithdrawalModal(false)}
-              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-slate-900 rounded-[40px] border border-slate-800 shadow-2xl p-8 overflow-hidden"
-            >
-              <div className="absolute -right-20 -top-20 w-48 h-48 bg-orange-500/10 rounded-full blur-[40px]" />
-              
-              <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-2">Demander un <span className="text-orange-500">Retrait.</span></h2>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-8">Solde disponible : {earnings} FCFA</p>
-
-              <div className="space-y-6">
-                <div>
-                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3">Méthode de Paiement</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button 
-                      onClick={() => setWithdrawMethod('mobile_money')}
-                      className={cn(
-                        "flex items-center justify-center gap-3 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all",
-                        withdrawMethod === 'mobile_money' ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600"
-                      )}
+                 {/* OVERLAY PENDING MISSIONS LIST */}
+                 {radarMode === 'search' && !selectedPendingJob && filteredPendingJobs.length > 0 && (
+                    <motion.div 
+                      initial={{ y: 100, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      className="absolute bottom-32 left-4 right-4 z-[40]"
                     >
-                      <Zap className="w-4 h-4" /> Mobile Money
-                    </button>
-                    <button 
-                      onClick={() => setWithdrawMethod('cash')}
-                      className={cn(
-                        "flex items-center justify-center gap-3 py-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all",
-                        withdrawMethod === 'cash' ? "bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20" : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600"
+                      <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
+                        <AnimatePresence>
+                          {filteredPendingJobs.map((job, index) => (
+                             <motion.div 
+                               key={job.id} 
+                               initial={{ x: 50, opacity: 0 }}
+                               animate={{ x: 0, opacity: 1 }}
+                               transition={{ delay: index * 0.1 }}
+                               onClick={() => setSelectedPendingJob(job)} 
+                               className="bg-white rounded-2xl p-4 shadow-xl border border-slate-100 min-w-[260px] snap-center shrink-0 active:scale-95 transition-all relative group"
+                             >
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRejectJob(job.id);
+                                  }}
+                                  className="absolute -top-1 -right-1 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                                <div className="flex justify-between items-center mb-3">
+                                   <div className="flex gap-1.5">
+                                     <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[8px] font-black italic tracking-widest">#{job.id.slice(-4).toUpperCase()}</span>
+                                     {job.isUrgent && <Zap className="w-3 h-3 text-rose-500 fill-rose-500" />}
+                                   </div>
+                                   <span className="text-sm font-black text-slate-900">{job.clientProposedPrice || job.cost} F</span>
+                                </div>
+                                <div className="space-y-1.5 border-l-2 border-slate-100 ml-1 pl-3 relative">
+                                   <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-slate-300" />
+                                   <p className="text-[10px] font-bold text-slate-500 truncate">{job.from.address}</p>
+                                   <div className="absolute -left-[5px] bottom-1 w-2 h-2 rounded-full bg-indigo-500" />
+                                   <p className="text-[10px] font-bold text-slate-900 truncate">{job.to.address}</p>
+                                </div>
+                             </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                 )}
+             </motion.div>
+          )}
+
+          {/* HISTORY TAB */}
+          {currentTab === 'history' && (
+             <motion.div key="history" initial={{opacity:0, scale: 0.98}} animate={{opacity:1, scale: 1}} exit={{opacity:0}} className="absolute inset-0 overflow-y-auto pb-32 px-6 pt-12 bg-slate-50">
+                <div className="flex items-center gap-4 mb-8">
+                   <button onClick={() => { setCurrentTab('radar'); navigate('/driver'); }} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm active:scale-90 transition-all">
+                      <ArrowLeft className="w-5 h-5" />
+                   </button>
+                   <h1 className="text-4xl font-black italic tracking-tighter text-slate-900"><span className="text-indigo-600">Historique</span>.</h1>
+                </div>
+                
+                <div className="space-y-4">
+                  {deliveredJobs.length === 0 ? (
+                    <div className="bg-white rounded-3xl p-5 lg:p-6 text-center border border-slate-200">
+                      <HistoryIcon className="w-10 h-10 text-slate-300 mx-auto mb-4" />
+                      <p className="text-sm font-bold text-slate-500">Aucune mission terminée.</p>
+                    </div>
+                  ) : (
+                    deliveredJobs.map(job => {
+                      const logo = getPaymentLogo(job.paymentMethod);
+                      return (
+                        <div key={job.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 group hover:shadow-md transition-all">
+                           <div className="flex justify-between items-center mb-3">
+                              <div className="flex items-center gap-2">
+                                 <div className={cn(
+                                   "w-8 h-8 rounded-lg flex items-center justify-center text-indigo-600 overflow-hidden shrink-0",
+                                   logo ? "bg-white p-1 border border-slate-100" : "bg-indigo-50"
+                                 )}>
+                                    {logo ? (
+                                      <img src={logo} alt={job.paymentMethod || ''} className="w-full h-full object-contain" />
+                                    ) : (
+                                      <Package className="w-4 h-4" />
+                                    )}
+                                 </div>
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                   {(() => {
+                                     if (!job.createdAt) return '-';
+                                     let dDate;
+                                     if (typeof (job.createdAt as any).toDate === 'function') {
+                                       dDate = (job.createdAt as any).toDate();
+                                     } else {
+                                       dDate = new Date(job.createdAt);
+                                     }
+                                     return isNaN(dDate.getTime()) ? '-' : dDate.toLocaleDateString('fr-FR');
+                                   })()}
+                                 </span>
+                              </div>
+                              <span className="text-xs font-black text-emerald-600">+{job.cost} F</span>
+                           </div>
+                           <div className="space-y-1.5 border-l-2 border-slate-100 ml-4 pl-4 relative">
+                              <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-slate-300" />
+                              <p className="text-[11px] font-medium text-slate-500 truncate">{job.from.address}</p>
+                              <div className="absolute -left-[5px] bottom-1 w-2 h-2 rounded-full bg-indigo-500" />
+                              <p className="text-[11px] font-bold text-slate-900 truncate">{job.to.address}</p>
+                           </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+             </motion.div>
+          )}
+
+          {/* WALLET TAB */}
+          {currentTab === 'wallet' && (
+             <motion.div key="wallet" initial={{opacity:0, scale: 0.98}} animate={{opacity:1, scale: 1}} exit={{opacity:0}} className="absolute inset-0 overflow-y-auto pb-32 px-6 pt-12 bg-slate-50">
+                <div className="flex items-center gap-4 mb-8">
+                   <button onClick={() => { setCurrentTab('radar'); navigate('/driver'); }} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm active:scale-90 transition-all">
+                      <ArrowLeft className="w-5 h-5" />
+                   </button>
+                   <h1 className="text-4xl font-black italic tracking-tighter text-slate-900">Mon <span className="text-indigo-600">Portefeuille.</span></h1>
+                </div>
+                
+                <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl shadow-slate-200 mb-8 relative overflow-hidden">
+                   <div className="absolute right-0 top-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-[40px] -mr-16 -mt-16" />
+                   <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-slate-400 mb-1 flex items-center gap-2">Solde Disponible</p>
+                        <div className="flex items-baseline gap-1">
+                          <h2 className="text-4xl font-black tracking-tight">{earnings.toLocaleString('fr-FR')}</h2>
+                          <span className="text-sm font-bold text-slate-500">FCFA</span>
+                        </div>
+                      </div>
+                      <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center">
+                         <Wallet className="w-5 h-5 text-indigo-400" />
+                      </div>
+                   </div>
+                   
+                   <button onClick={() => setIsWithdrawalModalOpen(true)} disabled={profile?.withdrawalRequested || earnings < 500} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95">
+                      {profile?.withdrawalRequested ? (
+                         <> <Zap className="w-3 h-3 animate-pulse" /> Traitement... </>
+                      ) : (
+                         <> <ArrowRight className="w-3 h-3" /> Demander un retrait </>
                       )}
-                    >
-                      <DollarSign className="w-4 h-4" /> Espèces
-                    </button>
+                   </button>
+                </div>
+
+                <div className="flex gap-4 mb-8">
+                   <div className="flex-1 bg-white p-4 rounded-3xl border border-slate-100 flex flex-col items-center justify-center text-center">
+                      <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center text-orange-500 mb-2">
+                         <span className="font-bold text-xs">MM</span>
+                      </div>
+                      <p className="text-[9px] font-black uppercase text-slate-400">Orange / MTN</p>
+                   </div>
+                   <div className="flex-1 bg-white p-4 rounded-3xl border border-slate-100 flex flex-col items-center justify-center text-center">
+                      <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500 mb-2">
+                         <DollarSign className="w-5 h-5" />
+                      </div>
+                      <p className="text-[9px] font-black uppercase text-slate-400">Cash Direct</p>
+                   </div>
+                </div>
+
+                <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-4 px-2">Évolution Hebdomadaire</p>
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 h-56 min-h-[224px] mb-8 shadow-sm">
+                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <LineChart data={mockChartData}>
+                        <Line type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={4} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                        <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                      </LineChart>
+                   </ResponsiveContainer>
+                </div>
+                
+                <div className="bg-orange-50 rounded-3xl p-6 border border-orange-100 flex items-start gap-4">
+                  <Info className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-black text-orange-800 mb-1">Commission actuelle</h4>
+                    <p className="text-xs font-medium text-orange-600">Vous conservez {commissionSettings?.driverSharePercent || 85}% des revenus générés sur vos courses.</p>
                   </div>
                 </div>
+             </motion.div>
+          )}
 
-                {withdrawMethod === 'mobile_money' && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}>
-                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Numéro Mobile Money</p>
-                    <input 
-                      type="tel" 
-                      placeholder="Ex: 01020304"
-                      value={withdrawPhone}
-                      onChange={(e) => setWithdrawPhone(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 text-white p-4 rounded-2xl text-lg font-black tracking-widest focus:border-orange-500 transition-all outline-none"
-                    />
-                  </motion.div>
-                )}
-
-                <div className="pt-4 flex gap-4">
-                   <button 
-                    onClick={() => setShowWithdrawalModal(false)}
-                    className="flex-1 py-4 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-all"
-                   >
-                     Annuler
+          {/* PROFILE TAB */}
+          {currentTab === 'profile' && (
+             <motion.div key="profile" initial={{opacity:0, scale: 0.98}} animate={{opacity:1, scale: 1}} exit={{opacity:0}} className="absolute inset-0 overflow-y-auto pb-32 px-6 pt-12 bg-slate-50">
+                <div className="flex items-center gap-4 mb-8">
+                   <button onClick={() => { setCurrentTab('radar'); navigate('/driver'); }} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm active:scale-90 transition-all">
+                      <ArrowLeft className="w-5 h-5" />
                    </button>
-                   <button 
-                    onClick={handleWithdrawal}
-                    disabled={isWithdrawing}
-                    className="flex-[2] py-4 bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-orange-600 transition-all shadow-xl shadow-orange-500/20"
-                   >
-                     {isWithdrawing ? 'Envoi...' : 'Confirmer le retrait'}
-                   </button>
+                   <h1 className="text-4xl font-black italic tracking-tighter text-slate-900"><span className="text-indigo-600">Profil</span>.</h1>
                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                
+                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex items-center gap-6 mb-8">
+                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 border-4 border-slate-50 shadow-inner overflow-hidden">
+                       {profile?.photoURL ? <img src={profile.photoURL} alt="Profil" className="w-full h-full object-cover" /> : <User className="w-8 h-8" />}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900">{profile?.displayName || profile?.name}</h3>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1 flex items-center gap-2">
+                        {profile?.vehicleType || 'Livreur'} • ⭐ {profile?.performanceScore ? (profile.performanceScore / 20).toFixed(1) : '5.0'}
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <button 
+                          onClick={() => setIsWithdrawalModalOpen(true)}
+                          className="px-2 py-1 bg-orange-100 text-orange-600 rounded-md text-[8px] font-black uppercase hover:bg-orange-200 transition-colors"
+                        >
+                          Demander un retrait
+                        </button>
+                        <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase">Vérifié</span>
+                      </div>
+                    </div>
+                 </div>
 
-      {/* Driver Type Selection (For new or unset profiles) */}
-      {!profile?.driverType && (
-        <div className="max-w-[1600px] mx-auto px-4 xl:px-8 mb-8">
-           <div className="bg-orange-500/10 border border-orange-500/20 rounded-[32px] p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                 <h3 className="text-xl font-black text-white italic uppercase tracking-tighter mb-1">Configuration <span className="text-orange-500">Profil.</span></h3>
-                 <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Précisez votre statut pour la gestion des revenus</p>
-              </div>
-              <div className="flex gap-4">
+                 {/* Stats Grid */}
+                 <div className="grid grid-cols-2 gap-4 mb-8">
+                    <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                       <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1 leading-none">Annulations</p>
+                       <p className="text-2xl font-black text-slate-900 leading-none">{profile?.cancellationRate || 0}%</p>
+                       <div className="w-full h-1 bg-slate-100 mt-3 rounded-full overflow-hidden">
+                          <div className="h-full bg-rose-500" style={{ width: `${profile?.cancellationRate || 5}%` }} />
+                       </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                       <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1 leading-none">Score Global</p>
+                       <p className="text-2xl font-black text-slate-900 leading-none">{profile?.performanceScore || 100}/100</p>
+                       <div className="w-full h-1 bg-slate-100 mt-3 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500" style={{ width: `${profile?.performanceScore || 95}%` }} />
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* Gains Journaliers */}
+                 <div className="bg-slate-900 rounded-2xl p-6 text-white mb-8 relative overflow-hidden">
+                    <div className="relative z-10">
+                       <div className="flex justify-between items-center mb-4">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Gains du jour</h4>
+                          <DollarSign className="w-4 h-4 text-emerald-500" />
+                       </div>
+                       <p className="text-3xl font-black mb-1">{dailyEarnings} F</p>
+                       <p className="text-[10px] font-bold text-slate-400 mt-2 italic text-left">Chaque course complète s'ajoute ici instantanément.</p>
+                       <button 
+                         onClick={() => setIsWithdrawalModalOpen(true)}
+                         className="mt-6 w-full py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
+                       >
+                         <DollarSign className="w-3.5 h-3.5" />
+                         Demander un retrait
+                       </button>
+                    </div>
+                    {/* Decorative radial gradient */}
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/20 rounded-full blur-[60px] translate-x-1/2 -translate-y-1/2" />
+                 </div>
+
+                {/* Badges Section */}
+                <div className="mb-8">
+                   <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 px-2">Performances & Badges</h3>
+                   <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar px-2 -mx-2">
+                      <div className="bg-orange-50 shrink-0 w-32 rounded-2xl p-4 border border-orange-100/50 flex flex-col items-center text-center">
+                         <div className="w-12 h-12 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mb-3">
+                            <Zap className="w-6 h-6" />
+                         </div>
+                         <span className="text-[10px] font-black uppercase text-orange-800">Top Livreur</span>
+                         <span className="text-[9px] font-bold text-orange-600/70 mt-1">Quartier ZAD</span>
+                      </div>
+                      <div className="bg-indigo-50 shrink-0 w-32 rounded-2xl p-4 border border-indigo-100/50 flex flex-col items-center text-center">
+                         <div className="w-12 h-12 bg-indigo-100 text-indigo-500 rounded-full flex items-center justify-center mb-3">
+                            <CheckCircle className="w-6 h-6" />
+                         </div>
+                         <span className="text-[10px] font-black uppercase text-indigo-800">100 Courses</span>
+                         <span className="text-[9px] font-bold text-indigo-600/70 mt-1">Sans incident</span>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="space-y-4">
+                  <button onClick={() => setIsVerificationModalOpen(true)} className="w-full bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex items-center justify-between hover:bg-slate-50">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500"><ShieldCheck className="w-5 h-5"/></div>
+                      <div>
+                        <span className="font-bold text-slate-700 block text-left">Documents & Vérification</span>
+                        {profile?.verificationStatus === 'pending' && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded text-[8px] font-black uppercase inline-block">En attente</span>}
+                        {profile?.verificationStatus === 'verified' && <span className="bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded text-[8px] font-black uppercase inline-block">Vérifié</span>}
+                        {!profile?.verificationStatus && <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded text-[8px] font-black uppercase inline-block">Non configuré</span>}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-400" />
+                  </button>
+                  <button onClick={() => signOut()} className="w-full bg-rose-50 rounded-3xl p-5 border border-rose-100 flex items-center justify-between text-rose-600 hover:bg-rose-100 mt-8">
+                     <span className="font-black uppercase tracking-widest text-[12px]">Déconnexion</span>
+                  </button>
+                </div>
+             </motion.div>
+          )}
+
+        </AnimatePresence>
+
+        {/* VERIFICATION MODAL */}
+        <AnimatePresence>
+          {isVerificationModalOpen && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center">
+              <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="bg-white w-full max-w-md rounded-t-[40px] sm:rounded-3xl p-5 lg:p-6 max-h-[90vh] overflow-y-auto">
+                 <div className="flex justify-between items-center mb-8">
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Vérification Sécurisée</h3>
+                    <button onClick={() => setIsVerificationModalOpen(false)} className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500"><X className="w-5 h-5" /></button>
+                 </div>
+
+                 <div className="space-y-6 mb-8">
+                    <div>
+                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Identité du Guaranteur (Référence physique)</label>
+                       <input 
+                          type="text" 
+                          placeholder="Nom complet du garant" 
+                          value={verificationForm.guarantorName} 
+                          onChange={e => setVerificationForm({...verificationForm, guarantorName: e.target.value})}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 outline-none"
+                       />
+                       <input 
+                          type="tel" 
+                          placeholder="Téléphone du garant" 
+                          value={verificationForm.guarantorPhone} 
+                          onChange={e => setVerificationForm({...verificationForm, guarantorPhone: e.target.value})}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 outline-none mt-2"
+                       />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Pièce d'identité</label>
+                          <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.cniFront ? 'border-indigo-500' : '')}>
+                             {verificationForm.cniFront ? (
+                                <img src={verificationForm.cniFront} className="w-full h-full object-cover" />
+                             ) : (
+                                <Camera className="w-6 h-6 text-slate-300" />
+                             )}
+                             <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                   try {
+                                     setToastMessage("Compression de l'image...");
+                                     const base64 = await compressImage(file);
+                                     setVerificationForm({...verificationForm, cniFront: base64});
+                                     setToastMessage("");
+                                   } catch (err: any) {
+                                     setToastMessage(err.message || "Erreur de traitement de l'image");
+                                   }
+                                }
+                             }} />
+                          </div>
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Casier Judiciaire</label>
+                          <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.criminalRecord ? 'border-indigo-500' : '')}>
+                             {verificationForm.criminalRecord ? (
+                                <div className="text-emerald-500 flex flex-col items-center">
+                                   <FileCheck className="w-8 h-8" />
+                                   <span className="text-[8px] font-bold mt-1">AJOUTÉ</span>
+                                </div>
+                             ) : (
+                                <FileText className="w-6 h-6 text-slate-300" />
+                             )}
+                             <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                   try {
+                                     setToastMessage("Compression du fichier...");
+                                     const base64 = await compressImage(file);
+                                     setVerificationForm({...verificationForm, criminalRecord: base64});
+                                     setToastMessage("");
+                                   } catch (err: any) {
+                                     setToastMessage(err.message || "Erreur de traitement du fichier");
+                                   }
+                                }
+                             }} />
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="bg-indigo-50 rounded-2xl p-4 border border-indigo-100 flex items-start gap-3 mb-8">
+                    <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                    <p className="text-[11px] font-medium text-indigo-700 leading-relaxed">
+                       Ces informations sont strictement confidentielles. Elles permettent de certifier votre compte et de protéger la plateforme contre les incidents.
+                    </p>
+                 </div>
+
                  <button 
-                  onClick={() => updateDoc(doc(db, 'users', profile?.userId!), { driverType: 'freelance', updatedAt: new Date().toISOString() })}
-                  className="px-8 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest border border-slate-800 hover:border-orange-500 transition-all"
+                  onClick={handleVerificationSubmit}
+                  disabled={!verificationForm.guarantorName || !verificationForm.guarantorPhone || !verificationForm.cniFront || isProcessingAction}
+                  className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 disabled:opacity-50 active:scale-95 transition-all"
                  >
-                   Je suis Indépendant
+                    {isProcessingAction ? 'Envoi en cours...' : 'Soumettre mon dossier'}
                  </button>
-                 <button 
-                  onClick={() => updateDoc(doc(db, 'users', profile?.userId!), { driverType: 'company', updatedAt: new Date().toISOString() })}
-                  className="px-8 py-4 bg-orange-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-orange-500/20 active:scale-95 transition-all"
-                 >
-                   Je travaille pour une Société
-                 </button>
-              </div>
-           </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isWithdrawalModalOpen && (
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[150] flex items-center justify-center p-6 pb-32">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsWithdrawalModalOpen(false)} />
+              <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} className="bg-white rounded-3xl p-6 w-full max-w-sm relative z-10 shadow-2xl flex flex-col gap-6">
+                 <div>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter mb-2">Montant du retrait</h2>
+                    <p className="text-xs text-slate-500">Combien souhaitez-vous retirer ? (Solde max: {earnings} FCFA)</p>
+                 </div>
+                 
+                 <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                       <span className="text-slate-400 font-bold">FCFA</span>
+                    </div>
+                    <input 
+                      type="number"
+                      value={withdrawalAmountInput}
+                      onChange={e => setWithdrawalAmountInput(e.target.value)}
+                      placeholder="Ex: 5000"
+                      className="w-full pl-16 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-300 placeholder:font-medium"
+                    />
+                 </div>
+                 
+                 <div className="flex gap-4">
+                    <button onClick={() => setIsWithdrawalModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-colors">
+                      Annuler
+                    </button>
+                    <button onClick={handleWithdrawal} disabled={isWithdrawing || !withdrawalAmountInput || Number(withdrawalAmountInput) < 500 || Number(withdrawalAmountInput) > earnings} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50">
+                      Confirmer
+                    </button>
+                 </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {toastMessage && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 bg-slate-900/90 backdrop-blur-md border border-slate-700 text-white rounded-full text-[10px] font-black uppercase tracking-[0.15em] shadow-2xl flex items-center gap-3">
+           <Zap className="w-4 h-4 text-orange-500" />
+           {toastMessage}
         </div>
       )}
-
-      <div className="max-w-[1600px] mx-auto px-4 xl:px-8">
-        <div className="grid grid-cols-12 gap-8 h-full">
-          {/* Left Column: Missions Radar */}
-          <div className="col-span-12 lg:col-span-4 xl:col-span-3 flex flex-col gap-6">
-            <div className="bg-slate-900 rounded-[40px] border border-slate-800 flex flex-col overflow-hidden min-h-[600px] shadow-2xl">
-               <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
-                 <h3 className="text-white font-black text-[11px] uppercase tracking-[0.3em]">Radar des Missions</h3>
-                 <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center">
-                    <Zap className="w-3 h-3 text-orange-500" />
-                 </div>
-               </div>
-              
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar">
-                <AnimatePresence mode="popLayout">
-                  {activeJob ? (
-                    <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="p-6 rounded-[32px] bg-slate-800 text-white shadow-2xl border border-slate-700 relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 w-full h-2 bg-orange-500" />
-                      <div className="absolute -right-10 -top-10 w-32 h-32 bg-orange-500/10 blur-[20px] rounded-full pointer-events-none" />
-                      
-                      <div className="flex justify-between items-center mb-6 pt-2 relative z-10">
-                        <span className="px-3 py-1 bg-orange-500/20 text-orange-400 font-black uppercase tracking-widest text-[8px] rounded-full border border-orange-500/30">
-                          En CourS
-                        </span>
-                        <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gain</span>
-                           <span className="text-xl font-black text-white italic">{activeJob.cost} <span className="text-[10px] opacity-50 not-italic">FCFA</span></span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-5 mb-8 relative z-10">
-                         <div className="relative pl-6">
-                           <div className="absolute left-0 top-1 w-3 h-3 rounded-full bg-slate-600 border-2 border-slate-800" />
-                           <div className="absolute left-[5px] top-4 bottom-[-24px] w-0.5 bg-slate-700" />
-                           <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">DÉPART</p>
-                           <p className="text-sm font-bold text-white leading-tight">{activeJob.from.address}</p>
-                           {activeJob.from.indications && <p className="text-[10px] text-slate-400 italic mt-1">{activeJob.from.indications}</p>}
-                         </div>
-                         <div className="relative pl-6">
-                           <div className="absolute left-0 top-1 w-3 h-3 rounded-full bg-orange-500 border-2 border-slate-800 shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
-                           <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest mb-1">DESTINATION</p>
-                           <p className="text-sm font-bold text-white leading-tight">{activeJob.to.address}</p>
-                           {activeJob.to.indications && <p className="text-[10px] text-slate-400 italic mt-1">{activeJob.to.indications}</p>}
-                         </div>
-                      </div>
-
-                      <div className="bg-slate-900 rounded-[24px] p-5 border border-slate-800 space-y-4 mb-6 relative z-10">
-                        {activeJob.status === 'accepted' ? (
-                          <>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Code Enlèvement (par le client)</p>
-                            <input 
-                              type="text" 
-                              placeholder="Entrer code PIN..."
-                              value={pickupCodeInput}
-                              onChange={e => setPickupCodeInput(e.target.value.toUpperCase())}
-                              className="w-full bg-slate-950 border border-slate-700 text-white font-black text-lg p-3 rounded-xl focus:border-orange-500 focus:ring-1 focus:ring-orange-500 text-center tracking-[0.2em]"
-                            />
-                            <button 
-                              onClick={() => updateStatus('picked_up')}
-                              className="w-full py-4 bg-orange-500 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-orange-600 shadow-lg shadow-orange-500/20"
-                            >
-                              Valider l'Enlèvement
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-2">Code Livraison (par le client)</p>
-                            <input 
-                              type="text" 
-                              placeholder="Entrer code PIN final..."
-                              value={codeInput}
-                              onChange={e => setCodeInput(e.target.value.toUpperCase())}
-                              className="w-full bg-slate-950 border border-slate-700 text-white font-black text-lg p-3 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-center tracking-[0.2em]"
-                            />
-                            <button 
-                              onClick={() => updateStatus('delivered')}
-                              className="w-full py-4 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-emerald-500 shadow-lg shadow-emerald-500/20"
-                            >
-                              Terminer la Course
-                            </button>
-                          </>
-                        )}
-                      </div>
-
-                      <button onClick={cancelJob} className="w-full py-3 bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-white transition-all border border-red-500/20 relative z-10">
-                        {showCancelConfirm ? 'Confirmer l\'Annulation ?' : 'Bouton Panique / Annuler Course'}
-                      </button>
-                    </motion.div>
-                  ) : (
-                    pendingJobs.map((job) => (
-                      <motion.div
-                        key={job.id}
-                        layout
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-[#111827] rounded-[28px] border border-slate-800 hover:border-slate-700 transition-all overflow-hidden shadow-xl group relative"
-                      >
-                        {/* Shimmer effect */}
-                        <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-
-                        <div className="p-5">
-                          <div className="flex justify-between items-center mb-5">
-                            <div className="flex gap-2">
-                              <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 font-bold uppercase tracking-[0.2em] text-[8px] rounded-full border border-indigo-500/20">
-                                Nouveau
-                              </span>
-                              {job.packageDetails && (
-                                <span className="px-3 py-1 bg-amber-500/10 text-amber-500 font-bold uppercase tracking-[0.2em] text-[8px] rounded-full border border-amber-500/20">
-                                  {job.packageDetails.size}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">
-                              #{job.id.slice(-4)}
-                            </span>
-                          </div>
-
-                          <div className="flex items-end justify-between mb-6 pb-6 border-b border-dashed border-slate-800">
-                             <div>
-                               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Offre Initiale</p>
-                               <div className="flex items-baseline gap-1">
-                                 <span className="text-2xl font-black text-white">{job.clientProposedPrice || job.cost}</span>
-                                 <span className="text-[10px] font-bold text-emerald-400">FCFA</span>
-                               </div>
-                             </div>
-                             <div className="text-right">
-                               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Moyen</p>
-                               <span className="text-xs font-black text-slate-300">{job.paymentMethod === 'cash' ? '💵 Espèces' : '💳 Mobile'}</span>
-                             </div>
-                          </div>
-
-                          <div className="space-y-4 mb-6 relative">
-                             <div className="absolute left-1.5 top-2 bottom-2 w-0.5 bg-gradient-to-b from-indigo-500/50 to-amber-500/50" />
-                             
-                             <div className="relative pl-6">
-                                 <div className="absolute left-1 top-2 w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-                                 <p className="text-[8px] font-bold text-indigo-400 uppercase tracking-[0.2em] mb-0.5">Point A (Collecte)</p>
-                                 <p className="text-[11px] font-medium text-slate-300 pr-2 truncate">{job.from.address}</p>
-                             </div>
-                             <div className="relative pl-6">
-                                 <div className="absolute left-1 top-2 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
-                                 <p className="text-[8px] font-bold text-amber-500 uppercase tracking-[0.2em] mb-0.5">Point B (Dépôt)</p>
-                                 <p className="text-[11px] font-medium text-slate-300 pr-2 truncate">{job.to.address}</p>
-                             </div>
-                          </div>
-                          
-                          {biddingOn === job.id ? (
-                            <div className="space-y-3 mt-2 bg-[#0f141f] p-4 rounded-[20px] border border-slate-800">
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <input 
-                                    type="number" 
-                                    placeholder="Prix (FCFA)" 
-                                    value={bidPrice} 
-                                    onChange={e => setBidPrice(e.target.value ? Number(e.target.value) : '')} 
-                                    className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-bold placeholder:text-slate-600" 
-                                  />
-                                </div>
-                                <div className="w-20">
-                                  <input 
-                                    type="number" 
-                                    placeholder="Mins" 
-                                    value={bidTime} 
-                                    onChange={e => setBidTime(e.target.value ? Number(e.target.value) : '')} 
-                                    className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-bold placeholder:text-slate-600 text-center" 
-                                  />
-                                </div>
-                              </div>
-                              <input 
-                                type="text" 
-                                placeholder="Motifs ? (Loin, bouchons...)" 
-                                value={bidReason} 
-                                onChange={e => setBidReason(e.target.value)} 
-                                className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl p-3 text-xs focus:border-indigo-500 transition-all font-medium placeholder:text-slate-600" 
-                              />
-                              <div className="flex gap-2 pt-1">
-                                <button 
-                                  type="button"
-                                  onClick={() => setBiddingOn(null)} 
-                                  className="flex-1 bg-slate-800 text-slate-400 py-3.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] hover:bg-slate-700 hover:text-white transition-all active:scale-95"
-                                >
-                                  Annuler
-                                </button>
-                                <button 
-                                  type="button"
-                                  onClick={() => submitBid(job.id)} 
-                                  className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
-                                >
-                                  Proposer Prix
-                                </button>
-                              </div>
-                            </div>
-                          ) : submittedBids.includes(job.id) ? (
-                            <div className="w-full bg-emerald-500/10 text-emerald-400 py-4 rounded-[16px] text-[10px] font-black uppercase tracking-[0.2em] border border-emerald-500/20 text-center flex items-center justify-center gap-2">
-                              <CheckCircle className="w-4 h-4" /> Offre en attente
-                            </div>
-                          ) : (
-                            <div className="flex flex-col gap-2">
-                              <button 
-                                onClick={() => submitBid(job.id, job.clientProposedPrice || job.cost)} 
-                                className="w-full bg-emerald-500 hover:bg-emerald-400 text-white py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
-                              >
-                                Accepter directement
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setBidPrice(job.clientProposedPrice || job.cost || 0);
-                                  setBiddingOn(job.id);
-                                }} 
-                                className="w-full bg-slate-800 text-white py-3.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] hover:bg-slate-700 transition-all border border-slate-700 hover:border-slate-600"
-                              >
-                                Proposer au client
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    ))
-                  )}
-                  {!activeJob && pendingJobs.length === 0 && (
-                    <div className="text-center py-12 px-6">
-                      <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-700">
-                        <Navigation className="w-6 h-6 text-slate-600 animate-pulse" />
-                      </div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Scan du réseau en cours</p>
-                      <p className="text-slate-600 text-xs mt-2">En attente de nouvelles missions...</p>
-                    </div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Dark Map Cockpit */}
-          <div className="col-span-12 lg:col-span-8 xl:col-span-9 bg-slate-900 rounded-[48px] p-2 sm:p-4 border border-slate-800 h-[600px] lg:h-full min-h-[500px] lg:min-h-[800px] relative overflow-hidden shadow-2xl">
-            <div className="map-container h-full rounded-[40px] border-none shadow-black/50 bg-slate-950 relative overflow-hidden z-0">
-              <MapContainer center={[12.3714, -1.5197]} zoom={13} className="h-full w-full" zoomControl={false}>
-                <TileLayer 
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                />
-                
-                {!activeJob && pendingJobs.map(job => (
-                  <Marker 
-                    key={job.id} 
-                    position={[job.from.lat, job.from.lng]} 
-                    icon={new L.DivIcon({
-                      className: 'custom-div-icon',
-                      html: `<div class="w-8 h-8 bg-orange-500 rounded-lg border-2 border-white shadow-xl flex items-center justify-center text-white font-black text-[10px]">${job.id.slice(0, 1)}</div>`,
-                      iconAnchor: [16, 16]
-                    })}
-                  >
-                    <Popup>
-                      <div className="p-1 text-center">
-                        <p className="font-black text-xs uppercase mb-2 text-slate-900">
-                          Colis {job.packageDetails?.size || ''}
-                        </p>
-                        <button 
-                          onClick={() => setBiddingOn(job.id)}
-                          className="w-full bg-slate-900 text-white py-2 px-6 rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-orange-500"
-                        >
-                          Faire une offre
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-                
-                {activeJob && (
-                  <>
-                    <Marker 
-                      position={[activeJob.from.lat, activeJob.from.lng]} 
-                      icon={new L.DivIcon({
-                        className: 'from-icon',
-                        html: `<div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-white">A</div>`,
-                        iconAnchor: [16, 16]
-                      })} 
-                    />
-                    <Marker 
-                      position={[activeJob.to.lat, activeJob.to.lng]} 
-                      icon={new L.DivIcon({
-                        className: 'to-icon',
-                        html: `<div class="w-10 h-10 bg-orange-600 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-white">B</div>`,
-                        iconAnchor: [20, 20]
-                      })} 
-                    />
-                  </>
-                )}
-                
-                {userLocation && (
-                  <Marker 
-                    position={[userLocation.lat, userLocation.lng]} 
-                    icon={new L.DivIcon({ 
-                      className: 'driver-location-icon',
-                      html: `<div class="w-12 h-12 bg-emerald-500 rounded-2xl border-4 border-white shadow-2xl flex items-center justify-center text-white"><img src="https://cdn-icons-png.flaticon.com/512/3655/3655682.png" class="w-10 h-10" /></div>`,
-                      iconAnchor: [24, 24]
-                    })}
-                  />
-                )}
-                {activeJob && <ChangeView center={activeJob.status === 'accepted' ? [activeJob.from.lat, activeJob.from.lng] : [activeJob.to.lat, activeJob.to.lng]} />}
-              </MapContainer>
-            </div>
-            
-            {/* Un-inverted Overlays */}
-            <div className="absolute top-8 right-8 flex flex-col gap-4 z-50">
-              <div className="bg-slate-900/80 backdrop-blur-md px-6 py-3 rounded-2xl shadow-2xl flex items-center border border-slate-700/50">
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-ping mr-3 shadow-[0_0_10px_rgba(239,68,68,0.8)]"></div>
-                <span className="text-[8px] font-black text-white uppercase tracking-[0.3em]">GPS Actif</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+     {profile && chatDeliveryId && (
+        <Chat 
+           deliveryId={chatDeliveryId} 
+           currentUser={profile} 
+           isOpen={chatOpen} 
+           onClose={() => setChatOpen(false)} 
+        />
+      )}
     </div>
   );
 }

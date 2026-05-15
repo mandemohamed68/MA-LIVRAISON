@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { updateDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { User, Phone, MapPin, Truck, Save, ArrowLeft } from 'lucide-react';
+import { User, Phone, MapPin, Truck, Save, ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react';
+import { cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function Settings() {
-  const { profile, loading } = useAuth();
+  const { profile, loading, updateProfile } = useAuth();
   const navigate = useNavigate();
   
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [address, setAddress] = useState('');
   const [vehicleType, setVehicleType] = useState('moto');
   const [licensePlate, setLicensePlate] = useState('');
+  const [driverType, setDriverType] = useState<'freelance' | 'company'>(profile?.driverType || 'freelance');
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -21,15 +24,18 @@ export default function Settings() {
     if (profile) {
       setName(profile.name || '');
       setPhone(profile.phone || '');
+      setCity(profile.city || '');
+      setNeighborhood(profile.neighborhood || '');
       setAddress((profile as any).address || '');
       setVehicleType(profile.vehicleType || 'moto');
       setLicensePlate(profile.licensePlate || '');
+      if (profile.driverType) setDriverType(profile.driverType);
     }
   }, [profile]);
 
   if (loading || !profile) return (
-    <div className="flex justify-center py-20">
-      <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
@@ -38,154 +44,224 @@ export default function Settings() {
     setIsSaving(true);
     setSuccessMsg('');
     try {
-      const updates: any = {
+      await updateProfile({
         name,
         phone,
+        city,
+        neighborhood,
         address,
+        vehicleType,
+        licensePlate,
+        driverType,
         updatedAt: new Date().toISOString()
-      };
-      
-      if (profile.role === 'driver') {
-        updates.vehicleType = vehicleType;
-        updates.licensePlate = licensePlate;
-      }
-      
-      await updateDoc(doc(db, 'users', profile.userId), updates);
-      setSuccessMsg('Profil mis à jour avec succès');
+      } as any);
+      setSuccessMsg('Profil mis à jour avec succès !');
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de la mise à jour du profil');
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
-      <button 
-        onClick={() => navigate(-1)} 
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-900 mb-8 transition-colors font-bold text-xs uppercase tracking-widest"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Retour
-      </button>
+    <div className="min-h-screen bg-slate-50 p-6 lg:p-12 pb-24 selection:bg-orange-500 selection:text-white overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <button 
+          onClick={() => navigate(-1)} 
+          className="flex items-center gap-2 text-slate-400 hover:text-slate-900 mb-8 transition-colors font-black text-[10px] uppercase tracking-[0.3em] group"
+        >
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          Retour au Dashboard
+        </button>
 
-      <div className="bg-white rounded-[40px] p-8 md:p-12 shadow-sm border border-slate-100">
-        <div className="flex items-center gap-4 mb-10">
-          <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-900/20">
-            <User className="w-8 h-8" />
+        <header className="mb-12">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-1 bg-orange-500 rounded-full" />
+            <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.3em]">Espace Personnel</p>
           </div>
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Mon Profil</h1>
-            <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] uppercase mt-2">Paramètres du compte</p>
-          </div>
-        </div>
-
-        {successMsg && (
-          <div className="mb-8 p-4 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 text-sm font-bold text-center">
-            {successMsg}
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="space-y-6">
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Nom complet</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input 
-                type="text" 
-                value={name}
-                onChange={e => setName(e.target.value)}
-                required
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-orange-500 focus:bg-white text-slate-900 font-bold transition-all text-sm"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Téléphone</label>
-            <div className="relative">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input 
-                type="tel" 
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                required
-                placeholder="+226 XX XX XX XX"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-orange-500 focus:bg-white text-slate-900 font-bold transition-all text-sm"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Adresse</label>
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input 
-                type="text" 
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                placeholder="Ex: Ouagadougou, Secteur 1"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-orange-500 focus:bg-white text-slate-900 font-bold transition-all text-sm"
-              />
-            </div>
-          </div>
-
+          <h1 className="text-4xl lg:text-5xl font-black text-slate-900 italic uppercase tracking-tighter leading-none mb-6">
+            Configuration <span className="text-orange-500">Profil.</span>
+          </h1>
+          
           {profile.role === 'driver' && (
-            <div className="space-y-6 pt-6 border-t border-slate-100">
-              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Informations Livreur</h3>
-              
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Type de véhicule</label>
-                <div className="relative">
-                  <Truck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <select 
-                    value={vehicleType}
-                    onChange={e => setVehicleType(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-orange-500 focus:bg-white text-slate-900 font-bold transition-all text-sm appearance-none"
-                  >
-                    <option value="moto">Moto</option>
-                    <option value="tricycle">Tricycle</option>
-                    <option value="voiture">Voiture</option>
-                    <option value="fourgonnette">Fourgonnette</option>
-                  </select>
-                </div>
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white border border-slate-200 p-2 rounded-[32px] flex flex-col md:flex-row items-center gap-4 shadow-sm"
+            >
+              <div className="flex-1 px-6">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Précisez votre statut pour la gestion des revenus</p>
               </div>
+              <div className="flex bg-slate-50 p-1.5 rounded-[24px] w-full md:w-auto">
+                <button 
+                  type="button"
+                  onClick={() => setDriverType('freelance')}
+                  className={cn(
+                    "px-8 py-4 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all",
+                    driverType === 'freelance' ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  Je suis Indépendant
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setDriverType('company')}
+                  className={cn(
+                    "px-8 py-4 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all",
+                    driverType === 'company' ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  Je travaille pour une société
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </header>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Numéro d'immatriculation (Optionnel)</label>
-                <div className="relative">
+        <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white border border-slate-200 rounded-[40px] p-8 md:p-10 space-y-8 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-[60px] rounded-full" />
+              
+              <h3 className="text-xl font-black text-slate-900 italic uppercase tracking-tight flex items-center gap-4">
+                <User className="w-6 h-6 text-orange-500" /> Informations générales
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Nom Complet</label>
                   <input 
                     type="text" 
-                    value={licensePlate}
-                    onChange={e => setLicensePlate(e.target.value)}
-                    placeholder="Ex: 11 HH 1111 BF"
-                    className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:outline-none focus:border-orange-500 focus:bg-white text-slate-900 font-bold transition-all text-sm uppercase"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Email</label>
+                  <input 
+                    disabled
+                    type="email" 
+                    value={profile.email}
+                    className="w-full bg-slate-50/50 border border-slate-100 text-slate-400 p-5 rounded-2xl cursor-not-allowed font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Téléphone</label>
+                  <input 
+                    type="tel" 
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Ville</label>
+                  <input 
+                    type="text" 
+                    value={city}
+                    onChange={e => setCity(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Quartier</label>
+                  <input 
+                    type="text" 
+                    value={neighborhood}
+                    onChange={e => setNeighborhood(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2 lg:col-span-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Adresse Complète</label>
+                  <input 
+                    type="text" 
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
                   />
                 </div>
               </div>
             </div>
-          )}
 
-          <div className="pt-8">
+            {profile.role === 'driver' && (
+              <div className="bg-white border border-slate-200 rounded-[40px] p-8 md:p-10 space-y-8 relative overflow-hidden shadow-sm">
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/5 blur-[60px] rounded-full" />
+                
+                <h3 className="text-xl font-black text-slate-900 italic uppercase tracking-tight flex items-center gap-4">
+                  <Truck className="w-6 h-6 text-blue-500" /> Détails Logistiques
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Type de Véhicule</label>
+                    <select 
+                      value={vehicleType}
+                      onChange={e => setVehicleType(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm appearance-none"
+                    >
+                      <option value="moto">Moto (P4, Zem)</option>
+                      <option value="tricycle">Tricycle Cargo</option>
+                      <option value="voiture">Voiture / Van</option>
+                      <option value="camionnette">Fourgonnette</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Immatriculation</label>
+                    <input 
+                      type="text" 
+                      value={licensePlate}
+                      onChange={e => setLicensePlate(e.target.value)}
+                      placeholder="Ex: 11 HH 1111"
+                      className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-[40px] p-10 flex flex-col items-center text-center shadow-sm relative overflow-hidden">
+              <div className="w-24 h-24 bg-orange-50 rounded-[30px] flex items-center justify-center text-orange-500 mb-6 border border-orange-100">
+                <ShieldCheck className="w-12 h-12" />
+              </div>
+              <h4 className="text-slate-900 font-black uppercase tracking-tight mb-2 italic">Compte Sécurisé</h4>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-loose">
+                Vos données biométriques et documents sont cryptés (Bf-Law 2024).
+              </p>
+            </div>
+
             <button 
-              type="submit" 
+              type="submit"
               disabled={isSaving}
-              className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white p-5 rounded-2xl font-black text-sm tracking-widest uppercase hover:bg-orange-600 transition-all shadow-xl shadow-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-6 bg-slate-900 text-white rounded-[30px] font-black uppercase tracking-[0.3em] text-xs shadow-xl shadow-slate-200 hover:bg-orange-600 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
             >
               {isSaving ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Sauvegarde...
-                </>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
                   <Save className="w-5 h-5" />
-                  Garder les modifications
+                  Sauvegarder
                 </>
               )}
             </button>
+
+            <AnimatePresence>
+              {successMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="p-5 bg-emerald-50 border border-emerald-100 rounded-3xl flex items-center gap-4 text-emerald-600"
+                >
+                  <CheckCircle className="w-5 h-5 shrink-0" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">{successMsg}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </form>
       </div>

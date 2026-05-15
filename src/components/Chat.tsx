@@ -1,149 +1,202 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  Timestamp,
+  doc,
+  updateDoc 
+} from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { db } from '../lib/firebase';
-import { useAuth } from '../context/AuthContext';
-import { ChatMessage } from '../types';
-import { Send, User, MessageSquare } from 'lucide-react';
+import { ChatMessage, UserProfile } from '../types';
+import { Send, User, Shield, MessageSquare, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '../lib/utils';
 
 interface ChatProps {
   deliveryId: string;
-  recipientName: string;
+  currentUser: UserProfile;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-export default function Chat({ deliveryId, recipientName }: ChatProps) {
-  const { user } = useAuth();
+export const Chat: React.FC<ChatProps> = ({ deliveryId, currentUser, isOpen, onClose }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!deliveryId) return;
+    if (!deliveryId || !isOpen) return;
 
-    const q = query(
-      collection(db, `deliveries/${deliveryId}/messages`),
-      orderBy('timestamp', 'asc')
-    );
+    const messagesRef = collection(db, 'deliveries', deliveryId, 'messages');
+    const q = query(messagesRef, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage)));
-    });
+      const msgs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          // Handle both string and Timestamp for createdAt
+          createdAt: data.createdAt instanceof Timestamp 
+            ? data.createdAt.toDate().toISOString() 
+            : data.createdAt
+        } as ChatMessage;
+      });
+      setMessages(msgs);
+      setIsLoading(false);
+      
+      // Auto scroll to bottom
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 100);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, `deliveries/${deliveryId}/messages`));
 
     return () => unsubscribe();
-  }, [deliveryId]);
+  }, [deliveryId, isOpen]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isOpen]);
-
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user) return;
+    if (!newMessage.trim()) return;
+
+    const text = newMessage.trim();
+    setNewMessage('');
 
     try {
-      await addDoc(collection(db, `deliveries/${deliveryId}/messages`), {
-        senderId: user.uid,
-        text: newMessage,
-        timestamp: new Date().toISOString()
+      const messagesRef = collection(db, 'deliveries', deliveryId, 'messages');
+      const now = new Date().toISOString();
+      await addDoc(messagesRef, {
+        text,
+        senderId: currentUser.userId,
+        senderName: currentUser.name,
+        senderRole: currentUser.role === 'admin' || currentUser.role === 'superadmin' ? 'admin' : currentUser.role,
+        createdAt: serverTimestamp()
       });
-      await updateDoc(doc(db, 'deliveries', deliveryId), { 
-        lastMessageAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      // Update delivery to notify admin/others about new activity
+      await updateDoc(doc(db, 'deliveries', deliveryId), {
+        lastMessageAt: now,
+        updatedAt: now
       });
-      setNewMessage('');
     } catch (error) {
       console.error("Error sending message:", error);
     }
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100]">
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="bg-white rounded-[32px] shadow-2xl border-4 border-white w-80 md:w-96 h-[500px] flex flex-col mb-4 overflow-hidden"
-          >
-            <div className="bg-orange-500 p-6 text-white flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <User className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Discussion</p>
-                  <p className="font-black text-sm">{recipientName}</p>
-                </div>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          initial={{ opacity: 0, y: 100, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 100, scale: 0.95 }}
+          className="fixed bottom-24 right-4 z-[1000] w-[calc(100%-2rem)] sm:w-96 h-[500px] bg-white rounded-[32px] shadow-2xl border border-slate-100 flex flex-col overflow-hidden"
+        >
+          {/* Header */}
+          <div className="bg-indigo-600 p-4 flex items-center justify-between text-white">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                <MessageSquare className="w-5 h-5 text-white" />
               </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="text-white/70 hover:text-white font-black text-xl"
-              >
-                ×
-              </button>
+              <div>
+                <h3 className="font-black italic text-sm tracking-tight leading-tight">CHAT DIRECT.</h3>
+                <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Livraison #{deliveryId.slice(-6)}</p>
+              </div>
             </div>
-
-            <div 
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50 custom-scrollbar"
+            <button 
+              onClick={onClose}
+              className="p-2 hover:bg-white/10 rounded-xl transition-colors"
             >
-              {messages.length === 0 ? (
-                <div className="text-center py-10">
-                  <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Aucun message</p>
-                </div>
-              ) : (
-                messages.map((msg) => (
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Messages Cabinet */}
+          <div 
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="w-6 h-6 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full opacity-30 text-center px-8">
+                <MessageSquare className="w-12 h-12 mb-3" />
+                <p className="text-xs font-bold uppercase tracking-widest">Commencez la discussion</p>
+                <p className="text-[10px] mt-1 italic">Client, Livreur et Support sont ici.</p>
+              </div>
+            ) : (
+              messages.map((msg) => {
+                const isMe = msg.senderId === currentUser.userId;
+                return (
                   <div 
                     key={msg.id}
-                    className={`flex ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
+                    className={cn(
+                      "flex flex-col max-w-[85%]",
+                      isMe ? "ml-auto items-end" : "mr-auto items-start"
+                    )}
                   >
-                    <div className={`max-w-[80%] p-4 rounded-2xl text-sm font-medium shadow-sm ${
-                      msg.senderId === user?.uid 
-                        ? 'bg-blue-600 text-white rounded-tr-none' 
-                        : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
-                    }`}>
+                    {!isMe && (
+                      <div className="flex items-center gap-1.5 mb-1 px-2">
+                        <span className="text-[10px] font-black uppercase tracking-tight text-slate-500">
+                          {msg.senderName}
+                        </span>
+                        <span className={cn(
+                          "text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full border",
+                          msg.senderRole === 'admin' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                          msg.senderRole === 'driver' ? "bg-indigo-50 text-indigo-600 border-indigo-100" :
+                          "bg-emerald-50 text-emerald-600 border-emerald-100"
+                        )}>
+                          {msg.senderRole === 'admin' ? 'Support' : msg.senderRole}
+                        </span>
+                      </div>
+                    )}
+                    <div className={cn(
+                      "px-4 py-3 rounded-[20px] text-sm font-medium shadow-sm",
+                      isMe 
+                        ? "bg-indigo-600 text-white rounded-br-none" 
+                        : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
+                    )}>
                       {msg.text}
                     </div>
+                    <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase">
+                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
-                ))
-              )}
-            </div>
-
-            <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-slate-100 flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Votre message..."
-                className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
-              />
-              <button 
-                type="submit"
-                className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center hover:bg-orange-600 transition-all shadow-lg shadow-orange-100"
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-16 h-16 bg-orange-500 text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-105 transition-all border-4 border-white relative"
-      >
-        <MessageSquare className="w-8 h-8" />
-        {!isOpen && messages.length > 0 && (
-          <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-600 text-white rounded-full text-[10px] font-black flex items-center justify-center border-2 border-white">
-            {messages.length}
+                );
+              })
+            )}
           </div>
-        )}
-      </button>
-    </div>
+
+          {/* Input Box */}
+          <form 
+            onSubmit={handleSend}
+            className="p-4 bg-white border-t border-slate-100 flex items-center gap-3"
+          >
+            <input 
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Votre message..."
+              className="flex-1 bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-semibold placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/20 transition-all outline-none"
+            />
+            <button 
+              type="submit"
+              disabled={!newMessage.trim()}
+              className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:grayscale transition-all shadow-lg shadow-indigo-200"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </form>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
-}
+};

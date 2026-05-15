@@ -5,12 +5,68 @@ import { Truck, Package, MapPin, ArrowRight, UserCheck, User, ShieldCheck, Mail,
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { UserRole } from '../types';
+import { LoadingScreen } from '../components/LoadingScreen';
+import logoUrl from '../assets/logo.png';
 
 type AuthMode = 'login' | 'register' | 'phone';
 
+const compressImage = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (file.type === 'application/pdf') {
+       if (file.size > 1000000) {
+          reject(new Error("Le fichier PDF est trop volumineux (maximum 1 Mo). Veuillez réduire sa taille ou envoyer une photo."));
+          return;
+       }
+       const reader = new FileReader();
+       reader.onloadend = () => resolve(reader.result as string);
+       reader.onerror = reject;
+       reader.readAsDataURL(file);
+       return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        const MAX_DIM = 800; // Smaller dimension for lighter payload
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height *= MAX_DIM / width;
+            width = MAX_DIM;
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width *= MAX_DIM / height;
+            height = MAX_DIM;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+           ctx.drawImage(img, 0, 0, width, height);
+           const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // 50% quality JPEG
+           resolve(dataUrl);
+        } else {
+           resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => reject(new Error("Erreur de lecture de l'image"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function LandingView() {
   const { 
-    user, profile, login, loginWithEmail, registerWithEmail, loginWithPhone, 
+    user, profile, loading: authLoading, login, loginWithEmail, registerWithEmail, loginWithPhone, 
     updateProfile, isMasterAdmin 
   } = useAuth();
   const navigate = useNavigate();
@@ -21,110 +77,136 @@ export default function LandingView() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [address, setAddress] = useState('');
   const [driverType, setDriverType] = useState<'freelance' | 'company'>('freelance');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [confirmResult, setConfirmResult] = useState<any>(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  const [idCardFront, setIdCardFront] = useState<string | null>(null);
+  const [idCardBack, setIdCardBack] = useState<string | null>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const base64 = await compressImage(file);
+        if (side === 'front') setIdCardFront(base64);
+        else setIdCardBack(base64);
+      } catch (err: any) {
+        setError(err.message || "Erreur lors du traitement de l'image");
+      }
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setLocalLoading(true);
     try {
       if (isRegistering) {
-        // Driver specific validation
-        if (role === 'driver' && !termsAccepted) {
-           setError('Vous devez accepter les conditions d\'utilisation.');
-           setLoading(false);
-           return;
-        }
-        await registerWithEmail(email, password, name, role); 
         if (role === 'driver') {
-          await updateProfile({ 
-            address, 
-            driverType, 
-            termsAcceptedAt: new Date().toISOString() 
-          });
+          if (!termsAccepted) {
+             setError('Vous devez accepter les conditions d\'utilisation.');
+             setLocalLoading(false);
+             return;
+          }
+          // ID Card validation removed (made optional)
         }
+
+        await registerWithEmail(email, password, name, role, {
+          city,
+          neighborhood,
+          address,
+          driverType,
+          phone,
+          idCardFront,
+          idCardBack,
+          termsAcceptedAt: new Date().toISOString()
+        });
       } else {
         await loginWithEmail(email, password);
       }
     } catch (err: any) {
+      setLocalLoading(false);
       if (err.code === 'auth/operation-not-allowed') {
-        setError("L'authentification par email/mot de passe (ou téléphone) n'est pas activée dans Firebase. Allez dans Firebase Console > Authentication > Sign-in method pour l'activer.");
+        setError("L'authentification par email/mot de passe n'est pas activée.");
+      } else if (err.code === 'auth/invalid-credential') {
+        setError("L'adresse email ou le mot de passe est incorrect.");
+      } else if (err.code === 'auth/too-many-requests') {
+        setError("Trop de tentatives. Veuillez réessayer plus tard.");
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError("Un compte existe déjà avec cette adresse email.");
+      } else if (err.code === 'auth/user-not-found') {
+        setError("Aucun compte ne correspond à cette adresse email.");
+      } else if (err.code === 'auth/wrong-password') {
+        setError("Le mot de passe renseigné est incorrect.");
       } else {
-        setError(err.message || 'Une erreur est survenue');
+        setError("Erreur : Impossible de s'authentifier avec ces informations.");
       }
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handlePhoneSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      if (!confirmResult) {
-        const result = await loginWithPhone(phone, 'recaptcha-container');
-        setConfirmResult(result);
-      } else {
-        await confirmResult.confirm(verificationCode);
-      }
-    } catch (err: any) {
-      if (err.code === 'auth/operation-not-allowed') {
-        setError("L'authentification par téléphone n'est pas activée dans Firebase. Allez dans Firebase Console > Authentication > Sign-in method pour l'activer.");
-      } else if (err.code === 'auth/invalid-phone-number') {
-        setError("Le format du numéro de téléphone est invalide. Utilisez le format +226...");
-      } else {
-        setError(err.message || 'Erreur auth téléphone');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (authLoading || localLoading) {
+    return <LoadingScreen />;
+  }
 
-  // Redirect if logged in and profile complete
-  React.useEffect(() => {
-    if (user && profile && profile.role) {
-      // Role assigned? Go to dashboard
-      if (profile.phone || profile.role === 'superadmin') {
-         const path = (profile.role === 'superadmin' || profile.role === 'admin') ? '/admin' : 
-                   profile.role === 'client' ? '/client' : '/driver';
-         navigate(path);
-      }
-    }
-  }, [user, profile, navigate]);
-
-  if (user && profile && !profile.role) {
+  if (user && (!profile || !profile.role)) {
     // Role selection for new users (e.g. from Google login)
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+      <div className="h-full flex-1 w-full bg-slate-50 flex items-center justify-center p-6 min-h-0 overflow-y-auto">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-[40px] p-10 text-center shadow-2xl"
+          className="max-w-md w-full bg-white border border-slate-100 rounded-3xl p-10 text-center shadow-2xl"
         >
-          <h2 className="text-3xl font-black text-white tracking-tighter mb-8 italic uppercase">CHOISISSEZ VOTRE <span className="text-orange-500">RÔLE.</span></h2>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-8 italic uppercase">CHOISISSEZ VOTRE <span className="text-orange-500">RÔLE.</span></h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 text-left">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Ville</label>
+              <input 
+                type="text"
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                placeholder="Ex: Ouagadougou"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Quartier</label>
+              <input 
+                type="text"
+                value={neighborhood}
+                onChange={e => setNeighborhood(e.target.value)}
+                placeholder="Ex: Pissy"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-4">
             <button 
-              onClick={() => updateProfile({ role: 'client' })}
-              className="group p-8 bg-slate-800/50 hover:bg-orange-500 rounded-3xl border border-slate-700 hover:border-orange-400 transition-all text-left"
+              disabled={!city || !neighborhood}
+              onClick={() => updateProfile({ role: 'client', city, neighborhood })}
+              className="group p-8 bg-slate-50 hover:bg-orange-500 rounded-3xl border border-slate-100 hover:border-orange-400 transition-all text-left disabled:opacity-50 disabled:hover:bg-slate-50 disabled:cursor-not-allowed"
             >
               <User className="w-10 h-10 text-orange-500 group-hover:text-white mb-4" />
-              <h3 className="text-xl font-black text-white uppercase italic">Client</h3>
+              <h3 className="text-xl font-black text-slate-900 group-hover:text-white uppercase italic">Client</h3>
               <p className="text-slate-400 group-hover:text-orange-100 text-xs font-bold leading-tight mt-1">Envoyez vos colis en un clic partout à Ouaga.</p>
             </button>
             <button 
-              onClick={() => updateProfile({ role: 'driver' })}
-              className="group p-8 bg-slate-800/50 hover:bg-blue-600 rounded-3xl border border-slate-700 hover:border-blue-400 transition-all text-left"
+              disabled={!city || !neighborhood}
+              onClick={() => updateProfile({ role: 'driver', city, neighborhood, accountStatus: 'pending_approval' })}
+              className="group p-8 bg-slate-50 hover:bg-orange-600 rounded-3xl border border-slate-100 hover:border-orange-400 transition-all text-left disabled:opacity-50 disabled:hover:bg-slate-50 disabled:cursor-not-allowed"
             >
-              <Truck className="w-10 h-10 text-blue-500 group-hover:text-white mb-4" />
-              <h3 className="text-xl font-black text-white uppercase italic">Livreur</h3>
-              <p className="text-slate-400 group-hover:text-blue-100 text-xs font-bold leading-tight mt-1">Gagnez de l'argent en livrant avec votre moto ou auto.</p>
+              <Truck className="w-10 h-10 text-orange-600 group-hover:text-white mb-4" />
+              <h3 className="text-xl font-black text-slate-900 group-hover:text-white uppercase italic">Livreur</h3>
+              <p className="text-slate-400 group-hover:text-orange-100 text-xs font-bold leading-tight mt-1">Gagnez de l'argent en livrant avec votre moto ou auto.</p>
             </button>
           </div>
         </motion.div>
@@ -133,67 +215,69 @@ export default function LandingView() {
   }
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-slate-950 overflow-hidden">
+    <div className="h-full flex-1 w-full grid grid-cols-1 lg:grid-cols-2 bg-white overflow-hidden min-h-0">
       {/* Left Pane: Branding & Visuals */}
-      <div className="relative hidden lg:flex flex-col justify-between p-16 overflow-hidden">
+      <div className="relative hidden lg:flex flex-col justify-between p-16 overflow-hidden bg-slate-50">
         <div className="absolute inset-0 z-0">
-          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-orange-500/20 blur-[120px] rounded-full" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[100px] rounded-full" />
+          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[120px] rounded-full" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/5 blur-[100px] rounded-full" />
         </div>
         
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center">
-              <Truck className="text-white w-6 h-6" />
+          <div className="flex items-center gap-4 mb-12">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-orange-600 shadow-xl shadow-orange-500/20 p-2 group-hover:scale-110 transition-all">
+              <img src={logoUrl} alt="Livra Express" className="w-full h-full object-contain filter drop-shadow-sm" />
             </div>
-            <span className="text-xl font-black text-white tracking-widest uppercase italic">Ma Livraison.</span>
+            <div className="flex flex-col">
+              <div className="flex items-baseline space-x-0.5">
+                <span className="text-3xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">Livra</span>
+                <span className="text-3xl font-black text-orange-600 tracking-tighter italic uppercase leading-none">EXPRESS</span>
+              </div>
+              <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase mt-1">Plateforme Logistique</span>
+            </div>
           </div>
           
-          <h1 className="text-[100px] xl:text-[120px] font-black text-white leading-[0.85] tracking-tighter uppercase italic select-none">
+          <h1 className="text-[100px] xl:text-[120px] font-black text-slate-900 leading-[0.85] tracking-tighter uppercase italic select-none">
             VITESSE.<br />
-            <span className="text-orange-500">SÉCURITÉ.</span><br />
+            <span className="text-primary">SÉCURITÉ.</span><br />
             EXPRESS.
           </h1>
 
           <div className="mt-8">
              <p className="text-slate-400 text-xl font-bold max-w-sm leading-tight italic">
-               La logistique 2.0 au cœur de <span className="text-white underline decoration-orange-500 decoration-4">Ouagadougou.</span>
+               La logistique 2.0 au cœur de <span className="text-slate-900 underline decoration-primary decoration-4">Ouagadougou.</span>
              </p>
           </div>
         </div>
 
         <div className="relative z-10 flex gap-12 pt-20">
           <div className="flex flex-col">
-            <span className="text-5xl font-black text-white italic">24/7</span>
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Disponibilité Totale</span>
+            <span className="text-5xl font-black text-slate-900 italic">24/7</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">Disponibilité Totale</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-5xl font-black text-white italic">15m</span>
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Ramassage Moyen</span>
+            <span className="text-5xl font-black text-slate-900 italic">15m</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">Ramassage Moyen</span>
           </div>
         </div>
       </div>
 
       {/* Right Pane: Auth Forms */}
-      <div className="flex items-center justify-center p-8 bg-slate-900 lg:rounded-l-[60px] border-l border-slate-800 shadow-[-40px_0_80px_rgba(0,0,0,0.5)]">
-        <div className="max-w-md w-full">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/10 rounded-full border border-orange-500/20 mb-6">
-              <Zap className="w-3 h-3 text-orange-500" />
-              <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest leading-none">Version Pro 2.1</span>
-            </div>
-            <h2 className="text-4xl font-black text-white tracking-tight italic uppercase mb-2">
-              {isRegistering ? "Rejoindre l'élite" : "Bon Retour"}
+      <div className="flex flex-col items-center justify-center p-6 sm:p-10 bg-white lg:rounded-l-[40px] border-l border-slate-100 shadow-2xl relative z-10 w-full min-h-[100dvh] overflow-y-auto">
+        <div className="w-full max-w-md my-auto pb-10 mt-12 lg:mt-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2 italic">
+              {isRegistering ? "Création de compte" : "Bienvenue"}
             </h2>
-            <p className="text-slate-500 text-sm font-medium">Connectez-vous pour commencer.</p>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle Livra EXPRESS</p>
           </div>
 
-          <div className="flex p-1 bg-slate-800/50 rounded-2xl border border-slate-700 mb-8 overflow-hidden">
+          <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100 mb-8">
             <button 
               onClick={() => { setIsRegistering(false); setAuthMode('login'); confirmResult && setConfirmResult(null); }}
               className={cn(
-                "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                (!isRegistering && authMode !== 'phone') ? "bg-white text-slate-900 shadow-xl" : "text-slate-500"
+                "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                (!isRegistering && authMode !== 'phone') ? "bg-white text-slate-900 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
               )}
             >
               Email
@@ -201,206 +285,270 @@ export default function LandingView() {
             <button 
               onClick={() => { setIsRegistering(true); setAuthMode('login'); }}
               className={cn(
-                "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                isRegistering ? "bg-white text-slate-900 shadow-xl" : "text-slate-500"
+                "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                isRegistering ? "bg-white text-slate-900 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
               )}
             >
-              S'inscrire
+              Inscription
             </button>
             <button 
               onClick={() => { setAuthMode('phone'); setIsRegistering(false); }}
               className={cn(
-                "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                authMode === 'phone' ? "bg-white text-slate-900 shadow-xl" : "text-slate-500"
+                "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                authMode === 'phone' ? "bg-white text-slate-900 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
               )}
             >
               Mobile
             </button>
           </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-wider">
-              {error}
+          {!isRegistering && authMode !== 'phone' && (
+            <div className="mb-6">
+              <button 
+                onClick={() => login()}
+                className="w-full h-14 bg-white border border-slate-200 rounded-xl px-6 flex items-center justify-center gap-3 hover:bg-slate-50 transition-all font-black text-[10px] uppercase tracking-widest shadow-sm active:scale-95 group"
+              >
+                <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Se connecter avec Google
+              </button>
+
+              <div className="flex items-center my-6">
+                <div className="flex-1 h-px bg-slate-100" />
+                <span className="px-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">OU</span>
+                <div className="flex-1 h-px bg-slate-100" />
+              </div>
             </div>
           )}
 
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest text-center"
+            >
+              {error}
+            </motion.div>
+          )}
+
           {authMode === 'phone' ? (
-            <form onSubmit={handlePhoneSignIn} className="space-y-4">
-              {/* Phone auth UI remained untouched */}
-              <div id="recaptcha-container"></div>
-              {!confirmResult ? (
-                <div className="relative">
-                  <Phone className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input 
-                    required
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="+226 XX XX XX XX"
-                    className="w-full bg-slate-800 border-none rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-white focus:ring-2 focus:ring-orange-500 transition-all outline-none"
-                  />
-                </div>
-              ) : (
-                <div className="relative">
-                  <Lock className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input 
-                    required
-                    type="text"
-                    value={verificationCode}
-                    onChange={e => setVerificationCode(e.target.value)}
-                    placeholder="CODE SMS"
-                    className="w-full bg-slate-800 border-none rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-white focus:ring-2 focus:ring-orange-500 tracking-[0.5em] text-center outline-none"
-                  />
-                </div>
-              )}
-              <button 
-                type="submit"
-                disabled={loading}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-5 font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-orange-900/20 transition-all flex items-center justify-center gap-2 group"
-              >
-                {loading ? "Chargement..." : !confirmResult ? "Envoyer le code" : "Confirmer"}
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
-            </form>
+            <div className="py-12 flex flex-col items-center justify-center bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] italic text-center">SMS OTP INDISPONIBLE</p>
+            </div>
           ) : isRegistering ? (
             <form onSubmit={handleAuth} className="space-y-4">
-              <div className="flex gap-2 p-1 bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden mb-6">
+              <div className="flex gap-2 p-1 bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden mb-6">
                 <button 
                   type="button"
                   onClick={() => setRole('client')}
                   className={cn(
                     "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                    role === 'client' ? "bg-orange-500 text-white shadow-lg" : "text-slate-500 hover:text-white"
+                    role === 'client' ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  Compte Client
+                  Client
                 </button>
                 <button 
                   type="button"
                   onClick={() => setRole('driver')}
                   className={cn(
                     "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                    role === 'driver' ? "bg-blue-600 text-white shadow-lg" : "text-slate-500 hover:text-white"
+                    role === 'driver' ? "bg-slate-900 text-white shadow-lg" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  Compte Livreur
+                  Livreur
                 </button>
               </div>
 
               {role === 'driver' && (
-                <div className="flex bg-slate-800/50 rounded-xl p-1 border border-slate-700 mb-6">
+                <div className="flex bg-slate-50 rounded-2xl p-1 border border-slate-100 mb-6">
                    <button
                      type="button"
                      onClick={() => setDriverType('freelance')}
-                     className={cn("flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all", driverType === 'freelance' ? "bg-slate-700 text-white" : "text-slate-500 hover:text-white")}
+                     className={cn(
+                       "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", 
+                       driverType === 'freelance' ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-slate-400 hover:text-slate-600"
+                     )}
                    >
-                     Individu
+                     Indépendant
                    </button>
                    <button
                      type="button"
                      onClick={() => setDriverType('company')}
-                     className={cn("flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all", driverType === 'company' ? "bg-slate-700 text-white" : "text-slate-500 hover:text-white")}
+                     className={cn(
+                       "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", 
+                       driverType === 'company' ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-slate-400 hover:text-slate-600"
+                     )}
                    >
-                     Société de livraison
+                     Société
                    </button>
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-2">{role === 'driver' && driverType === 'company' ? 'Nom de la Société' : 'Nom Complet'}</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">{role === 'driver' && driverType === 'company' ? 'Nom de la Société' : 'Nom Complet'}</label>
                   <input 
                     required
                     type="text"
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    placeholder={role === 'driver' && driverType === 'company' ? 'Ex: Express Logistique' : 'Ex: Jean Dupont'}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none"
+                    placeholder={role === 'driver' && driverType === 'company' ? 'Ex: Express Log' : 'Ex: Jean Dupont'}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-2">Email</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Email</label>
                   <input 
                     required
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="Ex: contact@email.com"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-2">Téléphone</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Téléphone</label>
                   <input 
                     required
                     type="tel"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
                     placeholder="Ex: +226 70 00 00 00"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-2">Mot de Passe</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Mot de Passe</label>
                   <input 
                     required
                     type="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="Min. 6 caractères"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Ville</label>
+                  <input 
+                    required
+                    type="text"
+                    value={city}
+                    onChange={e => setCity(e.target.value)}
+                    placeholder="Ex: Ouagadougou"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Quartier</label>
+                  <input 
+                    required
+                    type="text"
+                    value={neighborhood}
+                    onChange={e => setNeighborhood(e.target.value)}
+                    placeholder="Ex: Pissy"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>
               </div>
 
               {role === 'driver' && (
-                <div className="mt-4 p-5 bg-slate-900/50 border border-slate-800 rounded-3xl space-y-5">
+                <div className="mt-4 p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-5">
                   <div className="flex items-center gap-2">
-                    <CheckSquare className="w-4 h-4 text-emerald-500" />
-                    <h3 className="text-xs font-black text-white uppercase tracking-widest">Documents et Vérification</h3>
+                     <CheckSquare className="w-5 h-5 text-emerald-500" />
+                     <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest italic">Vérification Documents</h3>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     <div className="border-2 border-dashed border-slate-700 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-orange-500 hover:bg-slate-800/50 transition-all group">
-                        <Camera className="w-6 h-6 text-slate-500 group-hover:text-orange-500 mb-2 transition-colors" />
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest group-hover:text-orange-400">
-                          {driverType === 'company' ? 'RCCM / Statuts' : 'CNI Recto *'}
-                        </span>
-                     </div>
-                     <div className="border-2 border-dashed border-slate-700 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:border-orange-500 hover:bg-slate-800/50 transition-all group">
-                        <Camera className="w-6 h-6 text-slate-500 group-hover:text-orange-500 mb-2 transition-colors" />
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest group-hover:text-orange-400">
-                          {driverType === 'company' ? 'NIF / IFU' : 'CNI Verso *'}
-                        </span>
-                     </div>
+                     <label className={cn(
+                       "border border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group",
+                       idCardFront ? "bg-orange-50 border-orange-500" : "border-slate-200 bg-white hover:border-orange-500"
+                     )}>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={e => handleFileChange(e, 'front')} 
+                          className="hidden" 
+                        />
+                        {idCardFront ? (
+                          <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+                            <img src={idCardFront} alt="Recto" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-orange-500/40 flex items-center justify-center text-white">
+                              <UserCheck className="w-6 h-6" />
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <Camera className="w-6 h-6 text-slate-300 group-hover:text-orange-500 mb-2" />
+                            <span className="text-[9px] font-black text-slate-400 uppercase">
+                              {driverType === 'company' ? 'RCCM / Statuts' : 'CNI Recto *'}
+                            </span>
+                          </>
+                        )}
+                     </label>
+                     <label className={cn(
+                       "border border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group",
+                       idCardBack ? "bg-orange-50 border-orange-500" : "border-slate-200 bg-white hover:border-orange-500"
+                     )}>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={e => handleFileChange(e, 'back')} 
+                          className="hidden" 
+                        />
+                        {idCardBack ? (
+                          <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+                            <img src={idCardBack} alt="Verso" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-orange-500/40 flex items-center justify-center text-white">
+                              <UserCheck className="w-6 h-6" />
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <Camera className="w-6 h-6 text-slate-300 group-hover:text-orange-500 mb-2" />
+                            <span className="text-[9px] font-black text-slate-400 uppercase">
+                              {driverType === 'company' ? 'NIF / IFU' : 'CNI Verso *'}
+                            </span>
+                          </>
+                        )}
+                     </label>
                   </div>
 
-                  <div className="space-y-1 pt-2">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-2">Adresse / Zone d'activité</label>
+                  <div className="space-y-1.5 pt-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Adresse / Zone d'activité</label>
                     <input 
                       type="text"
                       value={address}
                       onChange={e => setAddress(e.target.value)}
                       placeholder="Ex: Ouagadougou, Secteur 1"
-                      className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none"
+                      className="w-full bg-white border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                     />
                   </div>
 
-                  <div className="flex items-start gap-4 pt-4 border-t border-slate-800">
+                  <div className="flex items-start gap-4 pt-4 border-t border-slate-100">
                      <input 
                        type="checkbox" 
                        required
                        checked={termsAccepted}
                        onChange={(e) => setTermsAccepted(e.target.checked)}
-                       className="mt-1 w-5 h-5 rounded border-slate-700 bg-slate-800 text-orange-500 focus:ring-orange-500 focus:ring-offset-slate-900 cursor-pointer"
+                       className="mt-1 w-5 h-5 rounded border-slate-200 text-orange-500 focus:ring-orange-500 cursor-pointer"
                      />
                      <div>
-                       <p className="text-[11px] font-black text-slate-300">Conditions d'utilisation</p>
-                       <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                         En cochant cette case, le livreur s'engage à respecter les normes de sécurité des colis et à maintenir une conduite professionnelle irréprochable.
+                       <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Conditions d'utilisation</p>
+                       <p className="text-[9px] font-medium text-slate-400 mt-1 leading-relaxed">
+                         En cochant cette case, vous vous engagez à respecter les conditions de service de LIVRA.
                        </p>
                      </div>
                   </div>
@@ -409,74 +557,60 @@ export default function LandingView() {
 
               <button 
                 type="submit"
-                disabled={loading}
-                className="w-full mt-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-5 font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-orange-900/20 transition-all flex items-center justify-center gap-2 group"
+                disabled={localLoading}
+                className="w-full mt-6 bg-slate-900 hover:bg-orange-600 text-white rounded-xl py-5 font-black text-[10px] uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center gap-2 group"
               >
-                {loading ? "Chargement..." : "Créer mon compte"}
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                {localLoading ? "Chargement..." : "Créer mon compte"}
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
             </form>
           ) : (
             <form onSubmit={handleAuth} className="space-y-4">
               <div className="relative">
-                <Mail className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
                 <input 
                   required
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="ADRESSE EMAIL"
-                  className="w-full bg-slate-800 border-none rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-white focus:ring-2 focus:ring-orange-500 transition-all outline-none"
+                  placeholder="Adresse email"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                 />
               </div>
               <div className="relative">
-                <Lock className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
                 <input 
                   required
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder="MOT DE PASSE"
-                  className="w-full bg-slate-800 border-none rounded-2xl pl-14 pr-6 py-5 text-sm font-bold text-white focus:ring-2 focus:ring-orange-500 transition-all outline-none"
+                  placeholder="Mot de passe"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                 />
               </div>
               <button 
                 type="submit"
-                disabled={loading}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-5 font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-orange-900/20 transition-all flex items-center justify-center gap-2 group"
+                disabled={localLoading}
+                className="w-full bg-slate-900 hover:bg-orange-600 text-white rounded-xl py-4 font-black text-[10px] uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center gap-2 group mt-2"
               >
-                {loading ? "Chargement..." : "Se Connecter"}
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                {localLoading ? "Chargement..." : "Se connecter"}
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
             </form>
           )}
 
-          <div className="mt-10 flex items-center gap-4">
-            <div className="flex-1 h-px bg-slate-800" />
-            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest leading-none">Ou continuer avec</span>
-            <div className="flex-1 h-px bg-slate-800" />
-          </div>
-
-          <button 
-            onClick={() => login()}
-            className="mt-8 w-full bg-white text-slate-900 rounded-2xl py-5 font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
-          >
-            <Globe className="w-4 h-4 text-blue-600" />
-            Google Connect
-          </button>
-          
-          <div className="mt-10 pt-10 border-t border-slate-800/50 flex justify-between items-center">
+          <div className="mt-10 pt-8 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">Assistance 24/7</span>
-                <span className="text-white font-bold text-xs">+226 00 00 00 00</span>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Édité par NME TECHNOLOGIE Group</span>
+                <span className="text-slate-900 font-black text-sm tracking-tighter italic">72567606</span>
              </div>
-             <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer">
+             <div className="flex gap-3">
+                <a href="tel:+22672567606" className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-orange-600 transition-colors cursor-pointer border border-slate-100">
                    <Phone className="w-4 h-4" />
-                </div>
-                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer">
+                </a>
+                <a href="mailto:nmetechnologiegroup@gmail.com" className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-orange-600 transition-colors cursor-pointer border border-slate-100">
                    <Mail className="w-4 h-4" />
-                </div>
+                </a>
              </div>
           </div>
         </div>

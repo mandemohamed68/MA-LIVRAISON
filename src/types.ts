@@ -1,9 +1,40 @@
 export interface AppConfig {
   mode: 'test' | 'prod';
   updatedAt: string;
+  maintenanceMessage?: string;
+  isMaintenanceMode?: boolean;
+  ussdSyntaxOrange?: string;
+  ussdSyntaxMoov?: string;
+  ussdSyntaxTelecel?: string;
+  ussdSyntaxCoris?: string;
+  ussdSyntaxGeneric?: string;
+}
+
+export interface Sector {
+  id: string;
+  name: string;
+  city: string;
+  isActive: boolean;
+}
+
+export interface AppAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  targetRole: 'all' | 'client' | 'driver';
+  type: 'info' | 'warning' | 'success';
+  activeUntil: string;
+  createdAt: string;
 }
 
 export type UserRole = 'client' | 'driver' | 'admin' | 'superadmin';
+
+export interface DistancePricingRule {
+  id: string;
+  minKm: number;
+  maxKm: number;
+  price: number;
+}
 
 export interface CommissionSettings {
   id: 'global_config';
@@ -16,6 +47,10 @@ export interface CommissionSettings {
   fraisFixes: number;
   minRatioClient: number; // e.g. 0.7 for 70%
   maxRatioLivreur: number; // e.g. 2.0 for 200%
+  maxSimultaneousDeliveries?: number; // admin defined limit
+  distancePricingRules?: DistancePricingRule[];
+  promoEnabled?: boolean;
+  promoRules?: { maxKm: number; price: number }[];
   updatedAt: string;
   updatedBy: string;
 }
@@ -27,7 +62,26 @@ export interface UserProfile {
   phone?: string;
   role: UserRole;
   status?: 'online' | 'offline' | 'busy';
-  accountStatus?: 'active' | 'suspended';
+  accountStatus?: 'active' | 'suspended' | 'pending_approval';
+  city?: string;
+  neighborhood?: string;
+  performanceScore?: number; // 0-100 score based on reliability
+  cancellationRate?: number; // percentage
+  totalEarnings?: number;
+  dailyGoal?: number;
+  idCardFront?: string;
+  idCardBack?: string;
+  address?: string;
+  termsAcceptedAt?: string;
+  sectors?: string[];
+  favoriteAddresses?: {
+    id: string;
+    label: string;
+    address: string;
+    lat: number;
+    lng: number;
+    precision?: string;
+  }[];
   currentLocation?: {
     lat: number;
     lng: number;
@@ -36,13 +90,21 @@ export interface UserProfile {
   licensePlate?: string;
   vehicleType?: 'moto' | 'tricycle' | 'camionnette';
   isVerified?: boolean;
-  walletBalance?: number; // Virtual wallet for commission/cash
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
+  identityCardUrl?: string; // Existing: idCardFront/Back
+  identityCardBackUrl?: string;
+  criminalRecordUrl?: string;
+  guarantorName?: string;
+  guarantorPhone?: string;
+  guarantorCniUrl?: string;
+  walletBalance?: number; 
   driverType?: 'freelance' | 'company';
   parentCompanyId?: string; // If driver belongs to a company
   withdrawalRequested?: boolean;
   withdrawalAmount?: number;
   withdrawalMethod?: 'mobile_money' | 'cash';
   withdrawalPhone?: string;
+  totalWithdrawn?: number;
   createdAt: string;
 }
 
@@ -75,17 +137,18 @@ export interface DeliveryRequest {
   clientName: string;
   driverId?: string;
   driverName?: string;
+  vehicleType?: 'moto' | 'tricycle' | 'camionnette';
   from: {
     lat: number;
     lng: number;
     address: string;
-    indications?: string;
+    precision?: string;
   };
   to: {
     lat: number;
     lng: number;
     address: string;
-    indications?: string;
+    precision?: string;
   };
   senderPhone?: string;
   recipientPhone?: string;
@@ -94,7 +157,9 @@ export interface DeliveryRequest {
   clientProposedPrice?: number; // New: manual price set by client
   cost?: number; // Accepted final cost
   status: DeliveryStatus;
-  paymentMethod: 'cash' | 'mobile_money' | 'card';
+  paymentMethod: 'cash' | 'mobile_money' | 'card' | 'aggregator' | 'ussd' | 'orange' | 'moov' | 'telecel' | 'coris' | 'orange_ussd' | 'moov_ussd' | 'telecel_ussd';
+  paymentStatus?: 'pending' | 'confirmed' | 'rejected' | 'pending_approval';
+  paymentReference?: string;
   isPaid?: boolean;
   paidToDriver?: boolean;
   paidToDriverAt?: string;
@@ -104,11 +169,18 @@ export interface DeliveryRequest {
   insuranceCost?: number;
   rating?: number;
   feedback?: string;
+  proofImage?: string;
+  
+  // Urgent & Priority
+  isUrgent?: boolean;
+  urgentFee?: number;
+  boostAmount?: number; // Extra money added by client to speed up pickup
   
   // Imprévus et Exceptions
   isWeatherPaused?: boolean;
   sosAlert?: boolean;
   sosReason?: string;
+  rejectedBy?: string[]; // IDs of drivers who declined this mission
 
   createdAt: string;
   updatedAt: string;
@@ -116,10 +188,22 @@ export interface DeliveryRequest {
 
 export interface ChatMessage {
   id: string;
-  deliveryId: string;
-  senderId: string;
   text: string;
-  timestamp: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'client' | 'driver' | 'admin';
+  createdAt: string;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  link?: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface TrackingPoint {

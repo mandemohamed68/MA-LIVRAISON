@@ -1,33 +1,124 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch } from 'firebase/firestore';
-import { DeliveryRequest, UserProfile, UserRole, CommissionSettings, AppConfig } from '../types';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
+import { DeliveryRequest, UserProfile, UserRole, CommissionSettings, AppConfig, DistancePricingRule, Sector, AppAnnouncement } from '../types';
 import { 
   ShieldCheck, Package, Users, Truck, DollarSign, 
   ArrowUpRight, Clock, LayoutDashboard, MessageSquare, 
   ClipboardCheck, History, Store, Map as MapIcon, Globe, 
   BadgePercent, CreditCard, Wallet, LogOut, Bell, Settings, 
-  Plus, Navigation, UserCircle, Percent, Database, Download, Building2
+  Plus, Navigation, UserCircle, Percent, Database, Download, Building2, X, Trash2, Zap, Smartphone, Menu,
+  CheckCircle, AlertCircle, Landmark
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate, Navigate } from 'react-router-dom';
-
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import { LoadingScreen } from '../components/LoadingScreen';
+import { useAuth, ADMIN_EMAILS } from '../context/AuthContext';
+import { useNavigate, Navigate, useLocation } from 'react-router-dom';
+import LiveMap from '../components/LiveMap';
+import { sendNotification } from '../lib/notificationService';
 
 export default function AdminDashboard() {
-  const { profile, updateRole, logout, isMasterAdmin } = useAuth();
+  const { profile, updateRole, logout, isMasterAdmin, appConfig } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const queryTab = queryParams.get('tab');
+
   const [deliveries, setDeliveries] = useState<DeliveryRequest[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [commission, setCommission] = useState<CommissionSettings | null>(null);
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [configForm, setConfigForm] = useState<AppConfig | null>(null);
+  const [sectors, setSectors] = useState<Sector[]>([]);
+  const [announcements, setAnnouncements] = useState<AppAnnouncement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeMenu, setActiveMenu] = useState('Vue d\'ensemble');
+  const [activeMenu, setActiveMenu] = useState(queryTab || 'Vue d\'ensemble');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (queryTab && queryTab !== activeMenu) {
+      setActiveMenu(queryTab);
+    }
+  }, [queryTab]);
+
+  useEffect(() => {
+    if (appConfig && !configForm) {
+      setConfigForm(appConfig);
+    }
+  }, [appConfig]);
+
+  const handleUpdateConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!configForm) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, 'settings', 'app_config'), {
+        ...configForm,
+        updatedAt: new Date().toISOString()
+      });
+      alert('Modifications enregistrées avec succès !');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de l\'enregistrement.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleMenuChange = (menuName: string) => {
+    setActiveMenu(menuName);
+    setIsSidebarOpen(false);
+    navigate(`/admin?tab=${menuName}`, { replace: true });
+  };
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'freelance' | 'company'>('all');
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [showNewAnnonceForm, setShowNewAnnonceForm] = useState(false);
+  const [newAnnonce, setNewAnnonce] = useState({ title: '', message: '', type: 'info' as 'info' | 'warning' | 'success' });
+
+  const generateCode = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+
+  const prevPendingCount = useRef(0);
+
+  useEffect(() => {
+    // Check if there are new validations waiting (payments or withdrawals)
+    const currentPendingPayments = deliveries.filter(d => d.paymentStatus === 'pending' || d.paymentStatus === 'pending_approval').length;
+    const currentPendingWithdrawals = users.filter(u => u.withdrawalRequested).length;
+    
+    const totalPendingCount = currentPendingPayments + currentPendingWithdrawals;
+
+    if (totalPendingCount > prevPendingCount.current) {
+      // Something new needs validation, play a beep
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); // 800 Hz
+        oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05); // quick fade in
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3); // fade out
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.3);
+      } catch (e) {
+        console.warn("Audio notification suppressed or unsupported:", e);
+      }
+    }
+    prevPendingCount.current = totalPendingCount;
+  }, [deliveries, users]);
 
   useEffect(() => {
     // Only subscribe if we have a valid admin profile
@@ -48,7 +139,7 @@ export default function AdminDashboard() {
       (snap) => {
         setDeliveries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
       },
-      handleError('deliveries')
+      (error) => handleFirestoreError(error, OperationType.LIST, 'deliveries')
     );
 
     const unsubUsers = onSnapshot(
@@ -56,7 +147,7 @@ export default function AdminDashboard() {
       (snap) => {
         setUsers(snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile)));
       },
-      handleError('users')
+      (error) => handleFirestoreError(error, OperationType.LIST, 'users')
     );
 
     const unsubCommission = onSnapshot(
@@ -76,6 +167,12 @@ export default function AdminDashboard() {
             fraisFixes: 500,
             minRatioClient: 0.7,
             maxRatioLivreur: 2.0,
+            maxSimultaneousDeliveries: 2,
+            promoEnabled: true,
+            distancePricingRules: [
+              { id: 'rule1', minKm: 0, maxKm: 10, price: 800 },
+              { id: 'rule2', minKm: 10, maxKm: 15, price: 1200 }
+            ],
             updatedAt: new Date().toISOString(),
             updatedBy: 'system'
           };
@@ -83,32 +180,71 @@ export default function AdminDashboard() {
         }
         setLoading(false);
       },
-      handleError('commissions')
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'settings/commissions');
+        setLoading(false);
+      }
     );
 
-    const unsubConfig = onSnapshot(
-      doc(db, 'settings', 'app_config'), 
+    const unsubSectors = onSnapshot(
+      collection(db, 'sectors'),
       (snap) => {
-        if (snap.exists()) {
-          setAppConfig(snap.data() as AppConfig);
-        } else {
-          const defaults: AppConfig = {
-            mode: 'test',
-            updatedAt: new Date().toISOString()
-          };
-          setDoc(doc(db, 'settings', 'app_config'), defaults);
-        }
+        setSectors(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sector)));
       },
-      handleError('app_config')
+      (error) => handleFirestoreError(error, OperationType.LIST, 'sectors')
     );
+
+    const unsubAnnouncements = onSnapshot(
+      collection(db, 'announcements'),
+      (snap) => {
+        setAnnouncements(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppAnnouncement)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'announcements')
+    );
+
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
 
     return () => {
+      clearTimeout(timeout);
       unsubDeliveries();
       unsubUsers();
       unsubCommission();
-      unsubConfig();
+      unsubSectors();
+      unsubAnnouncements();
     };
   }, [profile, isMasterAdmin]);
+
+  const handleAddDistanceRule = () => {
+    if (!commission) return;
+    const newRule: DistancePricingRule = {
+      id: Math.random().toString(36).substr(2, 9),
+      minKm: 0,
+      maxKm: 0,
+      price: 0
+    };
+    setCommission({
+      ...commission,
+      distancePricingRules: [...(commission.distancePricingRules || []), newRule]
+    });
+  };
+
+  const handleRemoveDistanceRule = (id: string) => {
+    if (!commission || !commission.distancePricingRules) return;
+    setCommission({
+      ...commission,
+      distancePricingRules: commission.distancePricingRules.filter(r => r.id !== id)
+    });
+  };
+
+  const handleUpdateDistanceRule = (id: string, updates: Partial<DistancePricingRule>) => {
+    if (!commission || !commission.distancePricingRules) return;
+    setCommission({
+      ...commission,
+      distancePricingRules: commission.distancePricingRules.map(r => r.id === id ? { ...r, ...updates } : r)
+    });
+  };
 
   const handleUpdateCommission = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,7 +321,7 @@ export default function AdminDashboard() {
       // 3. Delete non-admin Users
       const usersToDelete = [...users];
       for (const user of usersToDelete) {
-        if (user.role !== 'admin' && user.role !== 'superadmin' && user.email !== 'mandemohamed68@gmail.com') {
+        if (user.role !== 'admin' && user.role !== 'superadmin' && !ADMIN_EMAILS.includes(user.email || '')) {
           promises.push(deleteDoc(doc(db, 'users', user.userId)));
         }
       }
@@ -213,26 +349,35 @@ export default function AdminDashboard() {
     { name: 'Dim', express: 160, standard: 70 },
   ];
 
-  const handlePayDriver = async (driverId: string, deliveryIds: string[]) => {
-    if (!deliveryIds.length) return;
+  const handlePayDriver = async (driverId: string, amount: number) => {
+    if (!amount || amount <= 0) return;
     try {
-      const batch = writeBatch(db);
-      const timestamp = new Date().toISOString();
-      deliveryIds.forEach(id => {
-        batch.update(doc(db, 'deliveries', id), {
-          paidToDriver: true,
-          paidToDriverAt: timestamp
-        });
-      });
+      const driver = users.find(u => u.userId === driverId);
+      if (!driver) return;
+      const currentWithdrawn = driver.totalWithdrawn || 0;
       
-      // Also reset the withdrawal requested flag for this user
-      batch.update(doc(db, 'users', driverId), {
+      const timestamp = new Date().toISOString();
+      
+      // Update driver balance
+      await updateDoc(doc(db, 'users', driverId), {
         withdrawalRequested: false,
         withdrawalAmount: 0,
+        totalWithdrawn: currentWithdrawn + amount,
         updatedAt: timestamp
       });
 
-      await batch.commit();
+      // Log withdrawal
+      await addDoc(collection(db, 'withdrawals'), {
+        driverId,
+        driverName: driver.name,
+        amount,
+        status: 'completed',
+        method: driver.withdrawalMethod || 'mobile_money',
+        phone: driver.withdrawalPhone || driver.phone || '',
+        createdAt: driver.withdrawalRequestedAt || timestamp,
+        processedAt: timestamp
+      });
+
       alert('Paiement enregistré avec succès');
     } catch (e) {
       console.error(e);
@@ -240,10 +385,15 @@ export default function AdminDashboard() {
     }
   };
 
-  const sidebarItems = [
+  const isSuperAdmin = profile?.role === 'superadmin' || isMasterAdmin;
+
+  const allSidebarItems = [
     { group: 'GÉNÉRAL', items: [
       { name: 'Vue d\'ensemble', icon: LayoutDashboard },
+    ]},
+    { group: 'COMMUNICATION', items: [
       { name: 'Support Chat', icon: MessageSquare },
+      ...(isSuperAdmin ? [{ name: 'Annonces Globales', icon: Bell }] : []),
     ]},
     { group: 'LOGISTIQUE', items: [
       { name: 'En cours', icon: Navigation },
@@ -255,18 +405,25 @@ export default function AdminDashboard() {
       { name: 'Carte Live (GPS)', icon: MapIcon },
       { name: 'Livreurs (Zems)', icon: Truck },
       { name: 'Clients', icon: Users },
-      { name: 'Secteurs d\'Ouaga', icon: Globe },
+      ...(isSuperAdmin ? [{ name: 'Administrateurs', icon: ShieldCheck }] : []),
+      ...(isSuperAdmin ? [{ name: 'Secteurs d\'Ouaga', icon: Globe }] : []),
     ]},
     { group: 'FINANCES', items: [
-      { name: 'Modèle Éco', icon: BadgePercent },
-      { name: 'Transactions', icon: CreditCard },
+      ...(isSuperAdmin ? [{ name: 'Modèle Éco', icon: BadgePercent }] : []),
+      { name: 'Validations Paiements', icon: CreditCard },
       { name: 'Paiements Livreurs', icon: Wallet },
-      { name: 'Commissions', icon: Percent },
+      ...(isSuperAdmin ? [{ name: 'Commissions', icon: Percent }] : []),
     ]},
-    { group: 'SYSTÈME & DATA', items: [
-      { name: 'Base de Données', icon: Database },
-    ]},
+    ...(isSuperAdmin ? [{
+      group: 'SYSTÈME & DATA', items: [
+        { name: 'Paramètres App', icon: Settings },
+        { name: 'Base de Données', icon: Database },
+        { name: 'Logs Système', icon: ClipboardCheck },
+      ]
+    }] : []),
   ];
+
+  const sidebarItems = allSidebarItems.filter(group => group.items.length > 0);
 
   const rolesList: { id: UserRole, label: string }[] = [
     { id: 'superadmin', label: 'SUPER ADMIN' },
@@ -278,6 +435,79 @@ export default function AdminDashboard() {
   const [selectedChatDeliveryId, setSelectedChatDeliveryId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [adminMessage, setAdminMessage] = useState('');
+  
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [isSubmittingNewUser, setIsSubmittingNewUser] = useState(false);
+  const [newUserData, setNewUserData] = useState<any>({
+    role: 'client',
+    name: '', email: '', phone: '', password: '',
+    // driver specific defaults
+    vehicleType: 'Moto',
+    licensePlate: '',
+    driverType: 'freelance',
+    sectors: []
+  });
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserData.email || !newUserData.password || !newUserData.name) {
+      alert("Veuillez remplir les informations obligatoires (Nom, Email, Mot de passe).");
+      return;
+    }
+    
+    setIsSubmittingNewUser(true);
+    let secondaryApp;
+    try {
+      secondaryApp = initializeApp(firebaseConfig, 'SecondaryAppForCreation_' + Date.now());
+      const secondaryAuth = getAuth(secondaryApp);
+      
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, newUserData.email, newUserData.password);
+      
+      const newUserProfile: UserProfile = {
+        userId: cred.user.uid,
+        name: newUserData.name,
+        email: newUserData.email,
+        phone: newUserData.phone || '',
+        role: newUserData.role,
+        createdAt: new Date().toISOString(),
+        accountStatus: 'active',
+      };
+
+      if (newUserData.role === 'driver') {
+        newUserProfile.vehicleType = newUserData.vehicleType;
+        newUserProfile.licensePlate = newUserData.licensePlate;
+        newUserProfile.driverType = newUserData.driverType;
+        newUserProfile.sectors = newUserData.sectors;
+      }
+
+      await setDoc(doc(db, 'users', cred.user.uid), newUserProfile);
+      
+      alert("Utilisateur créé avec succès !");
+      setShowCreateUserModal(false);
+      setNewUserData({
+        role: 'client',
+        name: '', email: '', phone: '', password: '',
+        vehicleType: 'Moto', licensePlate: '', driverType: 'freelance', sectors: []
+      });
+    } catch (err: any) {
+      console.error(err);
+      alert("Erreur lors de la création : " + err.message);
+    } finally {
+      if (secondaryApp) {
+        await deleteApp(secondaryApp);
+      }
+      setIsSubmittingNewUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!isSuperAdmin) return;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Fetch all active chats by checking deliveries that have lastMessageAt
   const chatDeliveries = deliveries
@@ -286,10 +516,19 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!selectedChatDeliveryId) return;
-    const q = query(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), orderBy('timestamp', 'asc'));
+    const q = query(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), orderBy('createdAt', 'asc'));
     const unsub = onSnapshot(q, (snap) => {
-      setChatMessages(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+      setChatMessages(snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          timestamp: data.createdAt instanceof Timestamp 
+            ? data.createdAt.toDate().toISOString() 
+            : (data.createdAt || data.timestamp)
+        };
+      }));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `deliveries/${selectedChatDeliveryId}/messages`));
     return () => unsub();
   }, [selectedChatDeliveryId]);
 
@@ -297,14 +536,17 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!adminMessage.trim() || !selectedChatDeliveryId || !profile) return;
     try {
+      const now = new Date().toISOString();
       await addDoc(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), {
         senderId: profile.userId,
+        senderName: profile.name,
+        senderRole: 'admin',
         text: adminMessage,
-        timestamp: new Date().toISOString()
+        createdAt: serverTimestamp()
       });
       await updateDoc(doc(db, 'deliveries', selectedChatDeliveryId), {
-         lastMessageAt: new Date().toISOString(),
-         updatedAt: new Date().toISOString()
+         lastMessageAt: now,
+         updatedAt: now
       });
       setAdminMessage('');
     } catch (e) {
@@ -312,8 +554,121 @@ export default function AdminDashboard() {
     }
   };
 
+  const getPaymentLogo = (method?: string | null) => {
+    if (!method) return null;
+    const id = method.replace('_ussd', '');
+    const validMethods = ['orange', 'moov', 'telecel', 'coris'];
+    if (validMethods.includes(id)) {
+      return `/payments/${id}.png`;
+    }
+    return null;
+  };
+
   const renderContent = () => {
     switch (activeMenu) {
+      case 'Validations Paiements':
+        const pendingPayments = deliveries.filter(d => d.paymentStatus === 'pending' || d.paymentStatus === 'pending_approval');
+        return (
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Validations de Paiements</h3>
+                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Approbation des transactions USSD et Agrégateurs</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+                <CreditCard className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              {pendingPayments.map(d => {
+                const logo = getPaymentLogo(d.paymentMethod);
+                return (
+                  <div key={d.id} className="p-6 bg-slate-50 rounded-3xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-white transition-all shadow-sm">
+                    <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-slate-100 relative overflow-hidden">
+                        {logo ? (
+                          <img src={logo} alt={d.paymentMethod || ''} className="w-full h-full object-cover" />
+                        ) : (
+                          <Wallet className="w-7 h-7" />
+                        )}
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full border-2 border-white animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-black text-slate-900 truncate">Course #{d.id?.slice(0, 8)}</p>
+                          <span className={cn(
+                            "text-[7px] font-black uppercase px-2 py-0.5 rounded-full",
+                            logo ? "bg-slate-900 text-white" :
+                            d.paymentMethod?.includes('ussd') ? "bg-orange-100 text-orange-600" :
+                            d.paymentMethod === 'aggregator' ? "bg-indigo-100 text-indigo-600" : "bg-blue-100 text-blue-600"
+                          )}>
+                            {d.paymentMethod}
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Client: {d.clientName} • {d.cost} FCFA</p>
+                        {d.paymentReference && (
+                          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-2 border-l-2 border-indigo-500 pl-2">
+                             REF: {d.paymentReference}
+                          </p>
+                        )}
+                        <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest mt-1 italic">Attend confirmation manuelle</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={async () => {
+                          try {
+                             console.log('Confirming payment for:', d.id);
+                             const pickupCode = generateCode();
+                             const deliveryCode = generateCode();
+                             await updateDoc(doc(db, 'deliveries', d.id), {
+                               paymentStatus: 'confirmed',
+                               isPaid: true,
+                               pickupCode,
+                               deliveryCode,
+                               updatedAt: new Date().toISOString()
+                             });
+                             if (d.driverId) {
+                               await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
+                             }
+                             await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé. Les codes sont disponibles.`, 'success', '/client');
+                          } catch(e) { console.error('Error confirming payment:', e); }
+                        }}
+                        className="px-6 py-3 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
+                      >
+                        Confirmer Réception
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          try {
+                             console.log('Rejecting payment for:', d.id);
+                             await updateDoc(doc(db, 'deliveries', d.id), {
+                               paymentStatus: 'rejected',
+                               isPaid: false,
+                               updatedAt: new Date().toISOString()
+                             });
+                             await sendNotification(d.clientId, "Paiement Rejeté", `Votre preuve de paiement pour la course #${d.id.slice(-6)} a été rejetée. Veuillez contacter le support.`, 'error', '/client');
+                          } catch(e) { console.error('Error rejecting payment:', e); }
+                        }}
+                        className="px-4 py-3 bg-white text-rose-500 border border-red-100 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-50 transition-all"
+                      >
+                        Rejeter
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {pendingPayments.length === 0 && (
+                <div className="py-20 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                  <ClipboardCheck className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                  <p className="text-slate-400 font-black uppercase text-xs tracking-widest">Aucun paiement en attente d'approbation</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
       case 'Vue d\'ensemble':
         return (
           <div className="space-y-8">
@@ -353,10 +708,10 @@ export default function AdminDashboard() {
               {[
                 { label: 'CLIENTS ACTIFS', value: users.filter(u => u.role === 'client').length, icon: Users, color: 'text-blue-500', trend: '+12%' },
                 { label: 'COURSES TOTALES', value: deliveries.length, icon: Package, color: 'text-orange-500', trend: '+5%' },
-                { label: 'VOLUME D\'AFFAIRES', value: `${deliveries.reduce((acc, curr) => acc + (curr.cost || 0), 0).toLocaleString()} FCFA`, icon: DollarSign, color: 'text-emerald-500', trend: '+18%' },
+                { label: 'VOLUME D\'AFFAIRES', value: `${deliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0).toLocaleString()} FCFA`, icon: DollarSign, color: 'text-emerald-500', trend: '+18%' },
                 { label: 'ZEMS EN SERVICE', value: users.filter(u => u.role === 'driver' && u.status === 'online').length, icon: Truck, color: 'text-indigo-500', trend: 'LIVE' },
               ].map((stat) => (
-                <div key={stat.label} className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-7 shadow-sm border border-slate-100 flex flex-col justify-between relative overflow-hidden group hover:shadow-xl transition-all">
+                <div key={stat.label} className="bg-white rounded-xl sm:rounded-2xl p-5 sm:p-7 shadow-sm border border-slate-100 flex flex-col justify-between relative overflow-hidden group hover:shadow-xl transition-all">
                   <div className="flex items-center justify-between mb-4">
                     <div className={cn("w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110", stat.color)}>
                       <stat.icon className="w-6 h-6" />
@@ -376,8 +731,8 @@ export default function AdminDashboard() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-8 bg-white rounded-[32px] sm:rounded-[40px] p-6 sm:p-10 shadow-sm border border-slate-100 relative overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:p-6">
+              <div className="lg:col-span-8 bg-white rounded-2xl sm:rounded-3xl p-6 sm:p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 relative overflow-hidden">
                 <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-50">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
@@ -388,10 +743,14 @@ export default function AdminDashboard() {
 
                 <div className="space-y-4">
                   {deliveries.slice(0, 5).map((delivery) => (
-                    <div key={delivery.id} className="p-4 sm:p-5 bg-slate-50/50 rounded-[24px] sm:rounded-3xl border border-slate-100 flex items-center justify-between gap-4 group hover:bg-white hover:shadow-xl transition-all">
+                    <div key={delivery.id} className="p-4 sm:p-5 bg-slate-50/50 rounded-xl sm:rounded-3xl border border-slate-100 flex items-center justify-between gap-4 group hover:bg-white hover:shadow-xl transition-all">
                       <div className="flex items-center gap-3 sm:gap-5">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-orange-600 shadow-sm border border-slate-100 shrink-0">
-                          <Package className="w-5 h-5" />
+                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-orange-600 shadow-sm border border-slate-100 shrink-0 overflow-hidden">
+                          {getPaymentLogo(delivery.paymentMethod) ? (
+                            <img src={getPaymentLogo(delivery.paymentMethod)!} alt={delivery.paymentMethod || ''} className="w-full h-full object-contain p-1" />
+                          ) : (
+                            <Package className="w-5 h-5" />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
@@ -425,7 +784,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="lg:col-span-4 space-y-8">
-                <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+                <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
                   <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-8">Utilisateurs</h3>
                   <div className="space-y-6">
                     {[
@@ -453,8 +812,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="bg-[#111827] rounded-[40px] p-8 text-white relative overflow-hidden shadow-2xl">
-                  <div className="absolute top-8 right-8 w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center text-orange-400 border border-orange-500/30">
+                <div className="bg-[#111827] rounded-3xl p-5 lg:p-6 text-white relative overflow-hidden shadow-2xl">
+                  <div className="absolute top-5 lg:p-6 right-8 w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center text-orange-400 border border-orange-500/30">
                     <ArrowUpRight className="w-6 h-6" />
                   </div>
                   <div>
@@ -463,14 +822,14 @@ export default function AdminDashboard() {
                     </div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">GAINS PLATEFORME (GLOBAL)</p>
                     <p className="text-4xl font-black tracking-tighter mb-2">
-                      {Math.floor(deliveries.reduce((acc, curr) => acc + (curr.cost || 0), 0) * (commission?.platformFeePercent || 15) / 100).toLocaleString()} <span className="text-lg opacity-60">FCFA</span>
+                      {Math.floor(deliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * (commission?.platformFeePercent || 15) / 100).toLocaleString()} <span className="text-lg opacity-60">FCFA</span>
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-[32px] sm:rounded-[40px] p-6 sm:p-10 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-6 sm:p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10">
                 <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Analyse des Courses</h3>
                 <div className="flex gap-4 sm:gap-6">
@@ -484,8 +843,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-              <div className="h-[250px] sm:h-[400px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[250px] sm:h-[400px] w-full min-h-[250px]">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="colorExpress" x1="0" y1="0" x2="0" y2="1">
@@ -520,7 +879,7 @@ export default function AdminDashboard() {
           return true;
         });
         return (
-          <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">{activeMenu} ({filteredDeliveries.length})</h3>
             <div className="grid grid-cols-1 gap-4">
               {filteredDeliveries.map(d => (
@@ -534,9 +893,42 @@ export default function AdminDashboard() {
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{d.from?.address?.slice(0, 30) || 'Lieu inconnu'}... → {d.to?.address?.slice(0, 30) || 'Lieu inconnu'}...</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-black text-slate-900">{d.cost} FCFA</p>
-                    <span className="text-[8px] font-black uppercase bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">{d.status}</span>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <p className="font-black text-slate-900">{d.cost} FCFA</p>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[8px] font-black uppercase bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">{d.status}</span>
+                        {(d.paymentStatus === 'pending' || d.paymentStatus === 'pending_approval') && (
+                          <span className="text-[7px] font-black uppercase bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full animate-pulse">Paiement à Valider</span>
+                        )}
+                      </div>
+                    </div>
+                    {(d.paymentStatus === 'pending' || d.paymentStatus === 'pending_approval') && (
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const pickupCode = generateCode();
+                            const deliveryCode = generateCode();
+                            await updateDoc(doc(db, 'deliveries', d.id), { 
+                              paymentStatus: 'confirmed', 
+                              isPaid: true,
+                              pickupCode,
+                              deliveryCode,
+                              updatedAt: new Date().toISOString() 
+                            });
+                            if (d.driverId) {
+                              await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
+                            }
+                            await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé.`, 'success', '/client');
+                          } catch(e) {
+                            console.error('Erreur lors de la validation:', e);
+                          }
+                        }}
+                        className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
+                      >
+                        Valider Paiement
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -546,12 +938,32 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
+      case 'Administrateurs':
       case 'Livreurs (Zems)':
       case 'Clients':
-        const filteredUsers = users.filter(u => activeMenu === 'Livreurs (Zems)' ? u.role === 'driver' : u.role === 'client');
+        const filteredUsers = users.filter(u => {
+          if (activeMenu === 'Livreurs (Zems)') return u.role === 'driver';
+          if (activeMenu === 'Clients') return u.role === 'client';
+          if (activeMenu === 'Administrateurs') return u.role === 'admin' || u.role === 'superadmin';
+          return false;
+        });
         return (
-          <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
-            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">{activeMenu} ({filteredUsers.length})</h3>
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{activeMenu} ({filteredUsers.length})</h3>
+              <button 
+                onClick={() => {
+                  setNewUserData(prev => ({ 
+                    ...prev, 
+                    role: activeMenu === 'Clients' ? 'client' : (activeMenu === 'Administrateurs' ? 'admin' : 'driver') 
+                  }));
+                  setShowCreateUserModal(true);
+                }}
+                className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] uppercase font-black tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Nouvel Utilisateur
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredUsers.map(u => (
                 <div key={u.userId} className={cn(
@@ -571,44 +983,96 @@ export default function AdminDashboard() {
                   </div>
                   <h4 className="font-black text-slate-900 uppercase tracking-tight">{u.name}</h4>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{u.email}</p>
-                  {u.role === 'driver' && (
-                    <div className="mt-3 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase tracking-widest">
-                       {u.vehicleType || 'Moto'} • {u.licensePlate || 'Nouveau'}
-                    </div>
-                  )}
+                  
+                  <div className="flex flex-wrap justify-center gap-2 mt-3">
+                    {u.role === 'driver' && (
+                      <div className="flex flex-col gap-1 items-center">
+                        <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase tracking-widest">
+                           {u.vehicleType || 'Moto'} • {u.licensePlate || 'Nouveau'}
+                        </div>
+                        <div className={cn(
+                          "px-3 py-1 rounded-full text-[7px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm border",
+                          u.status === 'online' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                          u.status === 'busy' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                          "bg-slate-50 text-slate-400 border-slate-100"
+                        )}>
+                          <div className={cn("w-1.5 h-1.5 rounded-full", u.status === 'online' ? "bg-emerald-500 animate-pulse" : u.status === 'busy' ? "bg-amber-500" : "bg-slate-300")} />
+                          {u.status === 'online' ? 'Disponible' : u.status === 'busy' ? 'Occupé' : 'Hors Ligne'}
+                        </div>
+                      </div>
+                    )}
+                    {u.role === 'driver' && u.verificationStatus === 'pending' && (
+                      <div className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-[8px] font-black uppercase tracking-widest animate-pulse border border-blue-200">
+                         Dossier à vérifier
+                      </div>
+                    )}
+                    {u.accountStatus === 'pending_approval' && (
+                      <div className="px-3 py-1 bg-amber-100 text-amber-600 rounded-full text-[8px] font-black uppercase tracking-widest animate-pulse">
+                         Attente Approbation
+                      </div>
+                    )}
+                  </div>
+
                   <div className="mt-6 flex flex-col gap-2 w-full">
-                    <div className="flex gap-2">
+                    {(u.accountStatus === 'pending_approval' || u.verificationStatus === 'pending') && u.role === 'driver' && (
                       <button 
-                        onClick={() => alert(`Email: ${u.email}\nPhone: ${u.phone || 'Non renseigné'}\nType: ${(u as any).driverType || 'N/A'}\nAdresse: ${(u as any).address || 'N/A'}`)}
-                        className="flex-1 bg-white border border-slate-200 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-orange-50 transition-all font-sans"
+                        onClick={async () => {
+                          try {
+                            await updateDoc(doc(db, 'users', u.userId), { 
+                              accountStatus: 'active',
+                              verificationStatus: 'verified',
+                              isVerified: true,
+                              updatedAt: new Date().toISOString()
+                            });
+                            await sendNotification(
+                              u.userId, 
+                              "Dossier Approuvé 🎉", 
+                              "Bienvenue chez LIVRA EXPRESS ! Votre compte est activé et vos documents sont validés.", 
+                              'success'
+                            );
+                          } catch(err) {
+                            console.error(err);
+                          }
+                        }}
+                        className="w-full bg-emerald-500 text-white py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
                       >
-                        Détails
+                        Valider Livreur & Dossier
                       </button>
-                    </div>
+                    )}
+                    
                     <div className="flex gap-2">
                        <button 
-                         onClick={async () => {
-                           if (confirm(`Voulez-vous ${u.accountStatus === 'suspended' ? 'réactiver' : 'suspendre'} ce compte ?`)) {
+                         onClick={() => setSelectedUser(u)}
+                         className="flex-1 bg-white border border-slate-200 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-orange-50 transition-all font-sans"
+                       >
+                         Détails
+                       </button>
+                    </div>
+                    {isSuperAdmin && (
+                      <div className="flex gap-2">
+                         <button 
+                           onClick={async () => {
+                             const action = u.accountStatus === 'suspended' ? 'active' : 'suspended';
                              try {
                                await updateDoc(doc(db, 'users', u.userId), { 
-                                 accountStatus: u.accountStatus === 'suspended' ? 'active' : 'suspended',
+                                 accountStatus: action,
                                  updatedAt: new Date().toISOString()
                                });
                              } catch(err) {
-                               alert('Erreur lors de la modification');
+                               console.error('Erreur lors de la modification');
                              }
-                           }
-                         }}
-                         className={cn(
-                           "flex-1 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all shadow-sm",
-                           u.accountStatus === 'suspended' 
-                             ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
-                             : "bg-red-50 text-red-600 hover:bg-red-100"
-                         )}
-                       >
-                         {u.accountStatus === 'suspended' ? 'Réactiver' : 'Suspendre'}
-                       </button>
-                    </div>
+                           }}
+                           className={cn(
+                             "flex-1 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all shadow-sm",
+                             u.accountStatus === 'suspended' 
+                               ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
+                               : "bg-red-50 text-red-600 hover:bg-red-100"
+                           )}
+                         >
+                           {u.accountStatus === 'suspended' ? 'Réactiver' : 'Suspendre'}
+                         </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -622,7 +1086,7 @@ export default function AdminDashboard() {
         );
       case 'Commissions':
         return (
-           <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
              <div className="flex items-center justify-between mb-10">
                <div>
                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Journal des Commissions</h3>
@@ -631,7 +1095,7 @@ export default function AdminDashboard() {
                <div className="bg-emerald-50 text-emerald-600 p-6 rounded-3xl border border-emerald-100 flex flex-col items-end">
                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60">TOTAL PLATFORME</p>
                  <p className="text-2xl font-black tracking-tighter">
-                   {Math.floor(deliveries.reduce((acc, curr) => acc + (curr.cost || 0), 0) * (commission?.platformFeePercent || 15) / 100).toLocaleString()} FCFA
+                   {Math.floor(deliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * (commission?.platformFeePercent || 15) / 100).toLocaleString()} FCFA
                  </p>
                </div>
              </div>
@@ -659,18 +1123,19 @@ export default function AdminDashboard() {
            </div>
         );
       case 'Paiements Livreurs': {
-        const [paymentFilter, setPaymentFilter] = useState<'all' | 'freelance' | 'company'>('all');
         const drivers = users.filter(u => u.role === 'driver');
         const driversWithPayments = drivers.map(driver => {
-          const driverDeliveries = deliveries.filter(d => d.driverId === driver.userId && d.status === 'delivered' && !d.paidToDriver);
-          return { driver, driverDeliveries };
+          const driverDeliveries = deliveries.filter(d => d.driverId === driver.userId && d.status === 'delivered' && d.paymentMethod !== 'cash');
+          const totalEarnings = driverDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * (commission?.driverSharePercent || 85) / 100;
+          const currentOwed = totalEarnings - (driver.totalWithdrawn || 0);
+          return { driver, currentOwed };
         }).filter(item => {
-          if (paymentFilter === 'all') return item.driverDeliveries.length > 0;
-          return item.driverDeliveries.length > 0 && item.driver.driverType === paymentFilter;
+          if (paymentFilter === 'all') return item.currentOwed > 0 || item.driver.withdrawalRequested;
+          return (item.currentOwed > 0 || item.driver.withdrawalRequested) && item.driver.driverType === paymentFilter;
         });
 
         return (
-          <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Paiements des Livreurs</h3>
                 <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner">
@@ -702,10 +1167,9 @@ export default function AdminDashboard() {
                </div>
              ) : (
                <div className="grid grid-cols-1 gap-6">
-                  {driversWithPayments.map(({ driver, driverDeliveries }) => {
-                    const earnings = driverDeliveries.reduce((acc, curr) => acc + (curr.cost || 0), 0) * (commission?.driverSharePercent || 85) / 100;
+                  {driversWithPayments.map(({ driver, currentOwed }) => {
                     return (
-                      <div key={driver.userId} className="p-8 bg-slate-50 rounded-[32px] border border-slate-100 flex items-center justify-between gap-8 group hover:bg-white hover:shadow-2xl transition-all">
+                      <div key={driver.userId} className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-5 group hover:bg-white hover:shadow-2xl transition-all">
                          <div className="flex items-center gap-6">
                            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-100 relative">
                              <Truck className="w-7 h-7" />
@@ -734,25 +1198,27 @@ export default function AdminDashboard() {
                                )}
                              </div>
                              <div className="flex flex-col gap-1">
-                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{driverDeliveries.length} Courses à régler</p>
+                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Solde Dispo: {Math.floor(currentOwed).toLocaleString()} F</p>
                                {driver.withdrawalRequested && (
                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[8px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded-full">Retrait via {driver.withdrawalMethod === 'mobile_money' ? `Mobile (${driver.withdrawalPhone})` : 'Espèces'}</span>
+                                    <span className="text-[8px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded-full">Demande de {driver.withdrawalAmount} F</span>
                                  </div>
                                )}
                              </div>
                            </div>
                          </div>
-                         <div className="flex gap-10 items-center">
+                         <div className="flex gap-6 items-center">
                            <div className="text-right">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">À PAYER</p>
-                              <p className="text-2xl font-black text-slate-900 tracking-tighter">{Math.floor(earnings).toLocaleString()} FCFA</p>
+                              <p className="text-2xl font-black text-slate-900 tracking-tighter">
+                                {driver.withdrawalRequested ? driver.withdrawalAmount?.toLocaleString() : Math.floor(currentOwed).toLocaleString()} FCFA
+                              </p>
                            </div>
                            <button 
-                             onClick={() => handlePayDriver(driver.userId, driverDeliveries.map(d => d.id))}
+                             onClick={() => handlePayDriver(driver.userId, driver.withdrawalRequested ? (driver.withdrawalAmount || 0) : currentOwed)}
                              className="bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl shadow-slate-200"
                            >
-                             Régler
+                             Valider
                            </button>
                          </div>
                       </div>
@@ -765,7 +1231,7 @@ export default function AdminDashboard() {
       }
       case 'Modèle Éco':
         return (
-          <div className="max-w-4xl bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+          <div className="max-w-4xl bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
             <div className="flex items-center gap-6 mb-10">
               <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-3xl flex items-center justify-center">
                 <BadgePercent className="w-8 h-8" />
@@ -777,7 +1243,7 @@ export default function AdminDashboard() {
             </div>
 
             {commission && (
-              <form onSubmit={handleUpdateCommission} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <form onSubmit={handleUpdateCommission} className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:p-6">
                 <div className="space-y-6">
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Commission Plateforme (%)</label>
@@ -815,6 +1281,19 @@ export default function AdminDashboard() {
                         type="number" 
                         value={commission.minDeliveryCost}
                         onChange={e => setCommission({ ...commission, minDeliveryCost: Number(e.target.value) })}
+                        className="w-full bg-white border-none rounded-xl pl-12 py-3 text-sm font-black focus:ring-4 focus:ring-orange-100 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Missions Simultanées Max</label>
+                    <div className="relative">
+                      <Package className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        type="number" 
+                        value={commission.maxSimultaneousDeliveries || 2}
+                        onChange={e => setCommission({ ...commission, maxSimultaneousDeliveries: Number(e.target.value) })}
                         className="w-full bg-white border-none rounded-xl pl-12 py-3 text-sm font-black focus:ring-4 focus:ring-orange-100 transition-all"
                       />
                     </div>
@@ -904,6 +1383,87 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                <div className="md:col-span-2 mt-8 space-y-6">
+                  <div className="flex items-center justify-between px-2 mb-4 bg-orange-50 p-6 rounded-3xl border border-orange-100">
+                    <div>
+                      <h4 className="text-[12px] font-black text-orange-600 uppercase tracking-widest flex items-center gap-2">
+                        <BadgePercent className="w-5 h-5" />
+                        Activer la Promo (Tarifs Réduits)
+                      </h4>
+                      <p className="text-[10px] text-orange-500/80 mt-1 font-bold">Applique les tarifs promotionnels définis ci-dessous.</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        value="" 
+                        className="sr-only peer"
+                        checked={commission.promoEnabled ?? false}
+                        onChange={(e) => setCommission({ ...commission, promoEnabled: e.target.checked })}
+                      />
+                      <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-500"></div>
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between px-2">
+                    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tarification Promo & Intervalles de Distance</h4>
+                    <button 
+                      type="button"
+                      onClick={handleAddDistanceRule}
+                      className="text-[10px] font-black text-orange-600 uppercase tracking-widest flex items-center gap-2 hover:text-orange-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Ajouter un Intervalle
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {(commission.distancePricingRules || []).map((rule) => (
+                      <div key={rule.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                        <div className="sm:col-span-1">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Min (KM)</label>
+                          <input 
+                            type="number"
+                            value={rule.minKm}
+                            onChange={(e) => handleUpdateDistanceRule(rule.id, { minKm: Number(e.target.value) })}
+                            className="w-full bg-white border-none rounded-xl px-4 py-2 text-xs font-black focus:ring-2 focus:ring-orange-100"
+                          />
+                        </div>
+                        <div className="sm:col-span-1">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Max (KM)</label>
+                          <input 
+                            type="number"
+                            value={rule.maxKm}
+                            onChange={(e) => handleUpdateDistanceRule(rule.id, { maxKm: Number(e.target.value) })}
+                            className="w-full bg-white border-none rounded-xl px-4 py-2 text-xs font-black focus:ring-2 focus:ring-orange-100"
+                          />
+                        </div>
+                        <div className="sm:col-span-1">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Prix (FCFA)</label>
+                          <input 
+                            type="number"
+                            value={rule.price}
+                            onChange={(e) => handleUpdateDistanceRule(rule.id, { price: Number(e.target.value) })}
+                            className="w-full bg-white border-none rounded-xl px-4 py-2 text-xs font-black focus:ring-2 focus:ring-orange-100"
+                          />
+                        </div>
+                        <div className="flex justify-end">
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveDistanceRule(rule.id)}
+                            className="w-10 h-10 bg-white text-red-500 rounded-xl flex items-center justify-center border border-slate-100 hover:bg-red-50 transition-colors shadow-sm"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {(commission.distancePricingRules || []).length === 0 && (
+                      <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-6 lg:p-5 lg:p-6 text-center">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Aucun intervalle défini. Le tarif par KM standard sera utilisé.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="md:col-span-2 pt-8 flex items-center justify-between border-t border-slate-100 mt-4">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-tight">
                     Dernière modif par : {commission.updatedBy}<br/>
@@ -923,99 +1483,414 @@ export default function AdminDashboard() {
           </div>
         );
       case 'Carte Live (GPS)':
+        const activeDrivers = users.filter(u => u.role === 'driver');
         return (
-          <div className="bg-white rounded-[40px] p-6 sm:p-10 shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[600px] lg:h-full">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Carte en Temps Réel</h3>
+          <div className="bg-white rounded-3xl p-6 sm:p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[600px] lg:h-full">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Carte en Temps Réel</h3>
+                <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Suivi en direct de la flotte et des colis</p>
+              </div>
               <div className="flex gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-ping" />
-                  <span className="text-[10px] font-black uppercase text-blue-500">Flux Live</span>
+                <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider">Flux Live Actif</span>
                 </div>
               </div>
             </div>
-            <div className="flex-1 bg-slate-50 rounded-3xl overflow-hidden shadow-inner relative border-4 border-slate-50">
-               <MapContainer 
-                 center={[12.3714, -1.5197]} 
-                 zoom={13} 
-                 className="h-full w-full"
-               >
-                 <TileLayer 
-                   url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
-                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                 />
-                 {deliveries.filter(d => ['accepted', 'picked_up'].includes(d.status) && d.from?.lat && d.from?.lng).map(delivery => (
-                   <Marker 
-                     key={delivery.id} 
-                     position={[delivery.from.lat, delivery.from.lng]}
-                     icon={new L.DivIcon({
-                       className: 'custom-div-icon',
-                       html: `<div class="w-8 h-8 bg-orange-500 rounded-lg border-2 border-white shadow-lg flex items-center justify-center text-white font-black text-[8px]">${delivery.id?.slice(0, 2) || 'X'}</div>`,
-                       iconAnchor: [16, 16]
-                     })}
-                   >
-                     <Popup className="rounded-2xl">
-                       <div className="p-2">
-                         <p className="font-black text-[10px] uppercase text-orange-500 mb-1">{delivery.status}</p>
-                         <p className="font-bold text-xs">#{delivery.id?.slice(0,8) || 'N/A'}</p>
-                         <p className="text-[10px] text-slate-500 mt-1">{delivery.clientName}</p>
-                       </div>
-                     </Popup>
-                   </Marker>
-                 ))}
-                 {users.filter(u => u.role === 'driver' && u.currentLocation?.lat && u.currentLocation?.lng).map(driver => (
-                   <Marker 
-                     key={driver.userId} 
-                     position={[driver.currentLocation!.lat, driver.currentLocation!.lng]}
-                     icon={new L.DivIcon({
-                       className: 'driver-icon',
-                       html: `<div class="w-10 h-10 bg-blue-600 rounded-2xl border-2 border-white shadow-xl flex items-center justify-center text-white"><img src="https://cdn-icons-png.flaticon.com/512/3655/3655682.png" class="w-6 h-6" /></div>`,
-                       iconAnchor: [20, 20]
-                     })}
-                   >
-                     <Popup>
-                       <div className="p-2">
-                         <p className="font-black text-xs uppercase text-blue-600">{driver.name}</p>
-                         <p className="text-[10px] text-slate-500">{driver.vehicleType || 'Moto'}</p>
-                       </div>
-                     </Popup>
-                   </Marker>
-                 ))}
-               </MapContainer>
+            
+            <div className="flex-1 min-h-0">
+               <LiveMap 
+                 drivers={activeDrivers} 
+                 deliveries={deliveries} 
+               />
             </div>
           </div>
         );
       case 'Secteurs d\'Ouaga':
-        const secteurs = ['Paspanga', 'Koulouba', 'Gounghin', 'Dassasgho', 'Patte d\'Oie', 'Ouaga 2000', 'Somgandé', 'Cissin', 'Larlé'];
         return (
-          <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
              <div className="flex justify-between items-center mb-8">
-               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Maillage Territorial</h3>
-               <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-none">Cliquez sur un secteur pour filtrer l'activité</p>
+               <div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Maillage Territorial</h3>
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Secteurs actifs et couverture réseau</p>
+               </div>
+               <button 
+                 onClick={async () => {
+                   const name = prompt('Nom du nouveau secteur (ex: Wayalghin) :');
+                   if (name) {
+                     await addDoc(collection(db, 'sectors'), { name, city: 'Ouagadougou', isActive: true });
+                   }
+                 }}
+                 className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl"
+               >
+                 <Plus className="w-4 h-4" /> Ajouter Secteur
+               </button>
              </div>
              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {secteurs.map(s => {
-                  const activityCount = deliveries.filter(d => d.from?.address?.toLowerCase().includes(s.toLowerCase()) || d.to?.address?.toLowerCase().includes(s.toLowerCase())).length;
+                {sectors.map(s => {
+                  const activityCount = deliveries.filter(d => 
+                    d.from?.address?.toLowerCase().includes(s.name.toLowerCase()) || 
+                    d.to?.address?.toLowerCase().includes(s.name.toLowerCase())
+                  ).length;
                   return (
-                    <button 
-                      key={s} 
-                      onClick={() => setActiveMenu('Historique')} // In a real app we'd pass the filter state
-                      className="p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-orange-500 hover:bg-white hover:shadow-2xl transition-all cursor-pointer group text-left"
+                    <div 
+                      key={s.id} 
+                      className="p-6 bg-slate-50 rounded-3xl border border-slate-100 group transition-all relative"
                     >
+                      <button 
+                        onClick={async () => {
+                          await deleteDoc(doc(db, 'sectors', s.id));
+                        }}
+                        className="absolute top-4 right-4 w-6 h-6 bg-white rounded-lg flex items-center justify-center text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity border border-rose-100 hover:bg-rose-50"
+                      >
+                         <Trash2 className="w-3 h-3" />
+                      </button>
                       <Globe className="w-6 h-6 text-slate-300 mb-4 group-hover:text-orange-500 transition-all" />
                       <div className="flex justify-between items-end">
-                        <span className="font-black text-slate-900 text-sm uppercase">{s}</span>
-                        <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-lg">{activityCount} Flux</span>
+                        <span className="font-black text-slate-900 text-sm uppercase">{s.name}</span>
+                        <span className={cn(
+                          "text-[10px] font-black px-2 py-1 rounded-lg",
+                          activityCount > 0 ? "text-emerald-500 bg-emerald-50" : "text-slate-400 bg-white border border-slate-100"
+                        )}>
+                          {activityCount} Flux
+                        </span>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
+                {sectors.length === 0 && (
+                  <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                    <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest leading-none">Aucun secteur défini dans la base de données</p>
+                    <p className="text-slate-300 font-bold text-[9px] uppercase tracking-widest mt-2 leading-none cursor-pointer" onClick={() => {
+                       ['Paspanga', 'Koulouba', 'Gounghin', 'Dassasgho', 'Ouaga 2000'].forEach(n => 
+                         addDoc(collection(db, 'sectors'), { name: n, city: 'Ouagadougou', isActive: true })
+                       )
+                    }}>Initialiser avec les secteurs par défaut</p>
+                  </div>
+                )}
              </div>
           </div>
         );
+      case 'Annonces Globales':
+        return (
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
+             <div className="flex justify-between items-center mb-8">
+               <div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Centre d'Annonces</h3>
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Diffuser des alertes à toute la plateforme</p>
+               </div>
+               <button 
+                 onClick={() => setShowNewAnnonceForm(!showNewAnnonceForm)}
+                 className="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl shadow-orange-200"
+               >
+                 {showNewAnnonceForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                 {showNewAnnonceForm ? 'Fermer' : 'Nouvelle Annonce'}
+               </button>
+             </div>
+
+             {showNewAnnonceForm && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-10 p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-200 shadow-inner"
+                >
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Titre de l'alerte</label>
+                        <input 
+                          type="text" 
+                          placeholder="Maintenance, Promo, etc." 
+                          value={newAnnonce.title}
+                          onChange={e => setNewAnnonce({...newAnnonce, title: e.target.value})}
+                          className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-orange-500 outline-none shadow-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Niveau d'Urgence</label>
+                        <select 
+                          value={newAnnonce.type}
+                          onChange={e => setNewAnnonce({...newAnnonce, type: e.target.value as any})}
+                          className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-orange-500 outline-none shadow-sm"
+                        >
+                          <option value="info">Information</option>
+                          <option value="warning">Alerte Critique</option>
+                          <option value="success">Notification Succès</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Message détaillé</label>
+                        <textarea 
+                          className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-orange-500 outline-none h-32 shadow-sm"
+                          placeholder="Décrivez l'annonce aux utilisateurs..."
+                          value={newAnnonce.message}
+                          onChange={e => setNewAnnonce({...newAnnonce, message: e.target.value})}
+                        />
+                      </div>
+                   </div>
+                   <div className="flex justify-end pt-4 border-t border-slate-200">
+                      <button 
+                        onClick={async () => {
+                          if (!newAnnonce.title || !newAnnonce.message) return;
+                          await addDoc(collection(db, 'announcements'), {
+                            ...newAnnonce,
+                            targetRole: 'all',
+                            activeUntil: new Date(Date.now() + 86400000 * 7).toISOString(),
+                            createdAt: new Date().toISOString()
+                          });
+                          setNewAnnonce({ title: '', message: '', type: 'info' });
+                          setShowNewAnnonceForm(false);
+                        }}
+                        className="px-12 py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-orange-600 transition-all shadow-xl active:scale-95"
+                      >
+                        Publier l'annonce
+                      </button>
+                   </div>
+                </motion.div>
+             )}
+
+             <div className="space-y-4">
+                {announcements.map(a => (
+                  <div key={a.id} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-between gap-6 hover:bg-white transiton-all group">
+                    <div className="flex items-center gap-6">
+                       <div className={cn(
+                         "w-12 h-12 rounded-2xl flex items-center justify-center",
+                         a.type === 'warning' ? "bg-orange-100 text-orange-600" :
+                         a.type === 'success' ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"
+                       )}>
+                         <Bell className="w-6 h-6" />
+                       </div>
+                       <div>
+                         <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">{a.title}</h4>
+                         <p className="text-xs font-bold text-slate-500 mt-0.5">{a.message}</p>
+                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Expire le : {new Date(a.activeUntil).toLocaleDateString()}</p>
+                       </div>
+                    </div>
+                    <button 
+                      onClick={() => deleteDoc(doc(db, 'announcements', a.id))}
+                      className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-rose-500 border border-slate-100 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-50"
+                    >
+                       <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {announcements.length === 0 && (
+                  <div className="py-20 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                    <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest leading-none">Aucune annonce active en ce moment</p>
+                  </div>
+                )}
+             </div>
+          </div>
+        );
+      case 'Paramètres App':
+        return (
+          <form onSubmit={handleUpdateConfig} className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
+             <div className="flex justify-between items-center mb-8">
+               <div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Configuration Système</h3>
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Modes de fonctionnement et maintenance</p>
+               </div>
+               <button 
+                 disabled={isSaving}
+                 type="submit"
+                 className="flex items-center gap-3 px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-orange-600 transition-all shadow-xl shadow-slate-200 disabled:opacity-50"
+               >
+                 {isSaving ? <Clock className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
+                 Enregistrer
+               </button>
+             </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:p-6">
+                  <div className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                     <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-4">
+                           <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center">
+                              <Zap className="w-5 h-5" />
+                           </div>
+                           <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">Mode de Production</h4>
+                        </div>
+                        <span className={cn(
+                          "text-[9px] font-black uppercase px-2 py-1 rounded-lg",
+                          configForm?.mode === 'prod' ? "bg-emerald-100 text-emerald-600" : "bg-orange-100 text-orange-600"
+                        )}>
+                          {configForm?.mode || 'TEST'}
+                        </span>
+                     </div>
+                     <div className="flex gap-2">
+                        <button 
+                          type="button"
+                          onClick={() => setConfigForm({ ...configForm!, mode: 'test' })}
+                          className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all", configForm?.mode === 'test' ? "bg-orange-500 text-white shadow-lg shadow-orange-200" : "bg-white border border-slate-200 text-slate-400 hover:bg-white")}
+                        >
+                          Mode Test
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setConfigForm({ ...configForm!, mode: 'prod' })}
+                          className={cn("flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all", configForm?.mode === 'prod' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200" : "bg-white border border-slate-200 text-slate-400 hover:bg-white")}
+                        >
+                          Production
+                        </button>
+                     </div>
+                     <p className="text-[10px] text-slate-400 font-bold mt-4 leading-relaxed uppercase tracking-tight">Le mode test désactive les vrais paiements bancaires et utilise les sandbox opérateurs.</p>
+                  </div>
+
+                  <div className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                     <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-4">
+                           <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center">
+                              <ShieldCheck className="w-5 h-5" />
+                           </div>
+                           <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">Mode Maintenance</h4>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={configForm?.isMaintenanceMode || false}
+                            onChange={(e) => setConfigForm({ ...configForm!, isMaintenanceMode: e.target.checked })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-rose-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                     </div>
+                     <input 
+                        type="text"
+                        placeholder="Message de maintenance..."
+                        value={configForm?.maintenanceMessage || ''}
+                        onChange={(e) => setConfigForm({ ...configForm!, maintenanceMessage: e.target.value })}
+                        className="w-full bg-white border-none rounded-xl px-4 py-3 text-xs font-bold focus:ring-4 focus:ring-rose-100"
+                     />
+                     <p className="text-[10px] text-slate-400 font-bold mt-4 leading-relaxed uppercase tracking-tight">Une fois actif, bloquera tout accès aux clients et drivers avec le message ci-dessus.</p>
+                  </div>
+               </div>
+
+               <div className="mt-8 p-6 lg:p-8 bg-slate-50 rounded-[32px] border border-slate-100">
+                  <div className="flex items-center gap-5 mb-8">
+                     <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                        <Smartphone className="w-6 h-6" />
+                     </div>
+                     <div>
+                        <h4 className="font-black text-slate-900 uppercase text-lg tracking-tight">Syntaxes USSD (Paiement Manuel)</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configurez les codes que les clients composeront sur leur téléphone</p>
+                     </div>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-8 flex gap-4 items-start">
+                    <div className="w-8 h-8 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center shrink-0">
+                      <Zap className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1">Instruction Importante</h5>
+                      <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                        Utilisez le mot-clé <span className="font-black bg-amber-200 px-1.5 py-0.5 rounded text-amber-950">{"{amount}"}</span> n'importe où dans la syntaxe. L'application le remplacera automatiquement par le prix de la course avant d'afficher le code au client.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                     {/* Orange Money */}
+                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
+                        <div className="flex items-center gap-4 mb-4">
+                           <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center overflow-hidden border border-orange-100">
+                              <img src="/payments/orange.png" alt="Orange" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=O' }}/>
+                           </div>
+                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Orange Money</label>
+                        </div>
+                        <input 
+                           type="text"
+                           placeholder="Ex: *144*4*6*{amount}#"
+                           value={configForm?.ussdSyntaxOrange || ''}
+                           onChange={(e) => setConfigForm({ ...configForm!, ussdSyntaxOrange: e.target.value })}
+                           className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl px-5 py-4 text-sm font-black text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white transition-all outline-none"
+                        />
+                        <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *144*4*6*{"{amount}"}#</p>
+                     </div>
+
+                     {/* Moov Money */}
+                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
+                        <div className="flex items-center gap-4 mb-4">
+                           <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
+                              <img src="/payments/moov.png" alt="Moov" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=M' }}/>
+                           </div>
+                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Moov Money</label>
+                        </div>
+                        <input 
+                           type="text"
+                           placeholder="Ex: *155*4*1*{amount}#"
+                           value={configForm?.ussdSyntaxMoov || ''}
+                           onChange={(e) => setConfigForm({ ...configForm!, ussdSyntaxMoov: e.target.value })}
+                           className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl px-5 py-4 text-sm font-black text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all outline-none"
+                        />
+                        <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *155*4*1*{"{amount}"}#</p>
+                     </div>
+
+                     {/* Telecel Money */}
+                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
+                        <div className="flex items-center gap-4 mb-4">
+                           <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center overflow-hidden border border-indigo-100">
+                              <img src="/payments/telecel.png" alt="Telecel" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=T' }}/>
+                           </div>
+                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Telecel Money</label>
+                        </div>
+                        <input 
+                           type="text"
+                           placeholder="Ex: *156*4*2*{amount}#"
+                           value={configForm?.ussdSyntaxTelecel || ''}
+                           onChange={(e) => setConfigForm({ ...configForm!, ussdSyntaxTelecel: e.target.value })}
+                           className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl px-5 py-4 text-sm font-black text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all outline-none"
+                        />
+                        <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *156*4*2*{"{amount}"}#</p>
+                     </div>
+
+                     {/* Coris Money */}
+                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
+                        <div className="flex items-center gap-4 mb-4">
+                           <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
+                              <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-[8px]">C</div>
+                           </div>
+                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Coris Money</label>
+                        </div>
+                        <input 
+                           type="text"
+                           placeholder="Ex: *555*1*1*{amount}#"
+                           value={configForm?.ussdSyntaxCoris || ''}
+                           onChange={(e) => setConfigForm({ ...configForm!, ussdSyntaxCoris: e.target.value })}
+                           className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl px-5 py-4 text-sm font-black text-slate-900 focus:outline-none focus:border-blue-400 focus:bg-white transition-all outline-none"
+                        />
+                        <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *555*1*1*{"{amount}"}#</p>
+                     </div>
+
+                     {/* Autre */}
+                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
+                        <div className="flex items-center gap-4 mb-4">
+                           <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden border border-slate-100">
+                              <Landmark className="w-5 h-5 text-slate-400" />
+                           </div>
+                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Autre Syntaxe</label>
+                        </div>
+                        <input 
+                           type="text"
+                           placeholder="Ex: *000*0*0*{amount}#"
+                           value={configForm?.ussdSyntaxGeneric || ''}
+                           onChange={(e) => setConfigForm({ ...configForm!, ussdSyntaxGeneric: e.target.value })}
+                           className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl px-5 py-4 text-sm font-black text-slate-900 focus:outline-none focus:border-slate-400 focus:bg-white transition-all outline-none"
+                        />
+                        <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Syntaxe générique par défaut.</p>
+                     </div>
+                  </div>
+
+                  <div className="mt-8 pt-8 border-t border-slate-200">
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-relaxed text-center">
+                      Ces syntaxes sont cruciales pour le parcours utilisateur "Paiement Manuel". <br/>
+                      <span className="text-orange-600">Assurez-vous de vérifier le code court de votre compte marchand avant de valider.</span>
+                    </p>
+                  </div>
+               </div>
+            </form>
+        );
       case 'Transactions':
         return (
-          <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">Flux Financiers</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -1048,10 +1923,10 @@ export default function AdminDashboard() {
         const currentChatMessages = chatMessages;
 
         return (
-          <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 flex h-[700px] overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 flex h-[700px] overflow-hidden">
              {/* Sidebar: List of Chats */}
              <div className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/50">
-                <div className="p-8 border-b border-slate-100 bg-white">
+                <div className="p-5 lg:p-6 border-b border-slate-100 bg-white">
                    <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Discussions</h3>
                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{chatDeliveries.length} actives</p>
                 </div>
@@ -1089,7 +1964,7 @@ export default function AdminDashboard() {
              <div className="flex-1 flex flex-col bg-white">
                 {selectedChatDeliveryId ? (
                   <>
-                    <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                    <div className="p-5 lg:p-6 border-b border-slate-100 flex items-center justify-between">
                        <div className="flex items-center gap-4">
                           <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center">
                              <Package className="w-6 h-6" />
@@ -1103,17 +1978,17 @@ export default function AdminDashboard() {
                        </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/30">
+                    <div className="flex-1 overflow-y-auto p-6 lg:p-5 lg:p-6 space-y-6 bg-slate-50/30">
                        {currentChatMessages.map((msg, idx) => {
                           const isMe = msg.senderId === profile?.userId;
                           const senderProfile = users.find(u => u.userId === msg.senderId);
                           return (
                             <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
-                                  {senderProfile?.name || 'Inconnu'} • {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''}
+                                  {msg.senderName || 'Inconnu'} • {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''}
                                </span>
                                <div className={cn(
-                                 "max-w-[70%] p-5 rounded-[24px] text-sm font-bold shadow-sm",
+                                 "max-w-[70%] p-5 rounded-xl text-sm font-bold shadow-sm",
                                  isMe ? "bg-slate-900 text-white rounded-tr-none" : "bg-white text-slate-800 rounded-tl-none border border-slate-100"
                                )}>
                                   {msg.text}
@@ -1141,7 +2016,7 @@ export default function AdminDashboard() {
                   </>
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-                     <div className="w-24 h-24 bg-slate-50 rounded-[40px] flex items-center justify-center mb-8">
+                     <div className="w-24 h-24 bg-slate-50 rounded-3xl flex items-center justify-center mb-8">
                         <MessageSquare className="w-12 h-12 text-slate-200" />
                      </div>
                      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4">Centre de Support Actif</h3>
@@ -1151,9 +2026,64 @@ export default function AdminDashboard() {
              </div>
           </div>
         );
+      case 'Logs Système':
+        const systemLogs = [
+          { id: 1, type: 'AUTH', text: 'Nouvelle connexion SuperAdmin', user: 'Admin', time: 'Il y a 2 min', color: 'text-indigo-500' },
+          { id: 2, type: 'PAYMENT', text: `Validation attendue: course de ${deliveries[0]?.clientName || 'un client'}`, user: 'System', time: 'Il y a 5 min', color: 'text-orange-500' },
+          { id: 3, type: 'LOGISTICS', text: 'Nouvelle mission publiée à Ouaga 2000', user: 'Client', time: 'Il y a 12 min', color: 'text-emerald-500' },
+          { id: 4, type: 'DB', text: 'Optimisation des index Firestore complétée', user: 'Vercel/Fire', time: 'Il y a 45 min', color: 'text-slate-500' },
+          { id: 5, type: 'AUTH', text: 'Tentative de connexion échouée (IP: 192.168.1.1)', user: 'Guest', time: 'Il y a 1h', color: 'text-red-500' },
+        ];
+        return (
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 h-full overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Journaux du Système LIVRA</h3>
+                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Surveillance en temps réel des activités plateforme</p>
+              </div>
+              <div className="flex gap-2">
+                 <div className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    Live Watcher
+                 </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-2">
+              {systemLogs.map(log => (
+                <div key={log.id} className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-between hover:bg-white transition-all group">
+                   <div className="flex items-center gap-4">
+                      <div className={cn("w-2 h-10 rounded-full bg-slate-200 group-hover:w-3 transition-all", log.color.replace('text-', 'bg-'))} />
+                      <div>
+                         <div className="flex items-center gap-2 mb-1">
+                            <span className={cn("text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-white border border-slate-100", log.color)}>
+                               {log.type}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">{log.time}</span>
+                         </div>
+                         <p className="text-sm font-bold text-slate-800 tracking-tight">{log.text}</p>
+                      </div>
+                   </div>
+                   <div className="text-right">
+                      <p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Acteur</p>
+                      <p className="text-xs font-black text-slate-900">{log.user}</p>
+                   </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 pt-8 border-t border-slate-100">
+               <div className="bg-slate-900 rounded-2xl p-6 text-emerald-400 font-mono text-[10px] leading-relaxed shadow-xl">
+                  <p className="opacity-50 break-all mb-2">DEBUG_TRACE: 0x44F9A... Initializing Watchtower core...</p>
+                  <p className="opacity-70 break-all mb-2">DB_CONNECTED: Firestore Enterprise v2.b42 (Ouagadougou-1)</p>
+                  <p className="animate-pulse">_ READY: Waiting for socket incoming requests...</p>
+               </div>
+            </div>
+          </div>
+        );
       case 'Base de Données':
         return (
-          <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 flex flex-col h-full min-h-[600px]">
+          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 flex flex-col h-full min-h-[600px]">
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Exploration de la Base de Données</h3>
@@ -1233,24 +2163,14 @@ export default function AdminDashboard() {
         );
       default:
         return (
-          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-[40px] border border-slate-100 shadow-sm text-center px-10">
+          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-slate-100 shadow-sm text-center px-10">
             <Store className="w-24 h-24 text-slate-100 mb-8" />
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4">Module {activeMenu}</h3>
-            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest max-w-md">Ce module de suivi en temps réel de Ma Livraison Burkina est en cours de déploiement sécurisé.</p>
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest max-w-md">Ce module de suivi en temps réel de LIVRA est en cours de déploiement sécurisé.</p>
           </div>
         );
     }
   };
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-[90vh]">
-      <motion.div 
-        animate={{ rotate: 360 }} 
-        transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }} 
-        className="w-16 h-16 border-8 border-orange-500 border-t-transparent rounded-full shadow-2xl" 
-      />
-    </div>
-  );
 
   const handleRoleChange = async (newRole: UserRole) => {
     await updateRole(newRole);
@@ -1266,37 +2186,47 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="flex w-full h-[calc(100vh-80px)] bg-[#f8fafc] overflow-hidden">
-      <aside className="w-72 bg-white border-r border-slate-200 overflow-y-auto hidden lg:block scrollbar-hide">
-        <div className="p-10">
-          <div className="flex items-center gap-4 mb-16">
-            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-slate-100">
-              <ShieldCheck className="w-7 h-7" />
+    <div className="flex-1 flex w-full bg-[#f8fafc] overflow-hidden min-h-0">
+      {loading && (
+        <div className="fixed top-0 left-0 right-0 z-[100] h-1 overflow-hidden bg-indigo-100">
+          <motion.div 
+            initial={{ x: '-100%' }}
+            animate={{ x: '100%' }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+            className="h-full w-1/3 bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+          />
+        </div>
+      )}
+      <aside className="w-64 bg-white border-r border-slate-200 overflow-y-auto hidden lg:block scrollbar-hide">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-12">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-black text-slate-900 text-xl tracking-tight leading-none">Admin</h2>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1.5">Workspace</p>
+              <h2 className="font-black text-slate-900 text-lg tracking-tight leading-none uppercase">LIVRA</h2>
+              <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em] mt-1.5">Administration</p>
             </div>
           </div>
 
-          <div className="space-y-10">
+          <div className="space-y-8">
             {sidebarItems.map((group) => (
               <div key={group.group}>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6 px-4">{group.group}</h3>
-                <div className="space-y-1.5">
+                <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 px-3">{group.group}</h3>
+                <div className="space-y-1">
                   {group.items.map((item) => (
                     <button
                       key={item.name}
-                      onClick={() => setActiveMenu(item.name)}
+                      onClick={() => handleMenuChange(item.name)}
                       className={cn(
-                        "w-full flex items-center justify-between px-5 py-4 rounded-[20px] text-[11px] font-black uppercase tracking-tight transition-all duration-300",
+                        "w-full flex items-center justify-between px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all duration-300",
                         activeMenu === item.name 
                           ? "bg-slate-900 text-white shadow-sm scale-[1.02]" 
                           : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                       )}
                     >
-                      <div className="flex items-center gap-4">
-                        <item.icon className={cn("w-4.5 h-4.5", activeMenu === item.name ? "text-white" : "text-slate-400")} />
+                      <div className="flex items-center gap-3">
+                        <item.icon className={cn("w-4 h-4", activeMenu === item.name ? "text-white" : "text-slate-400")} />
                         {item.name}
                       </div>
                       {item.name === 'Paiements Livreurs' && users.some(u => u.withdrawalRequested) && (
@@ -1311,9 +2241,15 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 shadow-inner">
+      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 shadow-inner min-h-0">
         <header className="bg-white px-4 sm:px-8 py-4 flex flex-col gap-4 sm:flex-row sm:items-center justify-between sticky top-0 z-40 border-b border-slate-200 shrink-0 shadow-sm">
           <div className="flex items-center justify-between sm:justify-start gap-4">
+             <button 
+               onClick={() => setIsSidebarOpen(true)}
+               className="lg:hidden w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600"
+             >
+               <Menu className="w-5 h-5" />
+             </button>
              <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{activeMenu}</h3>
              {isMasterAdmin && (
                <button 
@@ -1327,45 +2263,49 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-6 justify-between sm:justify-end">
-            <div className="flex flex-col items-start sm:items-end">
-              <span className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Système Mode</span>
-              <button 
-                onClick={handleToggleMode}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all",
-                  appConfig?.mode === 'prod' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200" : "bg-amber-400 text-amber-950"
-                )}
-              >
-                <ShieldCheck className="w-3 h-3" />
-                {appConfig?.mode === 'prod' ? 'Production' : 'Mode Test'}
-              </button>
-            </div>
-            
-            <div className="hidden sm:block h-10 w-px bg-slate-100 mx-2" />
-
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <span className="text-[7px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Rôle :</span>
-              <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200 overflow-x-auto scrollbar-hide max-w-[200px] sm:max-w-none">
-                {rolesList.map((role) => (
-                  <button
-                    key={role.id}
-                    onClick={() => handleRoleChange(role.id)}
-                    className={cn(
-                      "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wide transition-all whitespace-nowrap",
-                      profile?.role === role.id 
-                        ? "bg-white text-orange-600 shadow-sm border border-slate-100" 
-                        : "text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    {role.label}
-                  </button>
-                ))}
+            {isSuperAdmin && (
+              <div className="flex flex-col items-start sm:items-end">
+                <span className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Système Mode</span>
+                <button 
+                  onClick={handleToggleMode}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all",
+                    appConfig?.mode === 'prod' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200" : "bg-amber-400 text-amber-950"
+                  )}
+                >
+                  <ShieldCheck className="w-3 h-3" />
+                  {appConfig?.mode === 'prod' ? 'Production' : 'Mode Test'}
+                </button>
               </div>
-            </div>
+            )}
+            
+            {isSuperAdmin && <div className="hidden sm:block h-10 w-px bg-slate-100 mx-2" />}
+
+            {isMasterAdmin && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <span className="text-[7px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Tester Rôle:</span>
+                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200 overflow-x-auto scrollbar-hide max-w-[200px] sm:max-w-none">
+                  {rolesList.map((role) => (
+                    <button
+                      key={role.id}
+                      onClick={() => handleRoleChange(role.id)}
+                      className={cn(
+                        "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wide transition-all whitespace-nowrap",
+                        profile?.role === role.id 
+                          ? "bg-white text-orange-600 shadow-sm border border-slate-100" 
+                          : "text-slate-500 hover:text-slate-800"
+                      )}
+                    >
+                      {role.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 lg:p-10 scrollbar-hide">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 lg:p-6 lg:p-5 lg:p-6 scrollbar-hide">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeMenu}
@@ -1380,6 +2320,66 @@ export default function AdminDashboard() {
         </div>
       </main>
 
+      {/* Mobile Sidebar */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-[60] lg:hidden">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            />
+            <motion.aside 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute inset-y-0 left-0 w-80 bg-white shadow-2xl flex flex-col pt-[env(safe-area-inset-top)]"
+            >
+               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <span className="font-black text-slate-900 uppercase">LIVRA ADMIN</span>
+                  </div>
+                  <button onClick={() => setIsSidebarOpen(false)} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center">
+                    <X className="w-5 h-5" />
+                  </button>
+               </div>
+               <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide py-[env(safe-area-inset-bottom)]">
+                  {sidebarItems.map((group) => (
+                    <div key={group.group}>
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 px-3">{group.group}</h3>
+                      <div className="space-y-1">
+                        {group.items.map((item) => (
+                          <button
+                            key={item.name}
+                            onClick={() => handleMenuChange(item.name)}
+                            className={cn(
+                              "w-full flex items-center justify-between px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-tight transition-all",
+                              activeMenu === item.name 
+                                ? "bg-slate-900 text-white shadow-lg" 
+                                : "text-slate-500 hover:bg-slate-50"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <item.icon className="w-4 h-4" />
+                              {item.name}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+               </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Custom Reset Modal */}
       <AnimatePresence>
         {showResetConfirm && (
@@ -1389,7 +2389,7 @@ export default function AdminDashboard() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-8 max-w-sm w-full relative z-10 shadow-2xl"
+              className="bg-white rounded-3xl p-5 lg:p-6 max-w-sm w-full relative z-10 shadow-2xl"
             >
               <h3 className="text-xl font-black text-red-600 uppercase tracking-tighter mb-4">Hard Reset</h3>
               <p className="text-sm font-bold text-slate-500 mb-6 leading-relaxed">
@@ -1415,6 +2415,390 @@ export default function AdminDashboard() {
                   className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
                 >
                   {isSaving ? 'Suppression...' : 'Confirmer'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Create User Modal */}
+      <AnimatePresence>
+        {showCreateUserModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !isSubmittingNewUser && setShowCreateUserModal(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 max-w-lg w-full relative z-10 shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex justify-between items-start mb-8">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Créer un Utilisateur</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    {newUserData.role === 'client' ? 'Nouveau Client' : 'Nouveau Livreur'}
+                  </p>
+                </div>
+                <button onClick={() => !isSubmittingNewUser && setShowCreateUserModal(false)} className="text-slate-300 hover:text-slate-900 transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Nom complet *</label>
+                  <input type="text" value={newUserData.name} onChange={e => setNewUserData({...newUserData, name: e.target.value})} required className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Email *</label>
+                  <input type="email" value={newUserData.email} onChange={e => setNewUserData({...newUserData, email: e.target.value})} required className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Mot de passe temporaire *</label>
+                  <input type="password" value={newUserData.password} onChange={e => setNewUserData({...newUserData, password: e.target.value})} required className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Téléphone</label>
+                  <input type="tel" value={newUserData.phone} onChange={e => setNewUserData({...newUserData, phone: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                </div>
+
+                {newUserData.role === 'driver' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Type véhicule</label>
+                        <select value={newUserData.vehicleType} onChange={e => setNewUserData({...newUserData, vehicleType: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100">
+                          <option>Moto</option>
+                          <option>Tricycle</option>
+                          <option>Camionnette</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Statut Pro</label>
+                        <select value={newUserData.driverType} onChange={e => setNewUserData({...newUserData, driverType: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100">
+                          <option value="freelance">Indépendant</option>
+                          <option value="company">Flotte Entreprise</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Immatriculation</label>
+                      <input type="text" value={newUserData.licensePlate || ''} onChange={e => setNewUserData({...newUserData, licensePlate: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                    </div>
+                  </>
+                )}
+
+                <div className="pt-6">
+                  <button type="submit" disabled={isSubmittingNewUser} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-700 transition-all disabled:opacity-50">
+                    {isSubmittingNewUser ? 'Création...' : 'Créer l\'utilisateur'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* User Details Modal */}
+      <AnimatePresence>
+        {selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedUser(null)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[32px] p-5 max-w-lg w-full relative z-10 shadow-2xl max-h-[80vh] overflow-y-auto custom-scrollbar"
+            >
+              <div className="flex justify-between items-center mb-6 px-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-500 border-2 border-white shadow-lg shadow-orange-100/50">
+                    <UserCircle className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-tight">{selectedUser.name}</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                       {isSuperAdmin && profile?.userId !== selectedUser.userId ? (
+                         <select
+                           value={selectedUser.role}
+                           onChange={async (e) => {
+                             const newRole = e.target.value;
+                             try {
+                               await updateDoc(doc(db, 'users', selectedUser.userId), { 
+                                 role: newRole,
+                                 updatedAt: new Date().toISOString()
+                               });
+                               setSelectedUser({ ...selectedUser, role: newRole as any });
+                             } catch (err) {
+                               console.error(err);
+                             }
+                           }}
+                           className={cn(
+                             "px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest border-none cursor-pointer focus:ring-2 appearance-none shadow-sm",
+                             selectedUser.role === 'driver' ? "bg-blue-50 text-blue-600 focus:ring-blue-200" : 
+                             (selectedUser.role === 'admin' || selectedUser.role === 'superadmin') ? "bg-orange-50 text-orange-600 focus:ring-orange-200" :
+                             "bg-emerald-50 text-emerald-600 focus:ring-emerald-200"
+                           )}
+                         >
+                           <option value="client">CLIENT</option>
+                           <option value="driver">LIVREUR</option>
+                           <option value="admin">ADMIN</option>
+                           <option value="superadmin">SUPER ADMIN</option>
+                         </select>
+                       ) : (
+                         <span className={cn(
+                           "px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest",
+                           selectedUser.role === 'driver' ? "bg-blue-50 text-blue-600" : 
+                           (selectedUser.role === 'admin' || selectedUser.role === 'superadmin') ? "bg-orange-50 text-orange-600" :
+                           "bg-emerald-50 text-emerald-600"
+                         )}>
+                           {selectedUser.role}
+                         </span>
+                       )}
+                       {selectedUser.accountStatus === 'suspended' && (
+                         <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest shadow-sm">Suspendu</span>
+                       )}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedUser(null)} 
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-full text-slate-400 hover:text-slate-900 transition-all border border-slate-100 active:scale-95 shadow-sm"
+                >
+                  <span className="text-[10px] font-black uppercase tracking-widest px-1">Fermer</span>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Email</p>
+                    <p className="text-xs font-bold text-slate-900 break-all text-left">{selectedUser.email}</p>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Téléphone</p>
+                    <p className="text-xs font-bold text-slate-900 text-left">{selectedUser.phone || 'Non renseigné'}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Type de compte</p>
+                    <p className="text-xs font-bold text-slate-900 uppercase tracking-tighter text-left">{(selectedUser as any).driverType || 'Standard'}</p>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Inscrit le</p>
+                    <p className="text-xs font-bold text-slate-900 text-left">{selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : 'Inconnu'}</p>
+                  </div>
+                </div>
+
+                {selectedUser.role === 'driver' && (
+                  <div className="p-5 bg-slate-900 rounded-[32px] space-y-4 shadow-xl shadow-slate-200">
+                    <div className="flex items-center justify-between text-white">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em]">Détails du véhicule</p>
+                      <Truck className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1 text-left">Modèle</p>
+                        <p className="text-xs font-bold text-white uppercase text-left">{selectedUser.vehicleType || 'Moto'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1 text-left">Immatriculation</p>
+                        <p className="text-xs font-bold text-white uppercase text-left">{selectedUser.licensePlate || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedUser.role === 'driver' && (selectedUser.guarantorName || selectedUser.guarantorPhone) && (
+                   <div className="bg-indigo-50 p-4 rounded-[32px] border border-indigo-100 space-y-3">
+                      <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 shadow-sm"><ShieldCheck className="w-4 h-4" /></div>
+                         <p className="text-[9px] font-black uppercase tracking-widest text-indigo-900">Garanti / Référence</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div>
+                            <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-1 text-left">Nom du garant</p>
+                            <p className="text-xs font-bold text-indigo-900 text-left">{selectedUser.guarantorName || 'N/A'}</p>
+                         </div>
+                         <div>
+                            <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-1 text-left">Téléphone</p>
+                            <p className="text-xs font-bold text-indigo-900 text-left">{selectedUser.guarantorPhone || 'N/A'}</p>
+                         </div>
+                      </div>
+                   </div>
+                )}
+                
+                {selectedUser.role === 'driver' && (
+                  <div className="space-y-4">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 px-2 text-left">DOCUMENTS ET PIÈCES JOINTES</p>
+                    <div className="grid grid-cols-2 gap-3">
+                       {/* Identity Recto */}
+                       <div className="space-y-1">
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">ID (Recto/Statuts)</p>
+                          {(selectedUser.identityCardUrl || selectedUser.idCardFront) ? (
+                            <button className="w-full relative group" onClick={() => window.open((selectedUser.identityCardUrl || selectedUser.idCardFront)!, '_blank')}>
+                              <img src={selectedUser.identityCardUrl || selectedUser.idCardFront} alt="ID Front" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                                <span className="text-[8px] font-black text-white uppercase tracking-widest">Voir</span>
+                              </div>
+                            </button>
+                          ) : (
+                            <div className="w-full aspect-video bg-slate-50 rounded-2xl flex items-center justify-center text-[10px] text-slate-300 font-bold border border-dashed border-slate-200">Non fourni</div>
+                          )}
+                       </div>
+
+                       {/* Identity Verso */}
+                       <div className="space-y-1">
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">ID (Verso / Complément)</p>
+                          {(selectedUser.identityCardBackUrl || selectedUser.idCardBack) ? (
+                            <button className="w-full relative group" onClick={() => window.open((selectedUser.identityCardBackUrl || selectedUser.idCardBack)!, '_blank')}>
+                              <img src={selectedUser.identityCardBackUrl || selectedUser.idCardBack} alt="ID Back" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                                <span className="text-[8px] font-black text-white uppercase tracking-widest">Voir</span>
+                              </div>
+                            </button>
+                          ) : (
+                            <div className="w-full aspect-video bg-slate-50 rounded-2xl flex items-center justify-center text-[10px] text-slate-300 font-bold border border-dashed border-slate-200">Non fourni</div>
+                          )}
+                       </div>
+
+                       {/* Casier Judiciaire */}
+                       <div className="space-y-1">
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Casier / NIF</p>
+                          {selectedUser.criminalRecordUrl ? (
+                            <button className="w-full relative group" onClick={() => window.open(selectedUser.criminalRecordUrl!, '_blank')}>
+                              <img src={selectedUser.criminalRecordUrl} alt="Record" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                                <span className="text-[8px] font-black text-white uppercase tracking-widest">Voir</span>
+                              </div>
+                            </button>
+                          ) : (
+                            <div className="w-full aspect-video bg-slate-50 rounded-2xl flex items-center justify-center text-[10px] text-slate-300 font-bold border border-dashed border-slate-200">Non fourni</div>
+                          )}
+                       </div>
+
+                       {/* CNI Garant */}
+                       <div className="space-y-1">
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">CNI du Garant / Autre</p>
+                          {selectedUser.guarantorCniUrl ? (
+                            <button className="w-full relative group" onClick={() => window.open(selectedUser.guarantorCniUrl!, '_blank')}>
+                              <img src={selectedUser.guarantorCniUrl} alt="Guarantor CNI" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                                <span className="text-[8px] font-black text-white uppercase tracking-widest">Voir</span>
+                              </div>
+                            </button>
+                          ) : (
+                            <div className="w-full aspect-video bg-slate-50 rounded-2xl flex items-center justify-center text-[10px] text-slate-300 font-bold border border-dashed border-slate-200">Non fourni</div>
+                          )}
+                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedUser.role === 'driver' && (
+                  <div className="mt-8 pt-6 border-t border-slate-100 space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="text-left">
+                        <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">Statut Dossier</p>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Vérification de l'identité du livreur</p>
+                      </div>
+                      <span className={cn(
+                        "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm",
+                        selectedUser.verificationStatus === 'verified' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                        selectedUser.verificationStatus === 'rejected' ? "bg-red-50 text-red-600 border border-red-100" :
+                        "bg-amber-50 text-amber-600 border border-amber-100 animate-pulse"
+                      )}>
+                        {selectedUser.verificationStatus === 'verified' ? "Validé" : 
+                         selectedUser.verificationStatus === 'rejected' ? "Rejeté" : "En attente"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        disabled={selectedUser.verificationStatus === 'verified' || isProcessingAction}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setIsProcessingAction(true);
+                          try {
+                            await updateDoc(doc(db, 'users', selectedUser.userId), {
+                              verificationStatus: 'verified',
+                              accountStatus: 'active',
+                              isVerified: true,
+                              updatedAt: new Date().toISOString()
+                            });
+                            setSelectedUser({ ...selectedUser, verificationStatus: 'verified', accountStatus: 'active', isVerified: true });
+                            await sendNotification(selectedUser.userId, "Dossier Validé ! 🎉", "Votre dossier a été approuvé. Bienvenue !", 'success');
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.UPDATE, `users/${selectedUser.userId}`);
+                          } finally {
+                            setIsProcessingAction(false);
+                          }
+                        }}
+                        className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:bg-emerald-800 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2"
+                      >
+                        {isProcessingAction ? <Clock className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        {selectedUser.verificationStatus === 'verified' ? 'Déjà Validé' : (isProcessingAction ? 'Attente...' : 'Valider')}
+                      </motion.button>
+                      
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        disabled={selectedUser.verificationStatus === 'rejected' || isProcessingAction}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setIsProcessingAction(true);
+                          const reason = "Documents incomplets ou non conformes";
+                          try {
+                            await updateDoc(doc(db, 'users', selectedUser.userId), {
+                              verificationStatus: 'rejected',
+                              accountStatus: 'pending_approval',
+                              isVerified: false,
+                              updatedAt: new Date().toISOString()
+                            });
+                            setSelectedUser({ ...selectedUser, verificationStatus: 'rejected', accountStatus: 'pending_approval', isVerified: false });
+                            await sendNotification(selectedUser.userId, "Dossier à corriger ⚠️", `Rejeté. Raison : ${reason || "Doc non conformes"}`, 'warning');
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.UPDATE, `users/${selectedUser.userId}`);
+                          } finally {
+                            setIsProcessingAction(false);
+                          }
+                        }}
+                        className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] shadow-lg shadow-slate-200 hover:bg-black transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2"
+                      >
+                         {isProcessingAction ? <Clock className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                         {selectedUser.verificationStatus === 'rejected' ? 'Rejeté' : (isProcessingAction ? 'Attente...' : 'Rejeter')}
+                      </motion.button>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="bg-orange-50 p-4 rounded-3xl border border-orange-100 mt-4">
+                   <p className="text-[7px] font-black text-orange-400 uppercase tracking-widest mb-1 text-left">Localisation / Zone</p>
+                   <p className="text-xs font-bold text-orange-900 text-left">{(selectedUser as any).address || 'Ouagadougou'}</p>
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3">
+                {isSuperAdmin && profile?.userId !== selectedUser.userId && (
+                  <button 
+                    onClick={async () => {
+                      await handleDeleteUser(selectedUser.userId);
+                      setSelectedUser(null);
+                    }}
+                    className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-rose-600 hover:text-white transition-all"
+                  >
+                    Supprimer Compte
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedUser(null)}
+                  className="w-full py-5 bg-slate-100 text-slate-900 rounded-[28px] text-[11px] font-black uppercase tracking-[0.3em] hover:bg-slate-200 active:scale-95 transition-all"
+                >
+                  Fermer
                 </button>
               </div>
             </motion.div>

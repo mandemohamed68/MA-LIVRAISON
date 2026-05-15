@@ -1,5 +1,19 @@
 {
   "entities": {
+    "announcement": {
+      "title": "Annonce Système",
+      "description": "Messages d'information ou d'alerte diffusés aux utilisateurs",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "warning", "success"] },
+        "targetRole": { "type": "string", "enum": ["all", "client", "driver", "admin"] },
+        "activeUntil": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "type", "targetRole", "activeUntil", "createdAt"]
+    },
     "User": {
       "title": "User",
       "description": "User profile with roles and basic info",
@@ -10,6 +24,13 @@
         "email": { "type": "string" },
         "role": { "type": "string", "enum": ["client", "driver", "admin"] },
         "status": { "type": "string", "enum": ["online", "offline", "busy"] },
+        "city": { "type": "string" },
+        "neighborhood": { "type": "string" },
+        "verificationStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "guarantorName": { "type": "string" },
+        "guarantorPhone": { "type": "string" },
+        "identityCardUrl": { "type": "string" },
+        "criminalRecordUrl": { "type": "string" },
         "currentLocation": {
           "type": "object",
           "properties": {
@@ -28,7 +49,9 @@
       "properties": {
         "id": { "type": "string" },
         "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
         "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
         "from": {
           "type": "object",
           "properties": {
@@ -47,13 +70,128 @@
         },
         "cost": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "accepted", "picked_up", "delivered", "cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "pending_approval", "confirmed", "rejected"] },
+        "paymentMethod": { "type": "string" },
+        "paymentReference": { "type": "string" },
+        "isPaid": { "type": "boolean" },
+        "paidToDriver": { "type": "boolean" },
+        "pickupCode": { "type": "string" },
+        "deliveryCode": { "type": "string" },
+        "rejectedBy": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["clientId", "from", "to", "cost", "status", "createdAt"]
+    },
+    "AppNotification": {
+      "title": "Notification",
+      "description": "In-app notifications for users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] },
+        "link": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "isRead", "createdAt"]
+    },
+    "Sector": {
+      "title": "Sector",
+      "description": "Geographical sector for delivery coverage",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "city": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "city", "isActive"]
+    },
+    "AppAnnouncement": {
+      "title": "Announcement",
+      "description": "Global announcement for the platform",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "warning", "success"] },
+        "targetRole": { "type": "string", "enum": ["all", "client", "driver"] },
+        "activeUntil": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "type", "targetRole", "activeUntil", "createdAt"]
+    },
+    "AppConfig": {
+      "title": "App Config",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["test", "prod"] },
+        "isMaintenanceMode": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "Real-time message between participants",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["client", "driver", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "senderId", "senderName", "senderRole", "createdAt"]
+    },
+    "Withdrawal": {
+      "title": "Retrait",
+      "description": "Demande de retrait de fonds par un livreur",
+      "type": "object",
+      "properties": {
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "method": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "processedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["driverId", "amount", "status", "createdAt"]
+    },
+    "CommissionSettings": {
+      "title": "Commission Settings",
+      "description": "Financial and operational settings for the platform",
+      "type": "object",
+      "properties": {
+        "commissionRate": { "type": "number" },
+        "minimumFee": { "type": "number" },
+        "distancePricingRules": {
+          "type": "array",
+          "items": { "schema": "DistancePricingRule" }
+        },
+        "maxSimultaneousDeliveries": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      }
     }
   },
   "firestore": {
+    "/notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "User notifications"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "announcement",
+      "description": "Annonces globales ou par rôle"
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profile storage"
@@ -61,6 +199,26 @@
     "/deliveries/{deliveryId}": {
       "schema": "Delivery",
       "description": "Delivery requests storage"
+    },
+    "/deliveries/{deliveryId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Real-time chat messages for a delivery"
+    },
+    "/sectors/{sectorId}": {
+      "schema": "Sector",
+      "description": "Sectors coverage"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "AppAnnouncement",
+      "description": "Global announcements"
+    },
+    "/settings/app_config": {
+      "schema": "AppConfig",
+      "description": "System configuration"
+    },
+    "/settings/commissions": {
+      "schema": "CommissionSettings",
+      "description": "Financial configuration"
     },
     "/deliveries/{deliveryId}/tracking/{trackId}": {
       "schema": {
@@ -72,6 +230,10 @@
         }
       },
       "description": "Real-time tracking for a specific delivery"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": "Withdrawal",
+      "description": "Historique des retraits des livreurs"
     }
   }
 }

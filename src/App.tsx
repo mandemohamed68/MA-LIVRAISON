@@ -1,117 +1,182 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { cn } from './lib/utils';
-import LandingView from './views/LandingView';
-import ClientDashboard from './views/ClientDashboard';
-import CreateDelivery from './views/CreateDelivery';
-import DriverDashboard from './views/DriverDashboard';
-import AdminDashboard from './views/AdminDashboard';
-import DeliveryTracking from './views/DeliveryTracking';
-import DeliveryHistory from './views/DeliveryHistory';
-import DriverActiveDelivery from './views/DriverActiveDelivery';
-import Settings from './views/Settings';
+import { ShieldCheck } from 'lucide-react';
+
 import Navbar from './components/Navbar';
+import NotificationToast from './components/NotificationToast';
+import BottomNav from './components/BottomNav';
+import { LoadingScreen } from './components/LoadingScreen';
+import AnnouncementBanner from './components/AnnouncementBanner';
+import { QuotaWarning } from './components/QuotaWarning';
+
+import { motion, AnimatePresence } from 'motion/react';
+
+// Lazy loaded views
+const LandingView = lazy(() => import('./views/LandingView'));
+const ClientDashboard = lazy(() => import('./views/ClientDashboard'));
+const CreateDelivery = lazy(() => import('./views/CreateDelivery'));
+const DriverDashboard = lazy(() => import('./views/DriverDashboard'));
+const AdminDashboard = lazy(() => import('./views/AdminDashboard'));
+const DeliveryTracking = lazy(() => import('./views/DeliveryTracking'));
+const DeliveryHistory = lazy(() => import('./views/DeliveryHistory'));
+const Settings = lazy(() => import('./views/Settings'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
-  const { user, profile, loading, isMasterAdmin } = useAuth();
+  const { user, profile, isMasterAdmin } = useAuth();
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-[#fcfcfd]">
-      <div className="relative w-20 h-20">
-        <div className="absolute inset-0 border-4 border-orange-500/20 rounded-2xl rotate-45" />
-        <div className="absolute inset-0 border-4 border-t-orange-500 rounded-2xl rotate-45 animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-2 h-2 bg-orange-600 rounded-full animate-ping" />
-        </div>
-      </div>
-      <p className="mt-8 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 animate-pulse">Initialisation Sécurisée</p>
-    </div>
-  );
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to="/" replace />;
   
   if (allowedRoles && !isMasterAdmin && profile && !allowedRoles.includes(profile.role)) {
-    return <Navigate to="/" />;
+    const defaultPath = profile.role === 'admin' ? '/admin' : profile.role === 'driver' ? '/driver' : '/client';
+    return <Navigate to={defaultPath} replace />;
   }
 
   return <>{children}</>;
 };
 
 function AppRoutes() {
-  const { profile, isMasterAdmin } = useAuth();
+  const { user, profile, isMasterAdmin, appConfig, isAuthReady } = useAuth();
   const location = useLocation();
 
-  const isAdminView = location.pathname.startsWith('/admin') && (isMasterAdmin || profile?.role === 'admin' || profile?.role === 'superadmin');
+  if (!isAuthReady) {
+    return <LoadingScreen />;
+  }
+
+  const isAdmin = isMasterAdmin || profile?.role === 'admin' || profile?.role === 'superadmin';
+  const isAdminView = location.pathname.startsWith('/admin') && isAdmin;
+
+  // Maintenance Mode Check
+  if (appConfig?.isMaintenanceMode && !isAdmin && location.pathname !== '/') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-24 h-24 bg-orange-500/10 text-orange-500 rounded-[40px] flex items-center justify-center mb-8 border border-orange-500/20 shadow-[0_0_50px_rgba(249,115,22,0.1)]"
+        >
+          <ShieldCheck className="w-12 h-12" />
+        </motion.div>
+        <motion.div
+           initial={{ y: 20, opacity: 0 }}
+           animate={{ y: 0, opacity: 1 }}
+           transition={{ delay: 0.1 }}
+        >
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Maintenance <span className="text-orange-500">en cours</span></h1>
+          <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
+            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de Livra EXPRESS pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
+          </p>
+          <div className="px-6 py-2 bg-white/5 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-white/5 italic">
+            Équipe Technique Livra EXPRESS
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const isFullBleedView = location.pathname === '/client/new' || location.pathname === '/driver' || location.pathname.startsWith('/delivery/') || isAdminView;
+  const isCreateView = location.pathname === '/client/new';
+
+  // Redirect authenticated user from landing page
+  if (location.pathname === '/' && user && profile?.role) {
+    const defaultPath = (profile.role === 'superadmin' || profile.role === 'admin') ? '/admin' : 
+                        profile.role === 'client' ? '/client' : '/driver';
+    return <Navigate to={defaultPath} replace />;
+  }
 
   return (
     <div className={cn(
-      "min-h-screen bg-[#fcfcfd] font-sans selection:bg-orange-500/10 selection:text-orange-600",
-      isAdminView && "h-screen overflow-hidden flex flex-col"
+      "min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col selection:bg-primary/20",
+      isAdminView && "lg:h-screen lg:overflow-hidden"
     )}>
+      <AnnouncementBanner />
       <Navbar />
+      <QuotaWarning />
+      <NotificationToast />
       <main className={cn(
-        "transition-all duration-300 flex-1 flex flex-col",
-        isAdminView ? "h-full w-full" : "container mx-auto px-4 py-8 md:py-12"
+        "flex-1 flex flex-col relative w-full",
+        isAdminView && "h-full min-h-0",
+        !isFullBleedView && "container mx-auto px-4 py-8 md:py-12",
+        "pb-[calc(6rem+env(safe-area-inset-bottom))] xl:pb-0" // Extra padding for BottomNav
       )}>
-        <Routes>
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/" element={<LandingView />} />
-          
-          {/* Client Routes */}
-          <Route path="/client" element={
-            <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
-              <ClientDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/client/new" element={
-            <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
-              <CreateDelivery />
-            </ProtectedRoute>
-          } />
-          <Route path="/client/history" element={
-            <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
-              <DeliveryHistory />
-            </ProtectedRoute>
-          } />
-
-          {/* Driver Routes */}
-          <Route path="/driver" element={
-            <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
-              <DriverDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/driver/active" element={
-            <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
-              <DriverActiveDelivery />
-            </ProtectedRoute>
-          } />
-          <Route path="/driver/history" element={
-            <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
-              <DeliveryHistory />
-            </ProtectedRoute>
-          } />
-
-          {/* Admin Routes */}
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-
-          {/* Shared Routes */}
-          <Route path="/delivery/:deliveryId" element={
-            <ProtectedRoute>
-              <DeliveryTracking />
-            </ProtectedRoute>
-          } />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          } />
-          <Route path="/tracking/:deliveryId" element={<Navigate replace to="/client" />} />
-        </Routes>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className={cn("flex-1 flex flex-col", isAdminView && "min-h-0")}
+          >
+            <Suspense fallback={
+              <div className="fixed top-0 left-0 right-0 z-[100] h-1 overflow-hidden bg-indigo-100">
+                <motion.div 
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '100%' }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                  className="h-full w-1/3 bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+                />
+              </div>
+            }>
+              <Routes location={location}>
+                <Route path="/login" element={<Navigate to="/" replace />} />
+                <Route path="/" element={<LandingView />} />
+              
+              {/* Client Routes */}
+              <Route path="/client" element={
+                <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
+                  <ClientDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/client/new" element={
+                <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
+                  <CreateDelivery />
+                </ProtectedRoute>
+              } />
+              <Route path="/client/history" element={
+                <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
+                  <DeliveryHistory />
+                </ProtectedRoute>
+              } />
+    
+              {/* Driver Routes */}
+              <Route path="/driver" element={
+                <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
+                  <DriverDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/driver/history" element={
+                <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
+                  <DeliveryHistory />
+                </ProtectedRoute>
+              } />
+    
+              {/* Admin Routes */}
+              <Route path="/admin" element={
+                <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } />
+    
+              {/* Shared Routes */}
+              <Route path="/delivery/:deliveryId" element={
+                <ProtectedRoute>
+                  <DeliveryTracking />
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              } />
+                <Route path="/tracking/:deliveryId" element={<Navigate replace to="/client" />} />
+              </Routes>
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
       </main>
+      <BottomNav />
     </div>
   );
 }

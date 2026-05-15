@@ -12,8 +12,10 @@ service cloud.firestore {
     function isVerified() { return isSignedIn(); }
     
     function isAdmin() { 
+      let hasEmail = request.auth.token.get('email', '') != '';
       return isSignedIn() && (
-        request.auth.token.email == 'mandemohamed68@gmail.com' ||
+        (hasEmail && request.auth.token.email == 'mandemohamed6868@gmail.com') ||
+        (hasEmail && request.auth.token.email == 'mandemohamed68@gmail.com') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'])
       ); 
@@ -38,15 +40,25 @@ service cloud.firestore {
       }
       
       allow get: if isSignedIn();
-      allow list: if isAdmin();
+      allow list: if isSignedIn() && (isAdmin() || resource.data.role in ['driver', 'admin', 'superadmin']);
       allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming());
       allow update: if (isSignedIn() && request.auth.uid == userId && 
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'status', 'accountStatus', 'currentLocation', 'updatedAt', 'phone', 'vehicleType', 'licensePlate', 'isVerified', 'withdrawalRequested', 'withdrawalAmount', 'rating', 'totalDeliveries', 'email', 'driverType', 'address', 'termsAcceptedAt']) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'status', 'accountStatus', 'currentLocation', 'updatedAt', 'phone', 'vehicleType', 'licensePlate', 'isVerified', 'withdrawalRequested', 'withdrawalAmount', 'rating', 'totalDeliveries', 'email', 'driverType', 'address', 'termsAcceptedAt', 'verificationStatus', 'guarantorName', 'guarantorPhone', 'identityCardUrl', 'criminalRecordUrl']) &&
                        (existing().email != 'mandemohamed68@gmail.com' || incoming().role == 'superadmin')) || isAdmin();
       allow delete: if isAdmin() && existing().email != 'mandemohamed68@gmail.com';
     }
 
     match /settings/{settingId} {
+      allow read: if true; 
+      allow write: if isAdmin();
+    }
+
+    match /sectors/{sectorId} {
+      allow read: if true; 
+      allow write: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
       allow read: if true; 
       allow write: if isAdmin();
     }
@@ -58,24 +70,30 @@ service cloud.firestore {
                data.to.lat is number && data.to.lng is number;
       }
 
-      allow read: if isSignedIn() && (
+      allow get: if isSignedIn() && (
+        resource == null ||
         isAdmin() ||
         request.auth.uid == existing().clientId || 
         request.auth.uid == existing().driverId || 
         (existing().status == 'pending' && isDriver())
       );
       
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.clientId == request.auth.uid || 
+        resource.data.driverId == request.auth.uid || 
+        (resource.data.status == 'pending' && isDriver())
+      );
 
       allow create: if isSignedIn() && isValidId(deliveryId) && (incoming().clientId == request.auth.uid || isAdmin()) && isValidDelivery(incoming()) && incoming().status == 'pending';
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && existing().clientId == request.auth.uid);
       allow update: if isSignedIn() && isValidDelivery(incoming()) && (
         isAdmin() ||
         // Action: Client accepts a bid (sets driver and cost)
         (request.auth.uid == existing().clientId &&
          existing().status == 'pending' &&
          incoming().status == 'accepted' &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'cost', 'updatedAt', 'vehicleType', 'paymentMethod', 'isPaid', 'clientProposedPrice'])) ||
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'cost', 'updatedAt', 'vehicleType', 'paymentMethod', 'isPaid', 'paymentStatus', 'pickupCode', 'deliveryCode', 'clientProposedPrice'])) ||
         // Action: Driver accepts job directly at client price
         (isDriver() && 
          existing().status == 'pending' &&
@@ -85,19 +103,19 @@ service cloud.firestore {
         // Action: Driver updates status
         (request.auth.uid == existing().driverId &&
          incoming().status in ['accepted', 'picked_up', 'delivered'] &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'currentLocation', 'isWeatherPaused', 'sosAlert', 'sosReason'])) ||
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'currentLocation', 'isWeatherPaused', 'sosAlert', 'sosReason', 'proofImage'])) ||
         // Action: Driver cancels job (returns to pending)
         (request.auth.uid == existing().driverId &&
          incoming().status == 'pending' &&
          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'updatedAt'])) ||
         // Action: Client cancels
         (request.auth.uid == existing().clientId &&
-         existing().status == 'pending' &&
+         existing().status in ['pending', 'accepted'] &&
          incoming().status == 'cancelled' &&
          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
         // Action: Client pays or rates
         (request.auth.uid == existing().clientId &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['isPaid', 'rating', 'feedback', 'updatedAt'])) ||
+         incoming().diff(existing()).affectedKeys().hasOnly(['isPaid', 'paymentMethod', 'paymentStatus', 'pickupCode', 'deliveryCode', 'rating', 'feedback', 'updatedAt'])) ||
         // Action: Driver/Client updates chat-related or other permitted fields
         ((request.auth.uid == existing().clientId || request.auth.uid == existing().driverId) &&
          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt']))
@@ -106,17 +124,43 @@ service cloud.firestore {
 
 
     match /deliveries/{deliveryId}/messages/{messageId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && (
+      function isValidMessage(data) {
+        return data.text is string && data.text.size() <= 1000 &&
+               data.senderId == request.auth.uid &&
+               data.senderName is string && data.senderName.size() <= 100 &&
+               data.senderRole in ['client', 'driver', 'admin'] &&
+               data.createdAt == request.time;
+      }
+
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        !exists(/databases/$(database)/documents/deliveries/$(deliveryId)) ||
+        request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.clientId ||
+        request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId
+      );
+      
+      allow create: if isSignedIn() && isValidId(messageId) && (
         isAdmin() ||
         request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.clientId ||
         request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId
-      ) && incoming().senderId == request.auth.uid;
+      ) && isValidMessage(incoming());
+      
       allow update, delete: if isAdmin();
     }
 
     match /deliveries/{deliveryId}/bids/{driverId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == driverId || 
+        get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.clientId == request.auth.uid ||
+        get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId == request.auth.uid
+      );
+      
+      allow list: if isSignedIn() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.clientId == request.auth.uid ||
+        get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId == request.auth.uid
+      );
       
       allow create, update: if isDriver() && 
                     request.auth.uid == driverId && 
@@ -137,9 +181,25 @@ service cloud.firestore {
     }
     
     match /deliveries/{deliveryId}/tracking/{trackId} {
-      allow read: if isSignedIn();
+      allow read: if canTrack(deliveryId);
       allow create: if isVerified() && request.auth.uid == get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId;
       allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      function isValidNotification(data) {
+        return data.userId is string && data.userId.size() <= 128 &&
+               data.title is string && data.title.size() <= 100 &&
+               data.message is string && data.message.size() <= 500 &&
+               data.type in ['info', 'success', 'warning', 'error'] &&
+               data.isRead is bool;
+      }
+      
+      allow read, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidNotification(incoming());
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['isRead']) &&
+                    incoming().isRead is bool;
     }
   }
 }

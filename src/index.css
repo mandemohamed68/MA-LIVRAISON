@@ -5,22 +5,21 @@
 @theme {
   --color-primary: #f97316; /* orange-500 */
   --color-primary-dark: #ea580c; /* orange-600 */
-  --color-secondary: #2563eb; /* blue-600 */
-  --color-accent: #facc15; /* yellow-400 */
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
   html, body {
-    @apply bg-slate-50 text-slate-900 antialiased overflow-x-hidden;
-    width: 100vw;
+    @apply bg-slate-50 text-slate-900 antialiased;
+    overflow-x: clip;
+    width: 100%;
     margin: 0;
     padding: 0;
   }
   
   #root {
     width: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
   
   .leaflet-container {
@@ -31,7 +30,8 @@
 }
 
 .map-container {
-  height: 400px;
+  height: 100%;
+  min-height: 400px;
   width: 100%;
   border-radius: 40px;
   overflow: hidden;
@@ -41,14 +41,71 @@
 }
 
 .vibrant-card {
-  @apply bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-all hover:shadow-xl;
+  @apply bg-white rounded-xl p-6 shadow border border-slate-200 transition-all hover:shadow-md;
 }
 
 .heading-accent {
   @apply font-black uppercase tracking-widest text-[10px] text-primary;
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar hide utility */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+@media print {
+  body, html {
+    visibility: hidden !important;
+    background: white !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .receipt-modal-overlay,
+  .receipt-modal-overlay * {
+    visibility: visible !important;
+  }
+
+  .receipt-modal-overlay {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+
+  .print-receipt {
+    position: static !important;
+    width: 650px !important; /* Standard receipt width */
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: 1px solid #eee !important;
+    margin: 0 auto !important;
+    height: auto !important;
+    display: block !important;
+    border-radius: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* Custom Scrollbar Branding */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;

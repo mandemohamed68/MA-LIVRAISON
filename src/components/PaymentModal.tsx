@@ -1,304 +1,798 @@
-import React, { useState } from 'react';
-import { Smartphone, ShieldCheck, Loader2, X, CreditCard, Coins } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldCheck, Smartphone, Landmark, CreditCard, Wallet, Clock, CheckCircle, AlertCircle, Loader2, ArrowLeft, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
+
+// --- CUSTOM ICONS ---
+// Note: Pour ajouter vos propres logos, déposez les fichiers orange.png, moov.png, etc. dans /public/payments/
+// Le code vérifiera si une image existe sinon il utilisera l'icône par défaut.
+
+const OrangeMoneyIcon = ({ className }: { className?: string }) => (
+  <div className={cn("w-full h-full bg-white border-2 border-slate-900 rounded-xl relative overflow-hidden flex", className)}>
+     <div className="w-1/2 bg-slate-900 h-full flex items-center justify-center"><span className="text-white font-black text-xl leading-none">&gt;</span></div>
+     <div className="w-1/2 bg-[#FF7900] h-full flex items-center justify-center"><span className="text-white font-black text-xl leading-none">&lt;</span></div>
+  </div>
+);
+
+const MoovMoneyIcon = ({ className }: { className?: string }) => (
+  <div className={cn("w-full h-full bg-[#F26C23] rounded-[9px] rotate-45 flex items-center justify-center relative overflow-hidden shadow-sm", className)}>
+     <div className="rotate-[-45deg] flex flex-col items-center justify-center">
+        <span className="text-[#005C9A] font-black text-[9px] -mb-1">MOOV</span>
+        <span className="text-white font-bold text-[8px]">Money</span>
+     </div>
+  </div>
+);
+
+const TelecelMoneyIcon = ({ className }: { className?: string }) => (
+   <div className={cn("w-full h-full bg-white border-2 border-[#1B4086] rounded-xl flex flex-col items-center justify-center gap-0.5", className)}>
+      <div className="flex w-full items-center justify-center gap-1">
+        <div className="w-2.5 h-2.5 bg-[#1B4086] rounded-tl-sm rounded-br-sm"></div>
+        <div className="w-2.5 h-2.5 bg-[#00A1E0] rounded-tl-sm rounded-br-sm"></div>
+      </div>
+   </div>
+);
+
+const CorisMoneyIcon = ({ className }: { className?: string }) => (
+   <div className={cn("w-full h-full bg-[#009ED6] rounded-xl flex items-center justify-center relative shadow-sm", className)}>
+      <svg viewBox="0 0 40 40" className="w-[80%] h-[80%]">
+        <path d="M 28 8 Q 12 8 10 20 Q 8 32 20 32 Q 28 32 30 24" fill="none" stroke="#FFEE00" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+   </div>
+);
+
+const PaymentIcon = ({ id, icon: Icon, isCustomImg, className, bg, color, selected }: any) => {
+  const [hasImage, setHasImage] = useState(false);
+  const logoUrl = `/payments/${id.replace('_ussd', '')}.png`;
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = logoUrl;
+    img.onload = () => setHasImage(true);
+  }, [logoUrl]);
+
+  return (
+    <div className={cn(
+      "w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 overflow-hidden",
+      selected ? "bg-white/10" : bg,
+      isCustomImg || hasImage ? "p-0" : ""
+    )}>
+      {hasImage ? (
+        <img src={logoUrl} alt={id} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      ) : (
+        <Icon className={cn(
+          isCustomImg ? "w-full h-full rounded-xl" : "w-6 h-6", 
+          selected ? "text-white" : color
+        )} />
+      )}
+    </div>
+  );
+};
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (method: 'cash' | 'mobile_money' | 'card') => void;
+  onConfirm: (method: string, transactionId?: string, isVerified?: boolean) => void;
   amount: number;
+  title?: string;
+  description?: string;
 }
 
-export default function PaymentModal({ isOpen, onClose, onConfirm, amount }: PaymentModalProps) {
-  const [step, setStep] = useState(1);
-  const [selectedMethod, setSelectedMethod] = useState<'orange' | 'moov' | 'coris' | 'sank' | 'card' | 'cash' | null>(null);
-  const [pin, setPin] = useState('');
+export default function PaymentModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  amount,
+  title = "Paiement Sécurisé",
+  description = "Le montant est bloqué par notre plateforme et ne sera versé au livreur qu'une fois la confirmation de livraison effectuée par vos soins."
+}: PaymentModalProps) {
+  const { appConfig } = useAuth();
+  const [step, setStep] = useState(1); // 1: Methods, 2: USSD/Input, 3: Success/Waiting
+  const [selectedMethod, setSelectedMethod] = useState<'orange' | 'moov' | 'telecel' | 'coris' | 'orange_ussd' | 'moov_ussd' | 'telecel_ussd' | 'card' | 'cash' | 'aggregator' | 'ussd' | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [transactionId, setTransactionId] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [waitingForAdmin, setWaitingForAdmin] = useState(false);
+  const [sappayInvoiceId, setSappayInvoiceId] = useState('');
+  const [sappayAccessToken, setSappayAccessToken] = useState('');
+  const [sappayTransId, setSappayTransId] = useState('');
+  const [sappayStep, setSappayStep] = useState<'init' | 'otp' | 'pending'>('init');
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedMethod === 'cash') {
-      onConfirm('cash');
-      onClose();
+  const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
+
+  const getUssdString = () => {
+    let syntax = "";
+    if (selectedMethod === 'orange' || selectedMethod === 'orange_ussd') {
+      syntax = appConfig?.ussdSyntaxOrange || "*144*4*6*{amount}#";
+    } else if (selectedMethod === 'moov' || selectedMethod === 'moov_ussd') {
+      syntax = appConfig?.ussdSyntaxMoov || "*155*4*1*{amount}#";
+    } else if (selectedMethod === 'telecel' || selectedMethod === 'telecel_ussd') {
+      syntax = appConfig?.ussdSyntaxTelecel || "*808*4*4*{amount}#";
+    } else if (selectedMethod === 'coris') {
+      syntax = appConfig?.ussdSyntaxCoris || "*555*1*1*{amount}#";
+    } else {
+      syntax = appConfig?.ussdSyntaxGeneric || "*144*4*6*{amount}#";
+    }
+    
+    // Replace the {amount} variable with the actual amount (case insensitive, and allow {montant})
+    return syntax
+      .replace(/\{amount\}/ig, amount.toString())
+      .replace(/\{montant\}/ig, amount.toString());
+  };
+
+  const processors: Record<string, string> = {
+    orange: '11688813752134336',
+    telecel: '11744695746597207',
+    moov: '11688813838374580',
+    coris: '11702302492453862'
+  };
+
+  const handleInitialConfirm = async () => {
+    setError(null);
+    const methodObj = methods.find(m => m.id === selectedMethod);
+
+    if (methodObj?.type === 'otp') {
+      setStep(2);
+      setSappayStep('init');
+    } else if (methodObj) {
+      if (methodObj.type === 'ussd') {
+         // Sur mobile (Capacitor), window.location.href peut fermer la webview, on utilise window.open avec _system
+         window.open(`tel:${getUssdString().replace('#', '%23')}`, '_system');
+      }
+      setStep(2);
+    }
+  };
+
+  const getApiUrl = (path: string) => {
+    if (typeof window !== 'undefined' && ((window as any).Capacitor || window.location.hostname === 'localhost' || window.location.protocol.includes('file'))) {
+      return `https://ais-pre-sziuwgy6vpibvj2wdcjxmo-252816219526.europe-west1.run.app${path}`;
+    }
+    return path;
+  };
+
+  const handleSappayInit = async () => {
+    setError(null);
+    if (!phoneNumber) {
+      setError("Veuillez entrer votre numéro de téléphone");
       return;
     }
     
     setIsProcessing(true);
-    // Simulate real delay
-    await new Promise(r => setTimeout(r, 2000));
-    setIsProcessing(false);
-    
-    let dbMethod: 'mobile_money' | 'card' | 'cash' = 'mobile_money';
-    if (selectedMethod === 'card') dbMethod = 'card';
-    if (selectedMethod === 'cash') dbMethod = 'cash';
-    
-    onConfirm(dbMethod);
-    onClose();
+    try {
+      // 1. Authentification & Facture (via Proxy)
+      const initRes = await fetch(getApiUrl('/api/payment/sappay/init'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          note: `COURSE LIVRA #${Math.random().toString(36).substr(2, 5)}`,
+          email: 'client@livra.app'
+        })
+      });
+      
+      if (!initRes.ok) {
+        let errorMsg = "Erreur de connexion à Sappay.";
+        try {
+          const errorData = await initRes.json();
+          errorMsg = errorData.message || errorData.error || errorMsg;
+        } catch (e) {
+          errorMsg = "Impossible d'initialiser la facture. Vérifiez vos identifiants Sappay dans les Secrets.";
+        }
+        throw new Error(errorMsg);
+      }
+
+      const initData = await initRes.json();
+      setSappayInvoiceId(initData.invoice_id);
+      setSappayAccessToken(initData.access_token);
+
+      // 2. Déclenchement OTP pour Moov et Coris (PUSH SMS)
+      if (selectedMethod === 'moov' || selectedMethod === 'coris') {
+        const otpRes = await fetch(getApiUrl('/api/payment/sappay/get-otp'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_msisdn: phoneNumber,
+            invoice_id: initData.invoice_id,
+            payment_processor_id: processors[selectedMethod as string],
+            access_token: initData.access_token
+          })
+        });
+        
+        if (!otpRes.ok) {
+           let errorMsg = "Erreur lors de l'envoi du SMS OTP.";
+           try {
+             const otpError = await otpRes.json();
+             errorMsg = otpError.message || otpError.error_description || otpError.error || errorMsg;
+           } catch (e) {
+             errorMsg = "Le réseau n'a pas pu envoyer le SMS. Réessayez.";
+           }
+           throw new Error(errorMsg);
+        }
+
+        const otpData = await otpRes.json();
+        if (otpData.trans_id) setSappayTransId(otpData.trans_id);
+      }
+
+      setSappayStep('otp');
+    } catch (err: any) {
+      // Log as warning to avoid looking like a code crash
+      console.warn("Init warning:", err.message);
+      setError(err.message || "Une erreur technique est survenue.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const getHeaderColor = () => {
-    if (selectedMethod === 'orange') return 'bg-[#FF7900]';
-    if (selectedMethod === 'moov') return 'bg-[#005CB9]';
-    if (selectedMethod === 'coris') return 'bg-[#CC0000]';
-    if (selectedMethod === 'sank') return 'bg-[#2E7A3C]';
-    if (selectedMethod === 'card') return 'bg-slate-800';
-    if (selectedMethod === 'cash') return 'bg-emerald-600';
-    return 'bg-slate-900';
+  const handlePayment = async () => {
+    setError(null);
+    const methodObj = methods.find(m => m.id === selectedMethod);
+    
+    if (methodObj?.type === 'otp') {
+      if (sappayStep === 'init') {
+        await handleSappayInit();
+        return;
+      }
+
+      if (!otpCode) {
+        setError("Veuillez entrer le code OTP reçu");
+        return;
+      }
+
+      setIsProcessing(true);
+      try {
+        const performRes = await fetch(getApiUrl('/api/payment/sappay/perform'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoice_id: sappayInvoiceId,
+            payment_processor_id: processors[selectedMethod as string],
+            customer_msisdn: phoneNumber,
+            otp: otpCode,
+            access_token: sappayAccessToken,
+            trans_id: sappayTransId
+          })
+        });
+
+        if (!performRes.ok) {
+           let errorMsg = "Transaction refusée par l'opérateur.";
+           try {
+             const errorData = await performRes.json();
+             errorMsg = errorData.message || errorData.error_description || errorData.error || errorData.details?.message || errorMsg;
+           } catch (e) {
+             errorMsg = "Erreur réseau lors de la validation. Vérifiez votre solde.";
+           }
+           if (errorMsg === "Transaction Failed") {
+             errorMsg = "Échec de la transaction. Veuillez vérifier votre solde et votre code de validation.";
+           }
+           throw new Error(errorMsg);
+        }
+
+        const performData = await performRes.json();
+        
+        // On considère SUCCESS comme validé sans admin, PENDING avec admin
+        const isSuccess = performData.status === 'SUCCESS' || performData.invoice_details?.status === 'SUCCESS';
+        const isPending = performData.status === 'PENDING' || performData.invoice_details?.status === 'PENDING';
+
+        if (isSuccess || isPending) {
+          onConfirm(selectedMethod as any, sappayInvoiceId, isSuccess);
+          if (isSuccess) {
+            onClose();
+          } else {
+            // PENDING : On attend la validation finale (admin ou webhook)
+            setSappayStep('pending');
+            setWaitingForAdmin(true);
+            setStep(3);
+          }
+        } else {
+          let detailMsg = performData.message || performData.error_description || performData.error || performData.details?.message;
+          if (detailMsg === "Transaction Failed") {
+            detailMsg = "Échec de la transaction (Fonds insuffisants ou code invalide).";
+          }
+          throw new Error(detailMsg || "Le paiement a échoué. Veuillez réessayer.");
+        }
+      } catch (err: any) {
+        // Log as warning since it's typically a balance/code issue, not a technical bug
+        console.warn("Transaction warning:", err.message);
+        setError(err.message);
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    const isManual = methodObj?.type === 'ussd' || !isDemo;
+
+    // Simplification USSD demandée par l'utilisateur
+    if (methodObj?.type === 'ussd') {
+      // Pas de check de transactionId
+    } else if (isManual && !transactionId) {
+       setError("Veuillez saisir l'ID de transaction reçu par SMS pour validation.");
+       return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // Simulation de délai pour le mode démo ou USSD
+      await new Promise(r => setTimeout(r, 1500));
+      
+      setIsProcessing(false);
+      
+      const needsApproval = isManual || methodObj?.type === 'ussd';
+
+      if (needsApproval) {
+        setWaitingForAdmin(true);
+        setStep(3);
+        
+        if (selectedMethod) {
+          // Si USSD on utilise le accountName ou PAYÉ
+          let finalId = transactionId || `REF-${Math.random().toString(36).substr(2, 5)}`;
+          if (methodObj?.type === 'ussd') {
+            finalId = accountName ? `PAYÉ (${accountName})` : "PAYÉ (USSD)";
+          }
+          onConfirm(selectedMethod as any, finalId, false);
+        }
+      } else {
+        if (selectedMethod) {
+          onConfirm(selectedMethod as any, transactionId, true);
+          onClose();
+        }
+      }
+    } catch (e: any) {
+      setError(e.message || "Erreur lors du paiement");
+      setIsProcessing(false);
+    }
   };
-  
+
+  const methods = [
+    // OTP Group
+    { id: 'orange', name: 'Orange Money', type: 'otp', icon: OrangeMoneyIcon, color: 'text-orange-600', bg: 'bg-white', border: 'border-orange-100', isCustomImg: true },
+    { id: 'moov', name: 'Moov Money', type: 'otp', icon: MoovMoneyIcon, color: 'text-blue-600', bg: 'bg-white', border: 'border-blue-100', isCustomImg: true },
+    { id: 'telecel', name: 'Telecel Cash', type: 'otp', icon: TelecelMoneyIcon, color: 'text-red-600', bg: 'bg-white', border: 'border-red-100', isCustomImg: true },
+    { id: 'coris', name: 'Coris Money', type: 'otp', icon: CorisMoneyIcon, color: 'text-blue-600', bg: 'bg-white', border: 'border-blue-100', isCustomImg: true },
+    
+    // USSD Group
+    { id: 'orange_ussd', name: 'Orange (USSD)', type: 'ussd', icon: Smartphone, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
+    { id: 'moov_ussd', name: 'Moov (USSD)', type: 'ussd', icon: Smartphone, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+    { id: 'telecel_ussd', name: 'Telecel (USSD)', type: 'ussd', icon: Smartphone, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
+  ];
+
   const getHeaderName = () => {
-    if (selectedMethod === 'orange') return 'Orange Money';
-    if (selectedMethod === 'moov') return 'Moov Money';
-    if (selectedMethod === 'coris') return 'Coris Money';
-    if (selectedMethod === 'sank') return 'Sank Money';
-    if (selectedMethod === 'card') return 'Carte Bancaire';
-    if (selectedMethod === 'cash') return 'Espèces à la livraison';
-    return 'Paiement (Burkina Faso)';
+    const method = methods.find(m => m.id === selectedMethod);
+    if (!method) return "MÉTHODE DE PAIEMENT";
+    return method.name.toUpperCase();
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-slate-950/40 backdrop-blur-md"
             onClick={onClose}
-            className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm"
           />
+          
           <motion.div 
-            initial={window.innerWidth < 1024 ? { y: '100%' } : { scale: 0.9, opacity: 0 }}
-            animate={window.innerWidth < 1024 ? { y: 0 } : { scale: 1, opacity: 1 }}
-            exit={window.innerWidth < 1024 ? { y: '100%' } : { scale: 0.9, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={cn(
-              "fixed z-[120] bg-white overflow-hidden shadow-2xl",
-              "bottom-0 left-0 right-0 rounded-t-[40px] max-h-[90vh]", // Mobile: Bottom Sheet
-              "lg:inset-auto lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-full lg:max-w-md lg:rounded-[40px]" // Desktop: Centered Modal
-            )}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="w-full max-w-lg bg-white rounded-[40px] shadow-2xl relative overflow-hidden flex flex-col h-auto max-h-[90vh] z-10"
           >
-            {/* Minimal Drag Indicator for Mobile */}
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto my-4 lg:hidden" />
-
-            <div className={cn("px-8 py-6 text-white relative transition-colors duration-300", getHeaderColor())}>
+            {/* Header / Actions - Top Buttons */}
+            <div className="absolute top-6 left-6 right-6 z-20 flex justify-between items-center">
+              {step > 1 ? (
+                <button 
+                  onClick={() => setStep(step - 1)}
+                  className="w-10 h-10 bg-slate-100/50 backdrop-blur border border-white/50 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              ) : <div />}
               <button 
                 onClick={onClose}
-                className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all"
+                className="w-10 h-10 bg-slate-100/50 backdrop-blur border border-white/50 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
-              <div className="flex items-center gap-3 mb-1">
-                <ShieldCheck className="w-4 h-4 opacity-70" />
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{getHeaderName()}</p>
-              </div>
-              <h2 className="text-2xl font-black tracking-tighter">Paiement Sécurisé</h2>
             </div>
 
-            <div className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {step === 1 ? (
-                <div className="space-y-6">
-                  <div className="text-center p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Montant à régler</p>
-                    <div className="flex items-baseline justify-center gap-2">
-                       <span className="text-5xl font-black text-slate-900 tracking-tighter">{amount}</span>
-                       <span className="text-lg font-black text-slate-400">FCFA</span>
+            {/* Content Area - Scrollable */}
+            <div className="flex-1 overflow-y-auto px-8 pt-10 pb-8 custom-scrollbar">
+              <AnimatePresence mode="wait">
+                {step === 1 ? (
+                  <motion.div 
+                    key="step1"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="space-y-8"
+                  >
+                    {/* Amount Display Block */}
+                    <div className="bg-slate-50 border border-white rounded-[32px] p-10 text-center shadow-inner relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-b from-white/50 to-transparent pointer-events-none" />
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 leading-none italic">MONTANT DE LA COURSE</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="text-6xl font-black text-slate-950 tracking-tighter italic">{amount.toLocaleString('fr-FR')}</span>
+                        <span className="text-xl font-black text-blue-900/40 italic mt-4 uppercase">FCFA</span>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 gap-3">
-                    <button 
-                      onClick={() => { setSelectedMethod('orange'); setStep(2); }}
-                      className="group w-full flex items-center justify-between p-4 bg-white border-2 border-slate-50 rounded-3xl hover:border-orange-500 transition-all text-left shadow-sm hover:shadow-orange-500/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-[#FF7900] rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
-                          <Smartphone className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <span className="block font-black text-slate-900 uppercase text-[10px] tracking-widest mb-0.5">Orange Money</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Paiement Mobile Rapide</span>
+
+                    <div className="space-y-6">
+                      {/* Groupe OTP */}
+                      <div className="space-y-3">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
+                          <Smartphone className="w-3 h-3" /> Mobile Money (Direct OTP) :
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {methods.filter(m => m.type === 'otp').map((method) => (
+                            <button
+                              key={method.id}
+                              onClick={() => setSelectedMethod(method.id as any)}
+                              className={cn(
+                                "p-4 rounded-[28px] border-2 flex items-center gap-3 transition-all relative group h-20",
+                                selectedMethod === method.id 
+                                  ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
+                                  : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
+                              )}
+                            >
+                              <PaymentIcon 
+                                id={method.id}
+                                icon={method.icon}
+                                isCustomImg={method.isCustomImg}
+                                bg={method.bg}
+                                color={method.color}
+                                selected={selectedMethod === method.id}
+                              />
+                              <div className="text-left flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-[10px] font-black tracking-tight uppercase italic truncate",
+                                  selectedMethod === method.id ? "text-white" : "text-slate-900"
+                                )}>{method.name}</p>
+                              </div>
+                              {selectedMethod === method.id && (
+                                <div className="absolute bottom-3 right-3">
+                                  <CheckCircle className="w-4 h-4 text-orange-500" />
+                                </div>
+                              )}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    </button>
 
-                    <button 
-                      onClick={() => { setSelectedMethod('moov'); setStep(2); }}
-                      className="group w-full flex items-center justify-between p-4 bg-white border-2 border-slate-50 rounded-3xl hover:border-blue-500 transition-all text-left shadow-sm hover:shadow-blue-500/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-[#005CB9] rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform">
-                          <Smartphone className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <span className="block font-black text-slate-900 uppercase text-[10px] tracking-widest mb-0.5">Moov Money</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Paiement Mobile Sécurisé</span>
+                      {/* Groupe USSD */}
+                      <div className="space-y-3 pb-6">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
+                          <Clock className="w-3 h-3" /> Mobile Money (Syntaxe USSD) :
+                        </p>
+                        <div className="grid grid-cols-1 gap-3">
+                          {methods.filter(m => m.type === 'ussd').map((method) => (
+                            <button
+                              key={method.id}
+                              onClick={() => setSelectedMethod(method.id as any)}
+                              className={cn(
+                                "p-5 rounded-[28px] border-2 flex items-center gap-4 transition-all relative group",
+                                selectedMethod === method.id 
+                                  ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
+                                  : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
+                              )}
+                            >
+                              <PaymentIcon 
+                                id={method.id}
+                                icon={method.icon}
+                                bg={method.bg}
+                                color={method.color}
+                                selected={selectedMethod === method.id}
+                              />
+                              <div className="text-left flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-[10px] font-black tracking-tight uppercase italic truncate",
+                                  selectedMethod === method.id ? "text-white" : "text-slate-900"
+                                )}>{method.name}</p>
+                                <p className={cn(
+                                  "text-[9px] font-bold uppercase tracking-widest leading-none mt-1",
+                                  selectedMethod === method.id ? "text-slate-400" : "text-slate-400"
+                                )}>Génération manuelle de code</p>
+                              </div>
+                              {selectedMethod === method.id && (
+                                <div className="absolute right-6">
+                                  <CheckCircle className="w-5 h-5 text-orange-500" />
+                                </div>
+                              )}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    </button>
-
-                    <button 
-                      onClick={() => { setSelectedMethod('coris'); setStep(2); }}
-                      className="group w-full flex items-center justify-between p-4 bg-white border-2 border-slate-50 rounded-3xl hover:border-red-500 transition-all text-left shadow-sm hover:shadow-red-500/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-[#CC0000] rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/20 group-hover:scale-110 transition-transform">
-                          <Smartphone className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <span className="block font-black text-slate-900 uppercase text-[10px] tracking-widest mb-0.5">Coris Money</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Paiement Local</span>
-                        </div>
+                    </div>
+                  </motion.div>
+                ) : step === 2 ? (
+                  <motion.div 
+                    key="step2"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="space-y-6"
+                  >
+                    <div className="bg-slate-50 border border-slate-100 rounded-[32px] p-8 text-center relative overflow-hidden">
+                      <div className={cn(
+                        "w-20 h-20 rounded-[28px] overflow-hidden flex items-center justify-center mx-auto mb-6 shadow-lg bg-white",
+                        methods.find(m => m.id === selectedMethod)?.bg
+                      )}>
+                        <PaymentIcon 
+                          id={selectedMethod as string}
+                          icon={methods.find(m => m.id === selectedMethod)?.icon || Smartphone}
+                          isCustomImg={methods.find(m => m.id === selectedMethod)?.isCustomImg}
+                          bg={methods.find(m => m.id === selectedMethod)?.bg}
+                          color={methods.find(m => m.id === selectedMethod)?.color}
+                          selected={false}
+                        />
                       </div>
-                    </button>
-
-                    <button 
-                      onClick={() => { setSelectedMethod('sank'); setStep(2); }}
-                      className="group w-full flex items-center justify-between p-4 bg-white border-2 border-slate-50 rounded-3xl hover:border-green-600 transition-all text-left shadow-sm hover:shadow-green-600/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-[#2E7A3C] rounded-2xl flex items-center justify-center shadow-lg shadow-green-600/20 group-hover:scale-110 transition-transform">
-                          <Smartphone className="w-6 h-6 text-white" />
+                      <h3 className="text-xl font-black text-slate-900 tracking-tight italic uppercase">
+                        {selectedMethod === 'ussd' ? "Syntaxe Marchand" : selectedMethod === 'aggregator' ? "Portail LIVRA Pay" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
+                      </h3>
+                      
+                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'moov' ? (
+                        <div className="bg-white border-2 border-orange-100 rounded-2xl p-6 mt-4 shadow-inner">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Composez sur votre mobile :</p>
+                          <div className="flex flex-col items-center gap-4">
+                            <p className="text-xl font-black text-indigo-900 tracking-widest select-all">
+                              {getUssdString()}
+                            </p>
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => window.open(`tel:${getUssdString().replace('#', '%23')}`, '_system')}
+                                className="px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-orange-500 transition-colors"
+                              >
+                                <Smartphone className="w-4 h-4" /> Lancer l'appel
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(getUssdString());
+                                  alert("Syntaxe copiée !");
+                                }}
+                                className="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-200 transition-colors"
+                              >
+                                <Copy className="w-4 h-4" /> Copier
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest text-center">
+                            {selectedMethod?.includes('orange') ? "Syntaxe Orange Money" : selectedMethod?.includes('moov') ? "Syntaxe Moov Money" : selectedMethod?.includes('telecel') ? "Syntaxe Telecel Cash" : "Syntaxe Marchand"}
+                          </p>
                         </div>
+                      ) : (
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 leading-relaxed max-w-xs mx-auto">
+                          Entrez le numéro payeur pour l'envoi de la requête de paiement.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-6">
+                      {/* CHAMP NOM DU COMPTE OU ID TRANSACTION */}
+                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' ? (
                         <div>
-                          <span className="block font-black text-slate-900 uppercase text-[10px] tracking-widest mb-0.5">Sank Money</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Réseau Burkinabè</span>
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">
+                            Nom du compte (Facultatif)
+                          </label>
+                          <input 
+                            type="text" 
+                            placeholder="Ex: Jean Dupont" 
+                            value={accountName}
+                            onChange={e => setAccountName(e.target.value)}
+                            className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
+                          />
+                          <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2">
+                            Nom utilisé pour effectuer le paiement.
+                          </p>
                         </div>
-                      </div>
-                    </button>
+                      ) : (
+                        !isDemo && (
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">
+                              ID de Transaction / Référence SMS
+                            </label>
+                            <input 
+                              type="text" 
+                              placeholder="Entrez l'identifiant reçu par SMS" 
+                              value={transactionId}
+                              onChange={e => setTransactionId(e.target.value)}
+                              className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
+                            />
+                            <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2">
+                              Vérifiez le SMS de confirmation de votre opérateur.
+                            </p>
+                          </div>
+                        )
+                      )}
 
-                    <button 
-                      onClick={() => { setSelectedMethod('card'); setStep(2); }}
-                      className="group w-full flex items-center justify-between p-4 bg-white border-2 border-slate-50 rounded-3xl hover:border-slate-800 transition-all text-left shadow-sm hover:shadow-slate-800/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center shadow-lg shadow-slate-800/20 group-hover:scale-110 transition-transform">
-                          <CreditCard className="w-6 h-6 text-white" />
+                      {/* ÉCRAN INITIAL : SAISIE NUMÉRO OU GÉNÉRATION SMS */}
+                      {methods.find(m => m.id === selectedMethod)?.type === 'otp' && sappayStep === 'init' && (
+                        <div className="space-y-6">
+                           <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex items-start gap-4">
+                            <Smartphone className="w-6 h-6 text-blue-500 shrink-0" />
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none">Étape 1 : Initialisation</p>
+                              <p className="text-[10px] font-bold text-blue-600/80 uppercase tracking-widest leading-relaxed">
+                                {selectedMethod === 'moov' || selectedMethod === 'coris' 
+                                  ? "Générez un code de validation qui vous sera envoyé par SMS par votre opérateur." 
+                                  : "Vérifiez votre numéro pour passer à l'étape suivante (Génération du code OTP via USSD)."}
+                              </p>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">Votre numéro de téléphone</label>
+                            <input 
+                              type="tel" 
+                              placeholder="Ex: 70000000" 
+                              value={phoneNumber}
+                              onChange={e => setPhoneNumber(e.target.value)}
+                              className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
+                            />
+                            <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2">Format: 8 chiffres (Ex: 65800508)</p>
+                          </div>
                         </div>
-                        <div>
-                          <span className="block font-black text-slate-900 uppercase text-[10px] tracking-widest mb-0.5">Carte Bancaire</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Visa, MasterCard, CB</span>
-                        </div>
-                      </div>
-                    </button>
+                      )}
 
-                    <button 
-                      onClick={() => { setSelectedMethod('cash'); setStep(2); }}
-                      className="group w-full flex items-center justify-between p-4 bg-white border-2 border-slate-50 rounded-3xl hover:border-emerald-600 transition-all text-left shadow-sm hover:shadow-emerald-600/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
-                          <Coins className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <span className="block font-black text-slate-900 uppercase text-[10px] tracking-widest mb-0.5">Espèces</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Règlement à la livraison</span>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
+                      {/* ÉCRAN OTP SAPPAY : SAISIE CODE VERSION DYNAMIQUE */}
+                      {methods.find(m => m.id === selectedMethod)?.type === 'otp' && sappayStep === 'otp' && (
+                        <div className="space-y-6">
+                          <div className={cn(
+                            "rounded-2xl p-5 flex items-start gap-4 shadow-sm",
+                            selectedMethod === 'moov' || selectedMethod === 'coris' ? "bg-emerald-50 border border-emerald-100" : "bg-orange-50 border border-orange-100"
+                          )}>
+                            {selectedMethod === 'moov' || selectedMethod === 'coris' ? <Smartphone className="w-6 h-6 text-emerald-500 shrink-0" /> : <Clock className="w-6 h-6 text-orange-500 shrink-0" />}
+                            <div className="space-y-1">
+                              <p className={cn(
+                                "text-[10px] font-black uppercase tracking-widest leading-none",
+                                selectedMethod === 'moov' || selectedMethod === 'coris' ? "text-emerald-700" : "text-orange-700"
+                              )}>
+                                {selectedMethod === 'orange' ? "Orange Money (Burkina)" : 
+                                 selectedMethod === 'telecel' ? "Telecel Cash (Burkina)" :
+                                 selectedMethod === 'moov' ? "Moov Money (Burkina)" : "Coris Money"} : Étape 2
+                              </p>
+                              <p className={cn(
+                                "text-[10px] font-bold uppercase tracking-widest leading-relaxed",
+                                selectedMethod === 'moov' || selectedMethod === 'coris' ? "text-emerald-600/80" : "text-orange-600/80"
+                              )}>
+                                {selectedMethod === 'orange' ? `Composez *144*4*6*${amount}# sur votre téléphone pour recevoir votre CODE SECRET OTP.` : 
+                                 selectedMethod === 'telecel' ? `Composez *808*4*4*${amount}# sur votre téléphone pour recevoir votre CODE OTP.` : 
+                                 selectedMethod === 'moov' ? "Saisissez le code de validation reçu par SMS et l'ID de transaction." :
+                                 "Saisissez le code de validation à 5 chiffres reçu par SMS."}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <div className="flex justify-between items-end mb-3 pl-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block italic leading-none">Code de Validation OTP</label>
+                                {selectedMethod === 'orange' || selectedMethod === 'telecel' ? (
+                                  <button 
+                                    onClick={() => window.open(`tel:${getUssdString().replace('#', '%23')}`, '_system')}
+                                    className="text-[9px] font-black text-orange-500 uppercase tracking-widest flex items-center gap-1 hover:underline"
+                                  >
+                                    <Smartphone className="w-3 h-3" /> Relancer la syntaxe
+                                  </button>
+                                ) : null}
+                              </div>
+                              <input 
+                                type="text" 
+                                placeholder={selectedMethod === 'coris' ? "00000" : "000000"} 
+                                value={otpCode}
+                                onChange={e => setOtpCode(e.target.value)}
+                                className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-3xl text-center text-slate-900 tracking-[0.25em] focus:outline-none focus:border-orange-500 transition-all outline-none"
+                              />
+                            </div>
 
-                  <p className="text-[8px] text-center text-slate-400 font-bold uppercase tracking-[0.2em] px-4">
-                    Le montant est bloqué par notre plateforme et ne sera versé au livreur qu'une fois la confirmation de livraison effectuée par vos soins.
-                  </p>
-                </div>
-              ) : selectedMethod === 'cash' ? (
-                <div className="text-center py-4">
-                  <div className="w-20 h-20 bg-emerald-50 rounded-[28px] flex items-center justify-center mx-auto mb-6 border-2 border-emerald-100 rotate-3">
-                    <Coins className="w-10 h-10 text-emerald-600 -rotate-3" />
-                  </div>
-                  <h3 className="text-xl font-black text-slate-900 mb-2">Paiement en espèces</h3>
-                  <p className="font-bold text-slate-500 text-xs uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed mb-8">
-                    Le montant de <span className="text-slate-900">{amount} FCFA</span> sera collecté directement par le livreur.
-                  </p>
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={() => setStep(1)}
-                      className="flex-1 py-5 rounded-[24px] font-black text-[10px] uppercase tracking-widest transition-all text-slate-400 bg-slate-50 hover:bg-slate-100"
-                    >
-                      Retour
-                    </button>
-                    <button 
-                      onClick={handleSubmit}
-                      className="flex-[2] py-5 rounded-[24px] font-black text-[10px] uppercase tracking-widest transition-all text-white bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-500/20 active:scale-95"
-                    >
-                      Confirmer la commande
-                    </button>
-                  </div>
+                            {selectedMethod === 'moov' && (
+                              <div className="pt-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">Référence de Transaction SMS (ID)</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="Ex: OMROR24..." 
+                                  value={sappayTransId}
+                                  onChange={e => setSappayTransId(e.target.value)}
+                                  className="w-full px-8 py-4 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-extrabold text-center text-slate-600 focus:outline-none focus:border-orange-500 transition-all outline-none"
+                                />
+                                <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2 text-center italic">Cet identifiant se trouve dans le SMS récapitulatif de Moov.</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-start gap-4">
+                        <ShieldCheck className="w-6 h-6 text-emerald-500 shrink-0" />
+                            <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest leading-relaxed">
+                          Transaction Sécurisée. Vos fonds sont protégés par le protocole de séquestre LIVRA.
+                        </p>
+                      </div>
+
+                      {error && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }} 
+                          animate={{ opacity: 1, y: 0 }} 
+                          className="bg-red-50 border-2 border-red-200 rounded-2xl p-5 flex items-start gap-4"
+                        >
+                          <AlertCircle className="w-6 h-6 text-red-500 shrink-0" />
+                          <div>
+                            <p className="text-[10px] font-black uppercase text-red-800 tracking-widest leading-none mb-1">Attention</p>
+                            <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide leading-relaxed">
+                              {error}
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="step3"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="py-8 text-center space-y-8"
+                  >
+                    <div className="w-32 h-32 bg-slate-950 text-white rounded-[40px] flex items-center justify-center mx-auto mb-8 shadow-2xl relative">
+                      <Clock className="w-16 h-16 animate-pulse" />
+                      <div className="absolute -bottom-2 -right-2 bg-orange-500 w-8 h-8 rounded-full flex items-center justify-center border-4 border-white">
+                        <Loader2 className="w-4 h-4 text-white animate-spin" />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">Vérification Admin...</h3>
+                      <p className="text-[10px] text-slate-400 font-bold leading-relaxed max-w-xs mx-auto uppercase tracking-widest italic">
+                        L'administration vérifie la réception de votre paiement avant de valider la course.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Footer - Fixed Button */}
+            <div className="p-8 bg-slate-50/50 border-t border-slate-100 shrink-0">
+              {step === 1 ? (
+                <button
+                  disabled={!selectedMethod}
+                  onClick={handleInitialConfirm}
+                  className="w-full py-5 bg-slate-950 text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[24px] shadow-2xl shadow-slate-950/20 hover:bg-orange-500 active:scale-95 transition-all disabled:opacity-30 italic"
+                >
+                  Continuer
+                </button>
+              ) : step === 2 ? (
+                <div className="space-y-4">
+                  <button
+                    disabled={isProcessing || (methods.find(m => m.id === selectedMethod)?.type === 'otp' && phoneNumber.length < 8)}
+                    onClick={handlePayment}
+                    className="w-full py-5 bg-orange-500 text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[24px] shadow-2xl shadow-orange-500/30 hover:bg-slate-950 active:scale-95 transition-all flex items-center justify-center gap-4 italic disabled:opacity-30"
+                  >
+                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                      methods.find(m => m.id === selectedMethod)?.type === 'ussd' ? "J'AI EFFECTUÉ LE PAIEMENT" : 
+                      (methods.find(m => m.id === selectedMethod)?.type === 'otp' && sappayStep === 'init') ? 
+                        (selectedMethod === 'orange' || selectedMethod === 'telecel' ? "INITIER LE PAIEMENT" : "GÉNÉRER LE CODE") :
+                      (methods.find(m => m.id === selectedMethod)?.type === 'otp' && sappayStep === 'otp') ? "VALIDER LE PAIEMENT" :
+                      "Vérifier la Transaction"
+                    )}
+                  </button>
+                  <button onClick={() => setStep(1)} className="w-full text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">Modifier le mode</button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-8">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-slate-100 rounded-[20px] flex items-center justify-center mx-auto mb-4">
-                      <ShieldCheck className="w-8 h-8 text-slate-800" />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 mb-1">Authentification</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Code PIN {getHeaderName()}
-                    </p>
-                  </div>
-                  
-                  <div className="flex justify-center gap-4">
-                    {[0, 1, 2, 3].map((index) => (
-                      <input 
-                        key={index}
-                        id={`pin-${index}`}
-                        type="password"
-                        maxLength={1}
-                        value={pin[index] || ''}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          const newPin = pin.split('');
-                          newPin[index] = val;
-                          setPin(newPin.join('').slice(0, 4));
-                          if (val && index < 3) {
-                            const nextInput = document.getElementById(`pin-${index + 1}`);
-                            nextInput?.focus();
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Backspace' && !pin[index] && index > 0) {
-                            const prevInput = document.getElementById(`pin-${index - 1}`);
-                            prevInput?.focus();
-                          }
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        className="w-14 h-16 bg-white border-2 border-slate-200 rounded-2xl text-center text-3xl font-black text-slate-900 focus:border-slate-900 focus:ring-4 focus:ring-slate-900/10 transition-all outline-none"
-                        autoFocus={index === 0}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="pt-4 space-y-4">
-                    <button 
-                      disabled={pin.length < 4 || isProcessing}
-                      className={cn(
-                        "w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-3 relative overflow-hidden group",
-                        getHeaderColor(),
-                        "text-white shadow-xl shadow-slate-900/10 disabled:opacity-50 disabled:active:scale-100 active:scale-95"
-                      )}
-                    >
-                      {/* Button highlight effect */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
-                      
-                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin relative z-10" /> : (
-                        <span className="relative z-10">Valider le paiement</span>
-                      )}
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => { setStep(1); setPin(''); }}
-                      className="w-full py-4 rounded-2xl font-bold text-[11px] uppercase tracking-widest text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all"
-                    >
-                      ← Changer de méthode
-                    </button>
-                  </div>
-                </form>
+                <button
+                  onClick={onClose}
+                  className="w-full py-5 bg-slate-950 text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[24px] italic"
+                >
+                  TERMINE LA CONSULTATION
+                </button>
               )}
             </div>
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );

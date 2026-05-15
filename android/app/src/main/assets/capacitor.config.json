@@ -1,5 +1,8 @@
 {
 	"appId": "com.malivraison.app",
-	"appName": "Ma Livraison Burkina",
-	"webDir": "dist"
+	"appName": "LIVRA",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	}
 }

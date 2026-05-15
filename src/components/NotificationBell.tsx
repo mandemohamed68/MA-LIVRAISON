@@ -1,50 +1,57 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Info, Package, CheckCircle, Truck } from 'lucide-react';
+import { Bell, Info, Package, CheckCircle, Truck, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-
-interface Notification {
-  id: string;
-  title: string;
-  desc: string;
-  type: 'info' | 'success' | 'warning';
-  icon: any;
-  time: string;
-}
+import { useAuth } from '../context/AuthContext';
+import { collection, query, where, orderBy, onSnapshot, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { AppNotification } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 export default function NotificationBell() {
+  const { user, notifications } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([
-    { id: '1', title: 'Bienvenue !', desc: 'Prêt pour votre première livraison ?', type: 'info', icon: Bell, time: 'À l\'instant' },
-  ]);
-  const [hasNew, setHasNew] = useState(true);
+  const [hasUnread, setHasUnread] = useState(false);
 
-  // Simulation of incoming notifications
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const newNotif: Notification = {
-        id: Date.now().toString(),
-        title: 'Promotion Ouaga',
-        desc: '-10% sur votre prochaine course avec le code FASO10',
-        type: 'success',
-        icon: Package,
-        time: 'Il y a 5 min'
-      };
-      setNotifications(prev => [newNotif, ...prev]);
-      setHasNew(true);
-    }, 15000);
-    return () => clearTimeout(timer);
-  }, []);
+    setHasUnread(notifications.some(n => !n.isRead));
+  }, [notifications]);
+
+  const markAllAsRead = async () => {
+    if (!user) return;
+    const batch = writeBatch(db);
+    notifications.filter(n => !n.isRead).forEach(n => {
+      batch.update(doc(db, 'notifications', n.id), { isRead: true });
+    });
+    await batch.commit();
+  };
+
+  const deleteNotification = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteDoc(doc(db, 'notifications', id));
+  };
+
+  const markAsRead = async (id: string) => {
+    await updateDoc(doc(db, 'notifications', id), { isRead: true });
+  };
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'success': return CheckCircle;
+      case 'warning': return Info;
+      default: return Bell;
+    }
+  };
 
   return (
     <div className="relative">
       <button 
-        onClick={() => { setIsOpen(!isOpen); setHasNew(false); }}
-        className="relative w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all"
+        onClick={() => { setIsOpen(!isOpen); if (!isOpen) markAllAsRead(); }}
+        className="relative w-10 md:w-12 h-10 md:h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all"
       >
-        <Bell className="w-6 h-6 text-white" />
-        {hasNew && (
-          <span className="absolute top-3 right-3 w-3 h-3 bg-red-500 border-2 border-orange-500 rounded-full animate-bounce" />
+        <Bell className="w-5 md:w-6 h-5 md:h-6 text-white" />
+        {hasUnread && (
+          <span className="absolute top-2 md:top-3 right-2 md:right-3 w-3 h-3 bg-red-500 border-2 border-[#1E293B] rounded-full animate-pulse" />
         )}
       </button>
 
@@ -56,37 +63,69 @@ export default function NotificationBell() {
               initial={{ opacity: 0, y: 10, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.9 }}
-              className="absolute right-0 mt-4 w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 z-50 overflow-hidden"
+              className="absolute right-0 mt-4 w-72 md:w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 z-50 overflow-hidden"
             >
               <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Notifications</h3>
-                <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-lg">LIVE</span>
+                <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Notifications</h3>
+                <span className="text-[9px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-lg">LIVE</span>
               </div>
-              <div className="max-h-[400px] overflow-y-auto">
+              <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
                 {notifications.length > 0 ? (
-                  notifications.map(n => (
-                    <div key={n.id} className="p-6 border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer group">
-                      <div className="flex gap-4">
-                        <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                          <n.icon className="w-5 h-5 text-orange-600" />
+                  notifications.map(n => {
+                    const Icon = getIcon(n.type);
+                    return (
+                      <div 
+                        key={n.id} 
+                        onClick={() => markAsRead(n.id)}
+                        className={cn(
+                          "p-5 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group relative",
+                          !n.isRead && "bg-blue-50/30 font-bold"
+                        )}
+                      >
+                        <div className="flex gap-3">
+                          <div className={cn(
+                            "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
+                            n.type === 'success' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
+                          )}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-[10px] font-black text-slate-900 leading-tight mb-1 uppercase tracking-tight">{n.title}</p>
+                            <p className="text-[10px] font-medium text-slate-500 leading-snug mb-1">{n.message}</p>
+                            <p className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">
+                              {new Date(n.createdAt).toLocaleDateString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <button 
+                            onClick={(e) => deleteNotification(n.id, e)}
+                            className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
-                        <div>
-                          <p className="text-[11px] font-black text-slate-900 leading-none mb-1">{n.title}</p>
-                          <p className="text-[10px] font-medium text-slate-400 leading-relaxed mb-1">{n.desc}</p>
-                          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{n.time}</p>
-                        </div>
+                        {!n.isRead && (
+                          <div className="absolute top-5 right-5 w-2 h-2 bg-blue-500 rounded-full" />
+                        )}
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
-                  <div className="p-10 text-center opacity-30 text-xs font-bold uppercase tracking-widest">
-                    Aucune alerte
+                  <div className="p-10 text-center text-slate-300">
+                    <Bell className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em]">Silence radio</p>
                   </div>
                 )}
               </div>
-              <div className="p-4 bg-slate-50 text-center">
-                <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-orange-500 transition-colors">Tout marquer comme lu</button>
-              </div>
+              {notifications.length > 0 && (
+                <div className="p-4 bg-slate-50 text-center">
+                  <button 
+                    onClick={markAllAsRead}
+                    className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-orange-500 transition-colors"
+                  >
+                    Tout marquer comme lu
+                  </button>
+                </div>
+              )}
             </motion.div>
           </>
         )}
