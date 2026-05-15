@@ -12,11 +12,15 @@ export default function NotificationBell() {
   const [hasUnread, setHasUnread] = useState(false);
 
   useEffect(() => {
+    if (!Array.isArray(notifications)) {
+      setHasUnread(false);
+      return;
+    }
     setHasUnread(notifications.some(n => !n.isRead));
   }, [notifications]);
 
   const markAllAsRead = async () => {
-    if (!profile) return;
+    if (!profile || !Array.isArray(notifications)) return;
     try {
       const unread = notifications.filter(n => !n.isRead);
       await Promise.all(unread.map(n => api.markNotificationRead(Number(n.id))));
@@ -74,7 +78,7 @@ export default function NotificationBell() {
                 <span className="text-[9px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-lg">LIVE</span>
               </div>
               <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
-                {notifications.length > 0 ? (
+                {Array.isArray(notifications) && notifications.length > 0 ? (
                   notifications.map(n => {
                     const Icon = getIcon(n.type);
                     return (

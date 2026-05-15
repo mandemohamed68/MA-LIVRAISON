@@ -455,7 +455,9 @@ async function startServer() {
         appName: "LIVRA EXPRESS",
         currency: "FCFA",
         supportPhone: "+22600000000",
-        maintenanceMode: false
+        maintenanceMode: false,
+        mode: "production",
+        updatedAt: new Date().toISOString()
     });
   });
 

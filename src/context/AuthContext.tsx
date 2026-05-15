@@ -138,9 +138,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const fetchNotifs = async () => {
             try {
               const data = await api.getNotifications(authUser.uid);
-              setNotifications(data);
+              setNotifications(Array.isArray(data) ? data : []);
             } catch (err: any) {
               console.warn("Notifications fetch error:", err.message);
+              setNotifications([]);
             }
           };
           fetchNotifs();

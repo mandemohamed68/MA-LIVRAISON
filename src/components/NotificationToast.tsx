@@ -1,28 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy, limit, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, X, CheckCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Bell, X, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useNavigate } from 'react-router-dom';
 
 export default function NotificationToast() {
-  const { user, notifications: allNotifications } = useAuth();
+  const { profile, notifications: allNotifications } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!Array.isArray(allNotifications)) {
+      setNotifications([]);
+      return;
+    }
     const unread = allNotifications
       .filter(n => !n.isRead)
       .slice(0, 3);
     setNotifications(unread);
   }, [allNotifications]);
 
-  const markAsRead = async (id: string) => {
+  const markAsRead = async (id: string | number) => {
     try {
-      await updateDoc(doc(db, 'notifications', id), { isRead: true });
+      await api.markNotificationRead(Number(id));
     } catch (e) {
       console.error(e);
     }
