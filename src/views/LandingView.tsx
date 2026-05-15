@@ -225,8 +225,8 @@ export default function LandingView() {
         
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-12">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-orange-600 shadow-xl shadow-orange-500/20 p-2 group-hover:scale-110 transition-all">
-              <img src={logoUrl} alt="Livra Express" className="w-full h-full object-contain filter drop-shadow-sm" />
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-2">
+              <img src={logoUrl} alt="Livra Express" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">

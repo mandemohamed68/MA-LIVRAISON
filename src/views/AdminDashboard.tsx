@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp, deleteApp } from '../lib/firebase';
+import { getAuth, createUserWithEmailAndPassword } from '../lib/firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { DeliveryRequest, UserProfile, UserRole, CommissionSettings, AppConfig, DistancePricingRule, Sector, AppAnnouncement } from '../types';
 import { 
@@ -19,13 +19,12 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { cn } from '../lib/utils';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { useAuth, ADMIN_EMAILS } from '../context/AuthContext';
-import { api } from '../lib/api';
 import { useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LiveMap from '../components/LiveMap';
 import { sendNotification } from '../lib/notificationService';
 
 export default function AdminDashboard() {
-  const { profile, updateRole, logout, isMasterAdmin, appConfig } = useAuth();
+  const { profile, updateRole, logout, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -34,6 +33,7 @@ export default function AdminDashboard() {
   const [deliveries, setDeliveries] = useState<DeliveryRequest[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [commission, setCommission] = useState<CommissionSettings | null>(null);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [configForm, setConfigForm] = useState<AppConfig | null>(null);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [announcements, setAnnouncements] = useState<AppAnnouncement[]>([]);
@@ -129,31 +129,27 @@ export default function AdminDashboard() {
       return;
     }
 
-    const fetchData = async () => {
-      try {
-        const [deliveriesData, usersData] = await Promise.all([
-          api.getDeliveries(),
-          api.getUsers()
-        ]);
-        
-        // Mapping as done in other views
-        const mappedDeliveries = deliveriesData.map((d: any) => ({
-          ...d,
-          from: d.fromAddress ? { address: d.fromAddress, lat: d.fromLat, lng: d.fromLng } : d.from,
-          to: d.toAddress ? { address: d.toAddress, lat: d.toLat, lng: d.toLng } : d.to,
-        }));
-        
-        setDeliveries(mappedDeliveries);
-        setUsers(usersData);
-      } catch (error) {
-        console.error("Error fetching data from API:", error);
-      } finally {
-        setLoading(false);
-      }
+    const handleError = (collectionName: string) => (error: any) => {
+      console.warn(`Permission error on ${collectionName}:`, error.message);
+      // We don't want to crash, so we just log it. 
+      // If it's a critical failure, we could show a UI state.
     };
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // 30s poll
+    const unsubDeliveries = onSnapshot(
+      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc')), 
+      (snap) => {
+        setDeliveries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'deliveries')
+    );
+
+    const unsubUsers = onSnapshot(
+      collection(db, 'users'), 
+      (snap) => {
+        setUsers(snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile)));
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'users')
+    );
 
     const unsubCommission = onSnapshot(
       doc(db, 'settings', 'commissions'), 
@@ -185,10 +181,23 @@ export default function AdminDashboard() {
         }
         setLoading(false);
       },
-      (error) => {
-        handleFirestoreError(error, OperationType.GET, 'settings/commissions');
-        setLoading(false);
-      }
+      (error) => handleFirestoreError(error, OperationType.GET, 'settings/commissions')
+    );
+
+    const unsubConfig = onSnapshot(
+      doc(db, 'settings', 'app_config'), 
+      (snap) => {
+        if (snap.exists()) {
+          setAppConfig(snap.data() as AppConfig);
+        } else {
+          const defaults: AppConfig = {
+            mode: 'test',
+            updatedAt: new Date().toISOString()
+          };
+          setDoc(doc(db, 'settings', 'app_config'), defaults);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, 'settings/app_config')
     );
 
     const unsubSectors = onSnapshot(
@@ -207,14 +216,11 @@ export default function AdminDashboard() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'announcements')
     );
 
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 5000);
-
     return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
+      unsubDeliveries();
+      unsubUsers();
       unsubCommission();
+      unsubConfig();
       unsubSectors();
       unsubAnnouncements();
     };
@@ -1022,10 +1028,10 @@ export default function AdminDashboard() {
                       <button 
                         onClick={async () => {
                           try {
-                            await api.updateUser(u.userId, { 
+                            await updateDoc(doc(db, 'users', u.userId), { 
                               accountStatus: 'active',
                               verificationStatus: 'verified',
-                              isVerified: 1,
+                              isVerified: true,
                               updatedAt: new Date().toISOString()
                             });
                             await sendNotification(
@@ -1058,7 +1064,7 @@ export default function AdminDashboard() {
                            onClick={async () => {
                              const action = u.accountStatus === 'suspended' ? 'active' : 'suspended';
                              try {
-                               await api.updateUser(u.userId, { 
+                               await updateDoc(doc(db, 'users', u.userId), { 
                                  accountStatus: action,
                                  updatedAt: new Date().toISOString()
                                });

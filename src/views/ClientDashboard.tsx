@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { db } from '../lib/firebase';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
@@ -51,29 +52,18 @@ export default function ClientDashboard() {
       setLoading(false);
       return;
     }
-
-    const fetchData = async () => {
-      try {
-        const data = await api.getDeliveries({ clientId: profile.userId });
-        // Mapping simple des adresses SQL vers le format attendu par le frontend
-        const mapped = data.map((d: any) => ({
-          ...d,
-          from: d.fromAddress ? { address: d.fromAddress, lat: d.fromLat, lng: d.fromLng } : d.from,
-          to: d.toAddress ? { address: d.toAddress, lat: d.toLat, lng: d.toLng } : d.to,
-        }));
-        setDeliveries(mapped);
-      } catch (error) {
-        console.error("API Error:", error);
-      } finally {
+    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        setDeliveries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
+        setLoading(false);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'deliveries');
         setLoading(false);
       }
-    };
-
-    fetchData();
-    // Rafraîchir toutes les 20 secondes pour simuler le temps réel en local
-    const interval = setInterval(fetchData, 20000);
-
-    return () => clearInterval(interval);
+    );
+    return () => unsubscribe();
   }, [profile]);
 
   const activeDeliveries = deliveries.filter(d => ['pending', 'accepted', 'picked_up', 'ready_for_pickup'].includes(d.status));
@@ -107,7 +97,7 @@ export default function ClientDashboard() {
             deliveryCode,
             updatedAt: new Date().toISOString()
           };
-          await api.updateDelivery(paymentDelivery.id, updates);
+          await updateDoc(doc(db, 'deliveries', paymentDelivery.id), updates);
           setPaymentDelivery(null);
         } catch (e) {
           console.error(e);

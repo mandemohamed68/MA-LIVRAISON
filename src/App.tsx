@@ -9,7 +9,6 @@ import NotificationToast from './components/NotificationToast';
 import BottomNav from './components/BottomNav';
 import { LoadingScreen } from './components/LoadingScreen';
 import AnnouncementBanner from './components/AnnouncementBanner';
-import { QuotaWarning } from './components/QuotaWarning';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -92,7 +91,6 @@ function AppRoutes() {
     )}>
       <AnnouncementBanner />
       <Navbar />
-      <QuotaWarning />
       <NotificationToast />
       <main className={cn(
         "flex-1 flex flex-col relative w-full",

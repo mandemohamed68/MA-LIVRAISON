@@ -10,7 +10,17 @@ import {
   useMap,
 } from "react-leaflet";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/api";
+import { db } from "../lib/firebase";
+import {
+  collection,
+  addDoc,
+  doc,
+  getDoc,
+  query,
+  where,
+  onSnapshot,
+} from '../lib/firebase';
+import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
 import {
   Navigation,
   ArrowLeft,
@@ -245,37 +255,70 @@ export default function CreateDelivery() {
   >("cash");
 
   useEffect(() => {
-    // Initial Config (SQL)
-    api.getInitialConfig().then((config) => {
-      // In our simple SQL setup, we merge commissions into central config or have a separate endpoint
-      // For now we'll mock the commissions if not found or try to get them
-      setCommissionSettings({ baseCommission: 0.1, minCommission: 200, updatedAt: new Date().toISOString() });
+    getDoc(doc(db, "settings", "commissions")).then((snap) => {
+      if (snap.exists())
+        setCommissionSettings(snap.data() as CommissionSettings);
     });
 
-    const fetchData = async () => {
-      try {
-        const drivers = await api.getUsers();
-        const driversList = drivers.filter((d: any) => d.role === 'driver' || d.role === 'admin' || d.role === 'superadmin');
-        const available = driversList.filter((d: any) => d.status === 'online' && d.accountStatus !== 'suspended').length;
-        const busy = driversList.filter((d: any) => d.status === 'busy' && d.accountStatus !== 'suspended').length;
-        setDriversAvailable(available);
-        setDriversBusy(busy);
-      } catch (e) {
-        console.error("Error fetching drivers:", e);
-      }
-    };
+    let unsubRecent: (() => void) | undefined;
 
-    fetchData();
-    const interval = setInterval(fetchData, 15000);
+    // Pre-fill senderPhone per user request
+    if (profile?.userId) {
+      if (!senderPhone && profile.phone) {
+        setSenderPhone(profile.phone);
+      }
+      const deliveriesRef = collection(db, "deliveries");
+      const qRecent = query(
+        deliveriesRef,
+        where("clientId", "==", profile.userId)
+      );
+
+      unsubRecent = onSnapshot(
+        qRecent,
+        (snap) => {
+          if (!snap.empty) {
+            const docs = snap.docs.map((d) => d.data());
+            // Sort by createdAt manually since we might not have the index
+            const sorted = docs.sort(
+              (a, b) =>
+                new Date(b.createdAt || 0).getTime() -
+                new Date(a.createdAt || 0).getTime()
+            );
+          }
+        },
+        (error) =>
+          handleFirestoreError(error, OperationType.LIST, "deliveries (recent)")
+      );
+    }
 
     detectLocation();
 
-    // Pre-fill senderPhone
-    if (profile?.phone && !senderPhone) {
-      setSenderPhone(profile.phone);
-    }
+    // Check for online drivers
+    const unsub = onSnapshot(
+      query(
+        collection(db, "users"),
+        where("role", "in", ["driver", "admin", "superadmin"])
+      ),
+      (snap) => {
+        const drivers = snap.docs.map((d) => d.data());
+        // A driver is available if they are online and NOT suspended
+        // We include those with pending_approval if they have at least gone online
+        const available = drivers.filter(
+          (d) => (d.status === "online") && d.accountStatus !== "suspended"
+        ).length;
+        const busy = drivers.filter(
+          (d) => d.status === "busy" && d.accountStatus !== "suspended"
+        ).length;
 
-    return () => clearInterval(interval);
+        setDriversAvailable(available);
+        setDriversBusy(busy);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, "users")
+    );
+    return () => {
+      unsub();
+      if (unsubRecent) unsubRecent();
+    };
   }, [profile?.userId]);
 
   const handleApplyPromo = () => {
@@ -372,30 +415,28 @@ export default function CreateDelivery() {
         // Since we are in the flow, we won't block the delivery but ideally we update Firestore
       }
 
-      const deliveryData = {
-        id: crypto.randomUUID(), // Utiliser un UUID pour SQL
+      const newDelivery = await addDoc(collection(db, "deliveries"), {
         clientId: profile.userId,
         clientName: profile.name,
-        fromAddress: from.address,
-        toAddress: to.address,
-        fromLat: from.lat,
-        fromLng: from.lng,
-        toLat: to.lat,
-        toLng: to.lng,
+        from: { ...from, precision: fromPrecision },
+        to: { ...to, precision: toPrecision },
         senderPhone: senderPhone || profile.phone || "",
         recipientPhone,
         vehicleType,
-        packageSize: size,
-        description: notes,
+        packageDetails: { size, weightStr: weight, notes },
+        baseCost: estimatedCost,
+        clientProposedPrice: Number(proposedPrice),
         cost: Number(proposedPrice),
-        isUrgent: isUrgent ? 1 : 0,
-        paymentStatus: 'pending',
+        isUrgent,
+        urgentFee: isUrgent ? 500 : 0,
+        paymentMethod: selectedPaymentMethod,
+        isPaid: false,
         status: "pending",
-        pickupTime: new Date().toISOString(),
-      };
-
-      await api.createDelivery(deliveryData);
-      navigate(`/delivery/${deliveryData.id}`);
+        deliveryCode: pinCode, // This is our safety PIN
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      navigate(`/delivery/${newDelivery.id}`);
     } catch (e) {
       console.error(e);
       alert("Erreur création");

@@ -1,30 +1,43 @@
 import React, { useEffect, useState } from 'react';
+import { collection, query, where, onSnapshot, orderBy, limit, updateDoc, doc } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, X, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Bell, X, CheckCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useNavigate } from 'react-router-dom';
 
 export default function NotificationToast() {
-  const { profile, notifications: allNotifications } = useAuth();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!Array.isArray(allNotifications)) {
-      setNotifications([]);
-      return;
-    }
-    const unread = allNotifications
-      .filter(n => !n.isRead)
-      .slice(0, 3);
-    setNotifications(unread);
-  }, [allNotifications]);
+    if (!user) return;
 
-  const markAsRead = async (id: string | number) => {
+    // Simplified query to avoid composite index requirements
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.uid),
+      limit(20)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as AppNotification))
+        .filter(n => !n.isRead)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 3);
+      setNotifications(docs);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications (toast)'));
+
+    return () => unsub();
+  }, [user]);
+
+  const markAsRead = async (id: string) => {
     try {
-      await api.markNotificationRead(Number(id));
+      await updateDoc(doc(db, 'notifications', id), { isRead: true });
     } catch (e) {
       console.error(e);
     }

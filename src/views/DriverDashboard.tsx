@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
 import { DeliveryRequest, CommissionSettings } from '../types';
 import { Compass, History as HistoryIcon, Wallet, User, Navigation, Package, DollarSign, Zap, CheckCircle, ShieldCheck, MapPin, X, ArrowRight, ArrowLeft, ChevronRight, Menu, List, Check, Info, Camera, Target, FileText, FileCheck, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -278,42 +277,32 @@ export default function DriverDashboard() {
 
     const watchId = requestGeolocation();
 
-    const fetchData = async () => {
-      try {
-        const [pendingData, myDeliveriesData] = await Promise.all([
-          api.getDeliveries({ status: 'pending' }),
-          api.getDeliveries({ driverId: profile.userId })
-        ]);
-
-        if (!isOnline) {
-          setPendingJobs([]);
-        } else {
-          setPendingJobs(pendingData);
-        }
-
-        const activeList = myDeliveriesData.filter((j: any) => ['accepted', 'picked_up'].includes(j.status));
-        const deliveredList = myDeliveriesData.filter((j: any) => j.status === 'delivered');
-
-        setActiveJobs(activeList);
-        setDeliveredJobs(deliveredList);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching deliveries:", error);
-        setLoading(false);
+    const unsubPending = onSnapshot(query(collection(db, 'deliveries'), where('status', '==', 'pending')), (snap) => {
+      let jobs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
+      if (!isOnline) {
+           setPendingJobs([]);
+      } else {
+           setPendingJobs(jobs);
       }
-    };
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (pending)'));
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // 30s poll
-
-    const timeout = setTimeout(() => {
+    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId)), (snap) => {
+      const allMyJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryRequest));
+      const actives = allMyJobs.filter(j => ['accepted', 'picked_up', 'delivered_pending', 'picked_up_pending'].includes(j.status) || (j.status === 'accepted' || j.status === 'picked_up')); // Wait, logic might be simpler
+      
+      // Filter for specific statuses correctly
+      const activeList = allMyJobs.filter(j => ['accepted', 'picked_up'].includes(j.status));
+      const deliveredList = allMyJobs.filter(j => j.status === 'delivered');
+      
+      setActiveJobs(activeList);
+      setDeliveredJobs(deliveredList);
       setLoading(false);
-    }, 5000);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (active)'));
 
     return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
       if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+      unsubPending();
+      unsubActive();
     };
   }, [profile]);
 
@@ -632,7 +621,7 @@ export default function DriverDashboard() {
                    </MapContainer>
 
                    {/* Map Controls */}
-                   <div className="absolute top-36 sm:top-28 right-4 z-[25] flex flex-col gap-3 pointer-events-auto">
+                   <div className="absolute top-28 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
                      <button onClick={() => setIsListView(!isListView)} className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg border border-slate-100 flex items-center justify-center text-slate-700 hover:text-indigo-600 transition-colors">
                         {isListView ? <Compass className="w-4 h-4 sm:w-5 sm:h-5" /> : <List className="w-4 h-4 sm:w-5 sm:h-5" />}
                      </button>
@@ -710,7 +699,7 @@ export default function DriverDashboard() {
                        </div>
 
                        {/* Right HUD: Earnings */}
-                       <div className="flex flex-col gap-3 items-end">
+                       <div className="flex flex-col gap-3">
                             <motion.div 
                               initial={{ x: 20, opacity: 0 }} 
                               animate={{ x: 0, opacity: 1 }}

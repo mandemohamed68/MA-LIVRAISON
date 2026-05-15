@@ -3,44 +3,53 @@ import { Bell, Info, Package, CheckCircle, Truck, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
+import { collection, query, where, orderBy, onSnapshot, deleteDoc, doc, updateDoc, writeBatch } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { AppNotification } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 export default function NotificationBell() {
-  const { profile, notifications } = useAuth();
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [hasUnread, setHasUnread] = useState(false);
 
   useEffect(() => {
-    if (!Array.isArray(notifications)) {
-      setHasUnread(false);
-      return;
-    }
-    setHasUnread(notifications.some(n => !n.isRead));
-  }, [notifications]);
+    if (!user) return;
+
+    // Simplified query to avoid composite index requirements
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notifs = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as AppNotification))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setNotifications(notifs);
+      setHasUnread(notifs.some(n => !n.isRead));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications'));
+
+    return () => unsubscribe();
+  }, [user]);
 
   const markAllAsRead = async () => {
-    if (!profile || !Array.isArray(notifications)) return;
-    try {
-      const unread = notifications.filter(n => !n.isRead);
-      await Promise.all(unread.map(n => api.markNotificationRead(Number(n.id))));
-    } catch (e) {
-      console.error("Error marking all read:", e);
-    }
+    if (!user) return;
+    const batch = writeBatch(db);
+    notifications.filter(n => !n.isRead).forEach(n => {
+      batch.update(doc(db, 'notifications', n.id), { isRead: true });
+    });
+    await batch.commit();
   };
 
   const deleteNotification = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    // In our simplified SQL version, we might not have a delete endpoint yet or we just hide it
-    console.log("Delete notification requested for id:", id);
+    await deleteDoc(doc(db, 'notifications', id));
   };
 
-  const markAsRead = async (id: string | number) => {
-    try {
-      await api.markNotificationRead(Number(id));
-    } catch (e) {
-      console.error("Error marking read:", e);
-    }
+  const markAsRead = async (id: string) => {
+    await updateDoc(doc(db, 'notifications', id), { isRead: true });
   };
 
   const getIcon = (type: string) => {
@@ -78,7 +87,7 @@ export default function NotificationBell() {
                 <span className="text-[9px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-lg">LIVE</span>
               </div>
               <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
-                {Array.isArray(notifications) && notifications.length > 0 ? (
+                {notifications.length > 0 ? (
                   notifications.map(n => {
                     const Icon = getIcon(n.type);
                     return (

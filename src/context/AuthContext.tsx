@@ -10,11 +10,10 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, query, collection, where, orderBy, limit } from 'firebase/firestore';
+} from '../lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from '../lib/firebase';
 import { auth, db } from '../lib/firebase';
-import { api } from '../lib/api';
-import { UserProfile, UserRole, AppConfig, AppNotification } from '../types';
+import { UserProfile, UserRole, AppConfig } from '../types';
 import { AppLanguage, translations } from '../lib/translations';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
@@ -27,7 +26,6 @@ interface AuthContextType {
   language: AppLanguage;
   setLanguage: (lang: AppLanguage) => void;
   appConfig: AppConfig | null;
-  notifications: AppNotification[];
   t: (key: keyof typeof translations.fr, params?: Record<string, any>) => string;
   login: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
@@ -46,7 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [language, setLanguage] = useState<AppLanguage>('fr');
@@ -69,98 +66,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let authHandled = false;
 
     const checkReady = () => {
-      // If we are already ready, don't do anything
-      setIsAuthReady(prev => {
-        if (prev) return true;
-        if (configReady && authHandled) return true;
-        return false;
-      });
-    };
-
-    // Global Config Listener (SQL)
-    const fetchConfig = async () => {
-      try {
-        const config = await api.getInitialConfig();
-        setAppConfig(config);
-      } catch (error: any) {
-        console.warn("Config fetch failed:", error.message);
-        setAppConfig({ mode: 'test', updatedAt: new Date().toISOString() });
-      } finally {
-        configReady = true;
-        checkReady();
+      if (configReady && authHandled) {
+        setIsAuthReady(true);
       }
     };
-    fetchConfig();
+
+    // Global Config Listener
+    const unsubConfig = onSnapshot(doc(db, 'settings', 'app_config'), (snap) => {
+      if (snap.exists()) {
+        setAppConfig(snap.data() as AppConfig);
+      }
+      configReady = true;
+      checkReady();
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/app_config');
+      configReady = true; // Still allow boot, but might use defaults
+      checkReady();
+    });
 
     // Auth State Listener
-    let notifsInterval: any = null;
-
-    // Safety timeout to prevent getting stuck on splash screen
-    const safetyTimeout = setTimeout(() => {
-      console.warn("Safety timeout triggered: forcing auth ready state");
-      configReady = true;
-      authHandled = true;
-      setIsAuthReady(true);
-    }, 4500); 
-
+    let unsubProfile: (() => void) | null = null;
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       setUser(authUser);
-      
-      if (notifsInterval) clearInterval(notifsInterval);
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
 
       if (authUser) {
-        try {
-          // PROFILE SETUP (SQL LOCAL)
-          let localProfile: UserProfile | null = null;
-          try {
-            localProfile = await api.getUser(authUser.uid);
-          } catch (e) {
-            console.log("SQL Profile not found, checking fallback or creating...");
-          }
-          
-          if (!localProfile) {
-            const isAdm = authUser.email ? ADMIN_EMAILS.includes(authUser.email) : false;
-            const role: UserRole = isAdm ? 'superadmin' : 'client';
-            localProfile = {
-              userId: authUser.uid,
-              name: isAdm ? 'Administrateur' : (authUser.displayName || 'Utilisateur'),
-              email: authUser.email || '',
-              role: role,
-              accountStatus: 'active',
-              createdAt: new Date().toISOString(),
-            };
-            await api.syncUser(localProfile).catch(e => console.error("Error creating profile in SQL:", e));
-          }
-          
-          setProfile(localProfile);
-
-          // Notifications Polling (SQL)
-          const fetchNotifs = async () => {
-            try {
-              const data = await api.getNotifications(authUser.uid);
-              setNotifications(Array.isArray(data) ? data : []);
-            } catch (err: any) {
-              console.warn("Notifications fetch error:", err.message);
-              setNotifications([]);
-            }
+        // First check if user exists, if not create it
+        const userRef = doc(db, 'users', authUser.uid);
+        const userDoc = await getDoc(userRef);
+        
+        if (!userDoc.exists()) {
+          const isAdm = authUser.email ? ADMIN_EMAILS.includes(authUser.email) : false;
+          const role: UserRole = isAdm ? 'superadmin' : 'client';
+          const newProfile: UserProfile = {
+            userId: authUser.uid,
+            name: isAdm ? 'Administrateur' : (authUser.displayName || 'Utilisateur'),
+            email: authUser.email || '',
+            role: role,
+            accountStatus: 'active',
+            createdAt: new Date().toISOString(),
           };
-          fetchNotifs();
-          notifsInterval = setInterval(fetchNotifs, 15000); // 15s poll
-        } catch (authError) {
-          console.error("Error in auth session setup:", authError);
+          await setDoc(userRef, newProfile);
+          setProfile(newProfile);
         }
+
+        // Setup real-time listener for profile
+        unsubProfile = onSnapshot(userRef, (snap) => {
+          if (snap.exists()) {
+            setProfile(snap.data() as UserProfile);
+          }
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${authUser.uid}`);
+        });
       } else {
         setProfile(null);
-        setNotifications([]);
       }
       authHandled = true;
       checkReady();
     });
 
     return () => {
-      clearTimeout(safetyTimeout);
+      unsubConfig();
       unsubAuth();
-      if (notifsInterval) clearInterval(notifsInterval);
+      if (unsubProfile) unsubProfile();
     };
   }, []);
 
@@ -200,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         accountStatus: role === 'driver' ? 'pending_approval' : 'active',
         ...extra
       };
-      await api.syncUser(newProfile);
+      await setDoc(doc(db, 'users', cred.user.uid), newProfile);
       setProfile(newProfile);
       setLoading(false);
     } catch (err) {
@@ -219,23 +190,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => signOut(auth);
 
   const updateRole = async (role: UserRole) => {
-    if (!user || !profile) return;
-    const updated = { ...profile, role };
-    await api.syncUser(updated);
-    setProfile(updated);
+    if (!user) return;
+    await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
+    setProfile(prev => prev ? { ...prev, role } : null);
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
-    if (!user || !profile) return;
-    const updated = { ...profile, ...data };
-    await api.syncUser(updated);
-    setProfile(updated);
+    if (!user) return;
+    await setDoc(doc(db, 'users', user.uid), data, { merge: true });
+    setProfile(prev => prev ? { ...prev, ...data } : null);
   };
 
   return (
     <AuthContext.Provider value={{ 
       user, profile, loading, isAuthReady, isMasterAdmin, language, setLanguage, t, 
-      appConfig, notifications,
+      appConfig,
       login, loginWithEmail, registerWithEmail, loginWithPhone,
       logout, updateRole, updateProfile 
     }}>

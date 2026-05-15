@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../lib/api';
+import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc } from '../lib/firebase';
+import { db } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest } from '../types';
 import { Package, Calendar, MapPin, CheckCircle, ChevronRight, Search, X, FileText, Trash2 } from 'lucide-react';
@@ -19,32 +21,22 @@ export default function DeliveryHistory() {
   useEffect(() => {
     if (!profile) return;
 
-    const fetchHistory = async () => {
-      try {
-        const filters: any = {};
-        if (profile.role === 'client') filters.clientId = profile.userId;
-        else filters.driverId = profile.userId;
-        filters.status = 'delivered'; // ou cancelled
+    const q = query(
+      collection(db, 'deliveries'),
+      where(profile.role === 'client' ? 'clientId' : 'driverId', '==', profile.userId),
+      where('status', 'in', ['delivered', 'cancelled']),
+      orderBy('createdAt', 'desc')
+    );
 
-        const data = await api.getDeliveries(filters);
-        // Adaptation simple si les structures diffèrent légèrement
-        const mapped = data.map((d: any) => ({
-          ...d,
-          from: d.fromAddress ? { address: d.fromAddress } : d.from,
-          to: d.toAddress ? { address: d.toAddress } : d.to,
-        }));
-        setDeliveries(mapped);
-      } catch (error) {
-        console.error("Error fetching history:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setDeliveries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'deliveries (history)');
+      setLoading(false);
+    });
 
-    fetchHistory();
-    // En local, on peut rafraîchir toutes les 30s ou utiliser un bouton
-    const interval = setInterval(fetchHistory, 30000);
-    return () => clearInterval(interval);
+    return () => unsubscribe();
   }, [profile]);
 
   if (loading) return (
@@ -168,7 +160,7 @@ export default function DeliveryHistory() {
                               onClick={async (e) => {
                                 e.preventDefault();
                                 try {
-                                  await api.deleteDelivery(delivery.id);
+                                  await deleteDoc(doc(db, 'deliveries', delivery.id));
                                   setDeletingId(null);
                                 } catch (error: any) {
                                   console.error("Delete Error", error);

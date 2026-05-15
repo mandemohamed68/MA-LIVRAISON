@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
+import { db } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { doc, onSnapshot, updateDoc, collection, deleteDoc } from '../lib/firebase';
 import { DeliveryRequest, UserProfile } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
@@ -68,56 +70,57 @@ export default function DeliveryTracking() {
 
   useEffect(() => {
     if (!deliveryId) return;
-
-    const fetchData = async () => {
-      try {
-        const data = await api.getDelivery(deliveryId);
-        // Map addresses
-        const mapped = {
-          ...data,
-          from: data.fromAddress ? { address: data.fromAddress, lat: data.fromLat, lng: data.fromLng } : data.from,
-          to: data.toAddress ? { address: data.toAddress, lat: data.toLat, lng: data.toLng } : data.to,
-        };
-        setDelivery(mapped);
-        
-        if (mapped.driverId) {
-          const driverInfo = await api.getUser(mapped.driverId);
-          setDriver(driverInfo);
+    const unsub = onSnapshot(doc(db, 'deliveries', deliveryId), (snap) => {
+      if (snap.exists()) {
+        const data = { id: snap.id, ...snap.data() } as DeliveryRequest;
+        setDelivery(data);
+        if (data.driverId) {
+          getDriverInfo(data.driverId);
         }
-
-        const bidsData = await api.getBids(deliveryId);
-        setBids(bidsData);
-      } catch (error) {
-        console.error("Error fetching delivery:", error);
-      } finally {
-        setLoading(false);
+      } else {
+        setDelivery(null);
       }
-    };
+      setLoading(false);
+    }, (err) => { 
+      handleFirestoreError(err, OperationType.GET, `deliveries/${deliveryId}`);
+      setLoading(false); 
+    });
 
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // Poll every 10s
+    const unsubBids = onSnapshot(collection(db, 'deliveries', deliveryId, 'bids'), (snap) => {
+      setBids(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `deliveries/${deliveryId}/bids`));
 
-    return () => clearInterval(interval);
+    return () => { unsub(); unsubBids(); };
   }, [deliveryId]);
+
+  const getDriverInfo = (driverId: string) => {
+     onSnapshot(doc(db, 'users', driverId), (snap) => {
+         if (snap.exists()) setDriver(snap.data() as UserProfile);
+     }, (err) => handleFirestoreError(err, OperationType.GET, `users/${driverId}`));
+  };
 
   const handlePayBid = async (method: string, transactionId?: string, isVerified?: boolean) => {
     if (!delivery || !paymentBid) return;
     try {
       const isCash = method === 'cash';
-      const isVerifiedPayment = isVerified || isCash;
+      const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
+      
+      const isUssd = method.includes('ussd');
+      // For demo, we auto confirm if it's not USSD or standard mobile money that needs approval
+      const shouldAutoConfirm = isVerified || isCash || (isDemo && !isUssd && method !== 'aggregator');
       
       const pickupCode = Math.random().toString(36).substring(2, 6).toUpperCase();
       const deliveryCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-      await api.updateDelivery(delivery.id, {
+      await updateDoc(doc(db, 'deliveries', delivery.id), {
         status: 'accepted',
         driverId: paymentBid.driverId,
         driverName: paymentBid.driverName,
         cost: paymentBid.price,
         paymentMethod: method,
         paymentReference: transactionId || '',
-        paymentStatus: isVerifiedPayment ? 'confirmed' : 'pending_approval',
-        isPaid: isVerifiedPayment ? 1 : 0,
+        paymentStatus: shouldAutoConfirm ? 'confirmed' : 'pending_approval',
+        isPaid: shouldAutoConfirm,
         pickupCode,
         deliveryCode,
         updatedAt: new Date().toISOString()
@@ -167,7 +170,7 @@ export default function DeliveryTracking() {
     if(!deliveryId) return;
     setIsDeleting(true);
     try {
-      await api.deleteDelivery(deliveryId);
+      await deleteDoc(doc(db, 'deliveries', deliveryId));
       navigate('/client', { replace: true });
     } catch (error: any) {
       console.error("Delete Error", error);
@@ -182,8 +185,9 @@ export default function DeliveryTracking() {
     setIsBoosting(true);
     try {
       const newCost = (delivery.cost || 0) + 200;
-      await api.updateDelivery(delivery.id, { 
+      await updateDoc(doc(db, 'deliveries', delivery.id), { 
         cost: newCost, 
+        clientProposedPrice: newCost,
         boostAmount: (delivery.boostAmount || 0) + 200,
         updatedAt: new Date().toISOString() 
       });

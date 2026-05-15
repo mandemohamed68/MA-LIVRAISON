@@ -4,7 +4,7 @@
   "description": "Plateforme Logistique de Livraison",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F97316",
+  "background_color": "#ffffff",
   "theme_color": "#F97316",
   "icons": [
     {

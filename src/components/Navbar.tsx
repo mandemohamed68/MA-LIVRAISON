@@ -7,25 +7,39 @@ import NotificationBell from './NotificationBell';
 import { cn } from '../lib/utils';
 import { AppLanguage } from '../lib/translations';
 import { db } from '../lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from '../lib/firebase';
 import { AppConfig } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import logoUrl from '../assets/logo.png';
 
 export default function Navbar() {
-  const { user, profile, logout, language, setLanguage, t, isMasterAdmin, appConfig } = useAuth();
+  const { user, profile, logout, language, setLanguage, t, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'app_config'), 
+      (snap) => {
+        if (snap.exists()) setAppConfig(snap.data() as AppConfig);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'settings/app_config');
+      }
+    );
+    return () => unsub();
+  }, []);
 
   const isAdminView = location.pathname.startsWith('/admin') && (isMasterAdmin || profile?.role === 'admin' || profile?.role === 'superadmin');
   const isCreateView = location.pathname === '/client/new';
 
   if (!user) return null;
 
-  const languages: { code: AppLanguage, label: string }[] = [
-    { code: 'fr', label: 'FR' },
-    { code: 'en', label: 'EN' },
+  const languages: { code: AppLanguage, label: string, flag: string }[] = [
+    { code: 'fr', label: 'Français', flag: '🇫🇷' },
+    { code: 'moore', label: 'Mooré', flag: '🇧🇫' },
+    { code: 'dioula', label: 'Dioula', flag: '🇧🇫' },
   ];
 
   const NavLink = ({ to, icon: Icon, children, exact = false, onClick }: { to: string, icon: any, children: React.ReactNode, exact?: boolean, onClick?: () => void }) => {
@@ -101,8 +115,8 @@ export default function Navbar() {
           isAdminView && "h-16 px-10 max-w-[1900px]"
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center group-hover:scale-110 transition-all duration-500 shrink-0">
-              <img src={logoUrl} alt="Livra Express" className="w-full h-full object-contain filter drop-shadow-md" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1.5 shrink-0">
+              <img src={logoUrl} alt="Livra Express" className="w-full h-full object-contain" />
             </div>
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">
@@ -119,17 +133,17 @@ export default function Navbar() {
             </div>
             
             <div className="flex items-center gap-2 sm:gap-4 lg:pl-6 lg:border-l lg:border-white/20">
-              <div className="hidden md:flex bg-slate-950 p-1 rounded-xl border border-white/10 shadow-inner">
+              <div className="hidden md:flex bg-white/10 p-1 rounded-xl border border-white/20">
                 {languages.map(lang => (
                   <button
                     key={lang.code}
                     onClick={() => setLanguage(lang.code)}
                     className={cn(
-                      "px-3 py-1 rounded-lg text-[9px] font-black transition-all uppercase tracking-widest",
-                      language === lang.code ? "bg-white text-slate-950 shadow-lg" : "text-white/40 hover:text-white"
+                      "px-2 py-1 rounded-lg text-[9px] font-black transition-all uppercase tracking-widest",
+                      language === lang.code ? "bg-white text-primary shadow-lg" : "text-white/70 hover:text-white"
                     )}
                   >
-                    {lang.label}
+                    {lang.code.toUpperCase()}
                   </button>
                 ))}
               </div>
@@ -183,7 +197,7 @@ export default function Navbar() {
             className="xl:hidden bg-primary-dark overflow-hidden"
           >
             <div className="p-6 flex flex-col gap-6">
-              <div className="flex bg-slate-950 p-1.5 rounded-xl border border-white/10">
+              <div className="flex bg-white/10 p-1.5 rounded-xl border border-white/5">
                 {languages.map(lang => (
                   <button
                     key={lang.code}
@@ -193,7 +207,7 @@ export default function Navbar() {
                     }}
                     className={cn(
                       "flex-1 py-3 rounded-lg text-xs font-black transition-all uppercase tracking-[0.2em]",
-                      language === lang.code ? "bg-white text-slate-950 shadow-xl" : "text-white/60"
+                      language === lang.code ? "bg-white text-primary shadow-xl" : "text-white/60"
                     )}
                   >
                     {lang.label}
