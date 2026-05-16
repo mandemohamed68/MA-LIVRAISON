@@ -101,13 +101,13 @@ npm run build
 
 ## 6. Lancement en tâche de fond avec PM2
 
-On utilise le fichier `ecosystem.config.js.example` pour un démarrage ultra clean (spécifiant automatiquement le Port 3005 et le mode Production).
+On utilise le fichier `ecosystem.config.cjs.example` pour un démarrage ultra clean (spécifiant automatiquement le Port 3005 et le mode Production).
 
 ```bash
 sudo npm install -g pm2
-cp ecosystem.config.js.example ecosystem.config.js
+cp ecosystem.config.cjs.example ecosystem.config.cjs
 
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup
 ```
