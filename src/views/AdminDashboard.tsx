@@ -288,6 +288,88 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSeedData = async () => {
+    try {
+      setIsSaving(true);
+      alert("Génération de données de test en cours (cela peut prendre quelques secondes)...");
+      const clientProfile = {
+        userId: 'client_test_' + Date.now(),
+        name: 'Client Test',
+        email: 'client_test@example.com',
+        role: 'client' as UserRole,
+        accountStatus: 'active',
+        createdAt: new Date().toISOString()
+      };
+      
+      const driverProfile = {
+        userId: 'driver_test_' + Date.now(),
+        name: 'Livreur Test',
+        email: 'driver_test@example.com',
+        role: 'driver' as UserRole,
+        accountStatus: 'active',
+        status: 'online',
+        vehicleType: 'Moto',
+        createdAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, 'users', clientProfile.userId), clientProfile);
+      await setDoc(doc(db, 'users', driverProfile.userId), driverProfile);
+
+      const d1 = {
+        clientId: clientProfile.userId,
+        clientName: clientProfile.name,
+        senderPhone: "12345678",
+        from: { address: 'Marché Rood Woko', lat: 12.368, lng: -1.530 },
+        to: { address: 'ZAD', lat: 12.345, lng: -1.500 },
+        receiverName: 'Destinataire A',
+        receiverPhone: '87654321',
+        packageType: 'Colis standard',
+        weight: 'Moins de 5kg',
+        cost: 1500,
+        status: 'pending' as any,
+        isUrgent: false,
+        paymentStatus: 'pending' as any,
+        pickupCode: '1A2B3C',
+        deliveryCode: 'X9Y8Z7',
+        paymentMethod: 'mobile_money' as any,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const d2 = {
+        clientId: clientProfile.userId,
+        clientName: clientProfile.name,
+        senderPhone: "12345678",
+        from: { address: 'Ouaga 2000', lat: 12.310, lng: -1.520 },
+        to: { address: 'Gounghin', lat: 12.370, lng: -1.550 },
+        receiverName: 'Destinataire B',
+        receiverPhone: '87654321',
+        packageType: 'Document',
+        cost: 2500,
+        status: 'accepted' as any,
+        driverId: driverProfile.userId,
+        driverName: driverProfile.name,
+        isUrgent: true,
+        paymentStatus: 'paid' as any,
+        pickupCode: '9A8B7C',
+        deliveryCode: 'Z1Y2X3',
+        paymentMethod: 'cash' as any,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, 'deliveries', 'del_test_' + Date.now() + '_1'), d1);
+      await setDoc(doc(db, 'deliveries', 'del_test_' + Date.now() + '_2'), d2);
+
+      alert("Données de test générées avec succès !");
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la génération des données.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetCode, setResetCode] = useState('');
 
@@ -2262,13 +2344,22 @@ export default function AdminDashboard() {
              </button>
              <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{activeMenu}</h3>
              {isMasterAdmin && (
-               <button 
-                onClick={() => setShowResetConfirm(true)} 
-                disabled={isSaving}
-                className="px-4 py-2 bg-red-100 hover:bg-red-500 hover:text-white text-red-600 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2"
-               >
-                 <ShieldCheck className="w-3 h-3" /> <span className="hidden sm:inline">Hard Reset</span>
-               </button>
+               <div className="flex gap-2">
+                 <button 
+                  onClick={handleSeedData} 
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-emerald-100 hover:bg-emerald-500 hover:text-white text-emerald-600 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2"
+                 >
+                   <Package className="w-3 h-3" /> <span className="hidden sm:inline">Générer Données</span>
+                 </button>
+                 <button 
+                  onClick={() => setShowResetConfirm(true)} 
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-red-100 hover:bg-red-500 hover:text-white text-red-600 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2"
+                 >
+                   <ShieldCheck className="w-3 h-3" /> <span className="hidden sm:inline">Hard Reset</span>
+                 </button>
+               </div>
              )}
           </div>
 

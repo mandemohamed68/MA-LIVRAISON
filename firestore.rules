@@ -43,8 +43,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && (isAdmin() || resource.data.role in ['driver', 'admin', 'superadmin']);
       allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming());
       allow update: if (isSignedIn() && request.auth.uid == userId && 
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'status', 'accountStatus', 'currentLocation', 'updatedAt', 'phone', 'vehicleType', 'licensePlate', 'isVerified', 'withdrawalRequested', 'withdrawalAmount', 'rating', 'totalDeliveries', 'email', 'driverType', 'address', 'termsAcceptedAt', 'verificationStatus', 'guarantorName', 'guarantorPhone', 'identityCardUrl', 'criminalRecordUrl']) &&
-                       (existing().email != 'mandemohamed68@gmail.com' || incoming().role == 'superadmin')) || isAdmin();
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'status', 'accountStatus', 'currentLocation', 'updatedAt', 'phone', 'vehicleType', 'licensePlate', 'isVerified', 'withdrawalRequested', 'withdrawalAmount', 'rating', 'totalDeliveries', 'email', 'driverType', 'address', 'termsAcceptedAt', 'verificationStatus', 'guarantorName', 'guarantorPhone', 'identityCardUrl', 'criminalRecordUrl'])) || isAdmin();
       allow delete: if isAdmin() && existing().email != 'mandemohamed68@gmail.com';
     }
 

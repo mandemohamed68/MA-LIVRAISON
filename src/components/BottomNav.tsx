@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Home, Package, User, Wallet } from 'lucide-react';
+import { Home, Package, User, Wallet, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function BottomNav() {
@@ -26,6 +26,10 @@ export default function BottomNav() {
     { to: '/client/history', icon: Package, label: 'COURSES', match: '/client/history' },
     { to: '/settings', icon: User, label: 'PROFIL', match: '/settings' },
   ];
+
+  if (isMasterAdmin && !isAdmin) {
+    navItems.push({ to: '/admin', icon: ShieldCheck, label: 'ADMIN', match: '/admin', exact: true });
+  }
 
   return (
     <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 px-2 flex xl:hidden justify-around items-center z-[100] pb-[env(safe-area-inset-bottom)]">
