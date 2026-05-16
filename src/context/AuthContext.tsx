@@ -216,6 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signOut(auth);
     } catch (e) {
       console.error("SignOut failed, forcing redirect", e);
+    } finally {
       window.location.href = '/';
     }
   };
@@ -227,13 +228,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.warn("Could not update role in Firestore, updating locally only", e);
     }
-    setProfile(prev => prev ? { ...prev, role } : null);
+    setProfile(prev => prev ? { ...prev, role } : { userId: user.uid, role, name: user.displayName || 'Utilisateur', email: user.email || '' } as UserProfile);
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
     await setDoc(doc(db, 'users', user.uid), data, { merge: true });
-    setProfile(prev => prev ? { ...prev, ...data } : null);
+    setProfile(prev => prev ? { ...prev, ...data } : { userId: user.uid, name: user.displayName || 'Utilisateur', email: user.email || '', role: 'client', ...data } as UserProfile);
   };
 
   return (

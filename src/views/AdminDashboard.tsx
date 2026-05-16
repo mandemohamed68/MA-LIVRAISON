@@ -136,7 +136,7 @@ export default function AdminDashboard() {
     };
 
     const unsubDeliveries = onSnapshot(
-      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc'), limit(500)), 
+      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc')), 
       (snap) => {
         setDeliveries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
       },
@@ -144,7 +144,7 @@ export default function AdminDashboard() {
     );
 
     const unsubUsers = onSnapshot(
-      query(collection(db, 'users'), limit(1000)), 
+      query(collection(db, 'users')), 
       (snap) => {
         setUsers(snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile)));
       },

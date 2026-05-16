@@ -357,36 +357,37 @@ export default function CreateDelivery() {
   // Pricing logic update
   useEffect(() => {
     if (from && to && commissionSettings) {
-      const dist = calculateDistance(from.lat, from.lng, to.lat, to.lng);
-      setDistance(dist);
+      const haversineDist = calculateDistance(from.lat, from.lng, to.lat, to.lng);
+      setDistance(haversineDist);
 
-      let basePrice = 0;
+      const calculatePrice = (distToUse: number) => {
+        let basePrice = 0;
 
-      if (vehicleType === "moto") {
-        if (dist <= 10) basePrice = 1000;
-        else if (dist <= 15) basePrice = 1500;
-        else basePrice = 1500 + Math.ceil(dist - 15) * 150;
-      } else if (vehicleType === "tricycle") {
-        // Base 3000 for tricycle, plus 250 per km after 5km
-        basePrice = 3000 + (dist > 5 ? Math.ceil(dist - 5) * 250 : 0);
-      } else if (vehicleType === "camionnette") {
-        // Base 7500 for camionnette, plus 500 per km after 5km
-        basePrice = 7500 + (dist > 5 ? Math.ceil(dist - 5) * 500 : 0);
-      }
+        if (vehicleType === "moto") {
+          if (distToUse <= 10) basePrice = 1000;
+          else if (distToUse <= 15) basePrice = 1500;
+          else basePrice = 1500 + Math.ceil(distToUse - 15) * 150;
+        } else if (vehicleType === "tricycle") {
+          basePrice = 3000 + (distToUse > 5 ? Math.ceil(distToUse - 5) * 250 : 0);
+        } else if (vehicleType === "camionnette") {
+          basePrice = 7500 + (distToUse > 5 ? Math.ceil(distToUse - 5) * 500 : 0);
+        }
 
-      // Weight adds a small buffer for Moto only?
-      if (vehicleType === "moto") {
-        basePrice += Number(weight || 0) * 100;
-      }
+        if (vehicleType === "moto") {
+          basePrice += Number(weight || 0) * 100;
+        }
 
-      if (isUrgent) {
-        basePrice += 500; // Urgent fee
-      }
+        if (isUrgent) {
+          basePrice += 500;
+        }
 
-      const finalBase = Math.max(0, basePrice - discount);
+        const finalBase = Math.max(0, basePrice - discount);
+        setEstimatedCost(Math.round(finalBase));
+        setProposedPrice(Math.round(finalBase));
+      };
 
-      setEstimatedCost(Math.round(finalBase));
-      setProposedPrice(Math.round(finalBase));
+      // Initial price with Haversine distance
+      calculatePrice(haversineDist);
 
       fetch(
         `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
@@ -400,6 +401,10 @@ export default function CreateDelivery() {
             setRouteCoords(
               data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]])
             );
+            // Use real driving distance from OSRM (in meters)
+            const realDistKm = data.routes[0].distance / 1000;
+            setDistance(realDistKm);
+            calculatePrice(realDistKm);
           }
         })
         .catch((e) => {
@@ -408,7 +413,7 @@ export default function CreateDelivery() {
           setRouteCoords([[from.lat, from.lng], [to.lat, to.lng]]);
         });
     }
-  }, [from, to, commissionSettings, weight, discount, isUrgent, vehicleType]);
+  }, [from, to, commissionSettings, weight, size, discount, isUrgent, vehicleType]);
 
   const handleCreate = async () => {
     if (!profile || !from || !to) return;
