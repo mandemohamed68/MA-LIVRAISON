@@ -25,12 +25,13 @@ export default function DeliveryHistory() {
       collection(db, 'deliveries'),
       where(profile.role === 'client' ? 'clientId' : 'driverId', '==', profile.userId),
       where('status', 'in', ['delivered', 'cancelled']),
-      orderBy('createdAt', 'desc'),
       limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setDeliveries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
+      const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
+      jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setDeliveries(jobs);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'deliveries (history)');

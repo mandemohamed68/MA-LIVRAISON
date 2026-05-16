@@ -52,10 +52,12 @@ export default function ClientDashboard() {
       setLoading(false);
       return;
     }
-    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId), orderBy('createdAt', 'desc'), limit(100));
+    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId), limit(100));
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
-        setDeliveries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
+        const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
+        jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setDeliveries(jobs);
         setLoading(false);
       },
       (error) => {

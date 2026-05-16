@@ -286,11 +286,10 @@ export default function DriverDashboard() {
       }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (pending)'));
 
-    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId), orderBy('createdAt', 'desc'), limit(200)), (snap) => {
+    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId), limit(200)), (snap) => {
       const allMyJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryRequest));
-      const actives = allMyJobs.filter(j => ['accepted', 'picked_up', 'delivered_pending', 'picked_up_pending'].includes(j.status) || (j.status === 'accepted' || j.status === 'picked_up')); // Wait, logic might be simpler
+      allMyJobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       
-      // Filter for specific statuses correctly
       const activeList = allMyJobs.filter(j => ['accepted', 'picked_up'].includes(j.status));
       const deliveredList = allMyJobs.filter(j => j.status === 'delivered');
       

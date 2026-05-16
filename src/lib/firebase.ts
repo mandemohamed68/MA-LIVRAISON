@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import defaultFirebaseConfig from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -15,13 +15,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Optimisation Professionnelle :
-// 1. Le cache local en mémoire est activé par défaut par Firebase, ce qui maintient les quotas bas
-//    pendant une session active.
-// 2. Des limites (limit) ont été ajoutées sur les requêtes pour réduire le nombre de lectures.
-// Note: Le cache persistant (IndexedDB) peut causer des erreurs "client is offline" dans 
-// certains environnements restreints (comme les iframes), nous l'avons donc désactivé pour la stabilité.
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Optimisation de robustesse : activation du cache persistant local 
+// pour synchronisation des données locales, fluidité et support hors-ligne
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+}, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);
 
