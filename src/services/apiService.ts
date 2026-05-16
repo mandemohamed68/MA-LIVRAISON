@@ -47,5 +47,13 @@ export const api = {
   },
   config: {
     get: (key: string) => request(`/config/${key}`),
+    update: (key: string, data: any) => request(`/config/${key}`, 'POST', data),
+  },
+  admin: {
+    users: {
+      list: () => request('/admin/users'),
+      update: (userId: string, data: any) => request(`/admin/users/${userId}`, 'PATCH', data),
+      updateRole: (userId: string, role: string) => request(`/admin/users/${userId}/role`, 'PATCH', { role }),
+    }
   }
 };

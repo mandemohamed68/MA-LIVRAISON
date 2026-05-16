@@ -8,6 +8,7 @@ import { DeliveryRequest, CommissionSettings } from '../types';
 import { Compass, History as HistoryIcon, Wallet, User, Navigation, Package, DollarSign, Zap, CheckCircle, ShieldCheck, MapPin, X, ArrowRight, ArrowLeft, ChevronRight, Menu, List, Check, Info, Camera, Target, FileText, FileCheck, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { api } from '../services/apiService';
 import L from 'leaflet';
 import { cn, calculateDistance } from '../lib/utils';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -158,14 +159,18 @@ export default function DriverDashboard() {
     if (!profile) return;
     setIsProcessingAction(true);
     try {
-      await updateDoc(doc(db, 'users', profile.userId), {
+      const updates = {
         verificationStatus: 'pending',
         guarantorName: verificationForm.guarantorName,
         guarantorPhone: verificationForm.guarantorPhone,
         identityCardUrl: verificationForm.cniFront,
         criminalRecordUrl: verificationForm.criminalRecord,
         updatedAt: new Date().toISOString()
-      });
+      };
+      await api.profile.update(updates);
+      // Fallback
+      updateDoc(doc(db, 'users', profile.userId), updates).catch(() => {});
+      
       setIsVerificationModalOpen(false);
       setToastMessage("Dossier soumis avec succès !");
     } catch (e) {
@@ -277,6 +282,33 @@ export default function DriverDashboard() {
 
     const watchId = requestGeolocation();
 
+    const fetchData = async () => {
+      try {
+        const [jobs] = await Promise.all([
+          api.deliveries.list().catch(() => [])
+        ]);
+        
+        const allMyJobs = jobs.filter((j: any) => j.driverId === profile.userId);
+        allMyJobs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        setActiveJobs(allMyJobs.filter((j: any) => ['accepted', 'picked_up'].includes(j.status)));
+        setDeliveredJobs(allMyJobs.filter((j: any) => j.status === 'delivered'));
+        
+        if (isOnline) {
+          setPendingJobs(jobs.filter((j: any) => j.status === 'pending'));
+        } else {
+          setPendingJobs([]);
+        }
+      } catch (err) {
+        console.warn("Local API fetch failed in driver dashboard", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+
     const unsubPending = onSnapshot(query(collection(db, 'deliveries'), where('status', '==', 'pending')), (snap) => {
       let jobs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
       if (!isOnline) {
@@ -300,6 +332,7 @@ export default function DriverDashboard() {
 
     return () => {
       if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+      clearInterval(interval);
       unsubPending();
       unsubActive();
     };
@@ -410,19 +443,24 @@ export default function DriverDashboard() {
     setIsBidding(true);
     if (isDirectAccept) {
       try {
-        await updateDoc(doc(db, 'deliveries', jobId), {
-          status: 'accepted',
-          driverId: profile.userId,
-          driverName: profile.name,
-          cost: job.clientProposedPrice || job.cost,
-          updatedAt: new Date().toISOString()
-        });
-        await sendNotification(job.clientId, "Livreur assigné", `${profile.name} a accepté la course. Veuillez payer pour générer les codes.`, 'success', `/client`);
-        setToastMessage("Mission acceptée !");
-        setSelectedPendingJob(null);
-      } catch (e) {
-        setToastMessage("Erreur d'acceptation");
-      }
+      const updates = {
+        status: 'accepted',
+        driverId: profile.userId,
+        driverName: profile.name,
+        cost: job.clientProposedPrice || job.cost,
+        updatedAt: new Date().toISOString()
+      };
+      await api.deliveries.update(jobId, updates);
+      // Fallback
+      updateDoc(doc(db, 'deliveries', jobId), updates).catch(() => {});
+      
+      await sendNotification(job.clientId, "Livreur assigné", `${profile.name} a accepté la course. Veuillez payer pour générer les codes.`, 'success', `/client`);
+      setToastMessage("Mission acceptée !");
+      setSelectedPendingJob(null);
+    } catch (e) {
+      console.error(e);
+      setToastMessage("Erreur d'acceptation");
+    }
       setIsBidding(false);
       return;
     }

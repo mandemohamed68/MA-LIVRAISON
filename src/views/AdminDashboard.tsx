@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp, limit } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { api } from '../services/apiService';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -59,14 +60,23 @@ export default function AdminDashboard() {
     if (!configForm) return;
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'app_config'), {
+      await api.config.update('app_config', {
         ...configForm,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
-      alert('Modifications enregistrées avec succès !');
+      });
+      alert('Modifications enregistrées avec succès sur le serveur local !');
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de l\'enregistrement.');
+      alert('Erreur lors de l\'enregistrement local. Tentative Firestore...');
+      try {
+        await setDoc(doc(db, 'settings', 'app_config'), {
+          ...configForm,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        alert('Enregistré sur Firestore.');
+      } catch (f) {
+        alert('Échec total de l\'enregistrement.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -134,6 +144,29 @@ export default function AdminDashboard() {
       // We don't want to crash, so we just log it. 
       // If it's a critical failure, we could show a UI state.
     };
+
+    const fetchData = async () => {
+      try {
+        const [usersList, deliveriesList, configData, commissionsData] = await Promise.all([
+          api.admin.users.list().catch(() => []),
+          api.deliveries.list().catch(() => []),
+          api.config.get('app_config').catch(() => ({ mode: 'prod' })),
+          api.config.get('commissions').catch(() => null)
+        ]);
+
+        setUsers(usersList);
+        setDeliveries(deliveriesList);
+        if (configData) setAppConfig(configData);
+        if (commissionsData) setCommission(commissionsData);
+      } catch (err) {
+        console.error("Error polling local API:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 10000); // Poll every 10s
 
     const unsubDeliveries = onSnapshot(
       query(collection(db, 'deliveries'), orderBy('createdAt', 'desc')), 
@@ -217,6 +250,7 @@ export default function AdminDashboard() {
     );
 
     return () => {
+      clearInterval(interval);
       unsubDeliveries();
       unsubUsers();
       unsubCommission();
@@ -281,10 +315,16 @@ export default function AdminDashboard() {
     if (!appConfig) return;
     const newMode = appConfig.mode === 'test' ? 'prod' : 'test';
     try {
-      await setDoc(doc(db, 'settings', 'app_config'), {
+      await api.config.update('app_config', {
+        ...appConfig,
         mode: newMode,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      });
+      // Fallback
+      setDoc(doc(db, 'settings', 'app_config'), {
+        mode: newMode,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
     } catch (error) {
       console.error('Error updating mode:', error);
     }
@@ -1112,12 +1152,16 @@ export default function AdminDashboard() {
                       <button 
                         onClick={async () => {
                           try {
-                            await updateDoc(doc(db, 'users', u.userId), { 
+                            const updates = { 
                               accountStatus: 'active',
                               verificationStatus: 'verified',
                               isVerified: true,
                               updatedAt: new Date().toISOString()
-                            });
+                            };
+                            await api.admin.users.update(u.userId, updates);
+                            // Fallback
+                            updateDoc(doc(db, 'users', u.userId), updates).catch(() => {});
+                            
                             await sendNotification(
                               u.userId, 
                               "Dossier Approuvé 🎉", 

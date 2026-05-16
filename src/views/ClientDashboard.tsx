@@ -52,20 +52,36 @@ export default function ClientDashboard() {
       setLoading(false);
       return;
     }
+
+    const fetchData = async () => {
+      try {
+        const jobs = await api.deliveries.list();
+        setDeliveries(jobs);
+      } catch (err) {
+        console.error("Local deliveries fetch failed", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 10000); // Poll every 10s
+
     const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId));
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
         jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setDeliveries(jobs);
-        setLoading(false);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'deliveries');
-        setLoading(false);
+        console.warn("Firestore listener failed, using local polling only", error);
       }
     );
-    return () => unsubscribe();
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [profile]);
 
   const activeDeliveries = deliveries.filter(d => ['pending', 'accepted', 'picked_up', 'ready_for_pickup'].includes(d.status));

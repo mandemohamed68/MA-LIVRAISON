@@ -344,6 +344,91 @@ async function startServer() {
     }
   });
 
+  // --- ADMIN ENDPOINTS ---
+  app.get("/api/admin/users", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const users = db.prepare("SELECT * FROM users").all() as any[];
+    users.forEach(u => delete u.password);
+    res.json(users);
+  });
+
+  app.patch("/api/admin/users/:userId", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { userId } = req.params;
+    const updates = req.body;
+    const fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');
+    if (fields.length === 0) return res.json({ status: "no changes" });
+
+    const setClause = fields.map(f => `${f} = ?`).join(", ");
+    const values = fields.map(f => typeof updates[f] === 'object' ? JSON.stringify(updates[f]) : updates[f]);
+    
+    try {
+      const stmt = db.prepare(`UPDATE users SET ${setClause} WHERE userId = ?`);
+      stmt.run(...values, userId);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Update failed" });
+    }
+  });
+
+  app.patch("/api/admin/users/:userId/role", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { userId } = req.params;
+    const { role } = req.body;
+    try {
+      db.prepare("UPDATE users SET role = ? WHERE userId = ?").run(role, userId);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  app.post("/api/config/:key", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { key } = req.params;
+    const value = JSON.stringify(req.body);
+    try {
+      db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)").run(key, value);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update config" });
+    }
+  });
+
+  // Initial Seeding
+  const seedConfig = () => {
+    const hasConfig = db.prepare("SELECT key FROM config WHERE key = 'app_config'").get();
+    if (!hasConfig) {
+      db.prepare("INSERT INTO config (key, value) VALUES (?, ?)").run('app_config', JSON.stringify({
+        mode: 'prod',
+        isMaintenanceMode: false,
+        updatedAt: new Date().toISOString()
+      }));
+    }
+    
+    const hasCommissions = db.prepare("SELECT key FROM config WHERE key = 'commissions'").get();
+    if (!hasCommissions) {
+      db.prepare("INSERT INTO config (key, value) VALUES (?, ?)").run('commissions', JSON.stringify({
+        platformFeePercent: 15,
+        driverSharePercent: 85,
+        minDeliveryCost: 500,
+        tarifKm: 150,
+        tarifPoids: 100,
+        fraisFixes: 500
+      }));
+    }
+  };
+
+  seedConfig();
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

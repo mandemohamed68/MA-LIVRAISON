@@ -16,6 +16,7 @@ import { auth, db } from '../lib/firebase';
 import { UserProfile, UserRole, AppConfig } from '../types';
 import { AppLanguage, translations } from '../lib/translations';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { api } from '../services/apiService';
 
 interface AuthContextType {
   user: User | null;
@@ -71,7 +72,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // Global Config Listener
+    // Global Config Fetch (Local Server First)
+    const fetchConfig = async () => {
+      try {
+        const config = await api.config.get('app_config');
+        if (config && config.mode) {
+           setAppConfig(config);
+        }
+      } catch (err) {
+        console.warn("Local config fetch failed, checking Firestore...", err);
+      } finally {
+        configReady = true;
+        checkReady();
+      }
+    };
+
+    fetchConfig();
+
     const unsubConfig = onSnapshot(doc(db, 'settings', 'app_config'), (snap) => {
       if (snap.exists()) {
         setAppConfig(snap.data() as AppConfig);
@@ -224,16 +241,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateRole = async (role: UserRole) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
+      // Priorité au serveur local
+      await api.profile.update({ role });
+      // Fallback Firestore si disponible (silencieux)
+      setDoc(doc(db, 'users', user.uid), { role }, { merge: true }).catch(() => {});
     } catch (e) {
-      console.warn("Could not update role in Firestore, updating locally only", e);
+      console.warn("Local updateRole failed, trying Firestore fallback", e);
+      try {
+        await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
+      } catch (f) {
+        console.error("Total failure to update role", f);
+      }
     }
     setProfile(prev => prev ? { ...prev, role } : { userId: user.uid, role, name: user.displayName || 'Utilisateur', email: user.email || '' } as UserProfile);
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    await setDoc(doc(db, 'users', user.uid), data, { merge: true });
+    try {
+      await api.profile.update(data);
+      // Sync Firestore si possible
+      setDoc(doc(db, 'users', user.uid), data, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn("Local updateProfile failed, using Firestore only", e);
+      await setDoc(doc(db, 'users', user.uid), data, { merge: true });
+    }
     setProfile(prev => prev ? { ...prev, ...data } : { userId: user.uid, name: user.displayName || 'Utilisateur', email: user.email || '', role: 'client', ...data } as UserProfile);
   };
 
