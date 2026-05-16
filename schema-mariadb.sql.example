@@ -1,0 +1,86 @@
+-- Schema MariaDB pour Livra Express avec Auth Firebase
+
+CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR(255) PRIMARY KEY,
+  userId VARCHAR(255) UNIQUE, -- L'ID provenant de Firebase Auth
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  role VARCHAR(50) DEFAULT 'client',
+  status VARCHAR(50) DEFAULT 'offline',
+  city VARCHAR(255),
+  neighborhood VARCHAR(255),
+  verificationStatus VARCHAR(50) DEFAULT 'pending',
+  guarantorName VARCHAR(255),
+  guarantorPhone VARCHAR(255),
+  identityCardUrl TEXT,
+  criminalRecordUrl TEXT,
+  currentLocation JSON,
+  balance DECIMAL(10, 2) DEFAULT 0,
+  earnings DECIMAL(10, 2) DEFAULT 0,
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS deliveries (
+  id VARCHAR(255) PRIMARY KEY,
+  clientId VARCHAR(255) NOT NULL,
+  clientName VARCHAR(255),
+  driverId VARCHAR(255),
+  driverName VARCHAR(255),
+  origin JSON NOT NULL,
+  destination JSON NOT NULL,
+  cost DECIMAL(10, 2) NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  paymentStatus VARCHAR(50) DEFAULT 'pending',
+  paymentMethod VARCHAR(100),
+  paymentReference VARCHAR(255),
+  isPaid BOOLEAN DEFAULT FALSE,
+  paidToDriver BOOLEAN DEFAULT FALSE,
+  pickupCode VARCHAR(50),
+  deliveryCode VARCHAR(50),
+  rejectedBy JSON,
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (clientId) REFERENCES users(userId)
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id VARCHAR(255) PRIMARY KEY,
+  deliveryId VARCHAR(255) NOT NULL,
+  text TEXT NOT NULL,
+  senderId VARCHAR(255) NOT NULL,
+  senderName VARCHAR(255),
+  senderRole VARCHAR(50),
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (deliveryId) REFERENCES deliveries(id)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(255) PRIMARY KEY,
+  userId VARCHAR(255) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  type VARCHAR(50) DEFAULT 'info',
+  link TEXT,
+  isRead BOOLEAN DEFAULT FALSE,
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (userId) REFERENCES users(userId)
+);
+
+CREATE TABLE IF NOT EXISTS config (
+  `key` VARCHAR(255) PRIMARY KEY,
+  value JSON NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS withdrawals (
+  id VARCHAR(255) PRIMARY KEY,
+  driverId VARCHAR(255) NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  method VARCHAR(100),
+  phone VARCHAR(50),
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  processedAt TIMESTAMP
+);
+
+INSERT IGNORE INTO config (`key`, value) VALUES ('commissions', '{"commissionRate":15,"minimumFee":500,"distancePricingRules":[],"maxSimultaneousDeliveries":3}');
+INSERT IGNORE INTO config (`key`, value) VALUES ('app_config', '{"mode":"prod","isMaintenanceMode":false,"maintenanceMessage":""}');

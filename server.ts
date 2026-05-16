@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-for-dev";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3005;
 
   app.use(express.json());
 

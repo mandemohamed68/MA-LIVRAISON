@@ -1,90 +1,155 @@
-# Guide de Déploiement Local - Livra Express
+# Guide de Déploiement Complet (Débutant) - Livra Express sur Debian 12
 
-Ce guide explique comment déployer l'application Livra Express sur un serveur local Debian 12 sans dépendre de Firebase.
+Ce guide vous accompagne pas à pas pour installer l'application **Livra Express** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3005**.
 
-## Prérequis
+## 1. Préparation du Serveur Debian 12
 
-- Un serveur avec **Debian 12**
-- **Node.js 18+** installé
-- **npm** ou **yarn**
-- **SQLite3** ou un moteur SQL compatible
-- Un serveur web (Nginx recommandé pour le reverse proxy)
+Connectez-vous à votre serveur via SSH puis mettez à jour le système :
 
-## Étape 1 : Préparation de l'environnement
+```bash
+sudo apt update && sudo apt upgrade -y
+```
 
-1. Installez Node.js :
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-   sudo apt-get install -y nodejs
-   ```
+### Installation des outils nécessaires
+Installez **Git**, **Curl**, et **SQLite3** :
+```bash
+sudo apt install git curl sqlite3 -y
+```
 
-2. Clonez votre projet et installez les dépendances :
-   ```bash
-   cd /var/www/livra-express
-   npm install
-   ```
+### Installation de Node.js (Version 18+)
+Nous utilisons Node.js pour faire tourner le serveur :
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+Vérifiez l'installation : `node -v` (doit afficher v18.x.x).
 
-## Étape 2 : Configuration
+---
 
-1. Copiez le fichier `.env.example` vers `.env` :
-   ```bash
-   cp .env.example .env
-   ```
-2. Modifiez le fichier `.env` pour définir vos secrets :
-   - `JWT_SECRET` : Une clé forte pour la sécurité des sessions.
-   - `DATABASE_URL` : Chemin vers votre fichier `local.db` (par défaut la racine).
-   - `SAPPAY_*` : Vos identifiants de paiement Sappay.
+## 2. Récupération du Code depuis GitHub
 
-## Étape 3 : Initialisation de la Base de Données
+Allez dans le dossier où vous voulez installer l'application (généralement `/var/www/`) :
 
-Le serveur initialise automatiquement le fichier `local.db` au premier lancement. Pour importer des données manuellement, vous pouvez utiliser le fichier `schema.sql.example`.
+```bash
+sudo mkdir -p /var/www/livra-express
+sudo chown $USER:$USER /var/www/livra-express
+cd /var/www/livra-express
+```
 
+Clonez votre dépôt GitHub (remplacez par votre URL) :
+```bash
+git clone https://github.com/VOTRE_NOM/VOTRE_PROJET.git .
+```
+
+---
+
+## 3. Installation et Configuration
+
+### Installation des dépendances
+```bash
+npm install
+```
+
+### Configuration des variables d'environnement
+Créez le fichier `.env` à partir de l'exemple :
+```bash
+cp .env.example .env
+nano .env
+```
+Dans l'éditeur `nano`, modifiez les valeurs suivantes :
+- `PORT=3005` (Vérifiez qu'il est bien à 3005)
+- `JWT_SECRET` : Inventez une phrase très longue et aléatoire.
+- `SAPPAY_CLIENT_ID`, etc. : Remplissez avec vos clés Sappay.
+
+Quittez et sauvegardez avec `CTRL+X`, puis `Y`, puis `Entrée`.
+
+---
+
+## 4. Préparation de la Base de Données
+
+Initialisez la base de données SQLite locale avec le schéma fourni :
 ```bash
 sqlite3 local.db < schema.sql.example
 ```
 
-## Étape 4 : Compilation et Lancement
+---
 
-1. Build de l'application :
-   ```bash
-   npm run build
-   ```
+## 5. Compilation et Premier Lancement
 
-2. Lancement du serveur :
-   ```bash
-   npm start
-   ```
-
-## Étape 5 : Configuration Nginx (Reverse Proxy)
-
-Créez un fichier de configuration `/etc/nginx/sites-available/livra` :
-
-```nginx
-server {
-    listen 80;
-    server_name votre-domaine.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-Activez le site et redémarrez Nginx :
+Compilez l'application (le code TypeScript vers JavaScript) :
 ```bash
-sudo ln -s /etc/nginx/sites-available/livra /etc/nginx/sites-enabled/
-sudo systemctl restart nginx
+npm run build
 ```
 
-## Notes sur l'authentification local
-
-L'application utilise désormais un système JWT local. Les utilisateurs doivent se créer un compte via l'interface. Pour le premier administrateur, vous devrez probablement modifier manuellement le rôle dans la base de données :
-
-```sql
-UPDATE users SET role = 'admin' WHERE email = 'votre-email@admin.com';
+Lancez l'application pour tester :
+```bash
+npm start
 ```
+Si vous voyez "Server running on http://localhost:3005", tout fonctionne ! Appuyez sur `CTRL+C` pour arrêter le test.
+
+---
+
+## 6. Maintenance Automatique (PM2)
+
+Pour que l'application ne s'arrête pas si vous fermez votre session SSH, utilisez **PM2** :
+
+```bash
+sudo npm install -g pm2
+pm2 start dist/server.cjs --name "livra-express"
+pm2 save
+pm2 startup
+```
+
+---
+
+## 7. Configuration Nginx (Reverse Proxy)
+
+Pour accéder à votre application via `http://votre-domaine.com` (port 80) au lieu de `:3005` :
+
+1. Installez Nginx :
+   ```bash
+   sudo apt install nginx -y
+   ```
+
+2. Créez la configuration :
+   ```bash
+   sudo nano /etc/nginx/sites-available/livra
+   ```
+
+3. Collez ce contenu :
+   ```nginx
+   server {
+       listen 80;
+       server_name votre-domaine.com; # Remplacez par votre IP ou domaine
+
+       location / {
+           proxy_pass http://localhost:3005;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+       }
+   }
+   ```
+
+4. Activez et redémarrez :
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/livra /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+---
+
+## 8. Note Importante : Administrateur
+
+Une fois l'application lancée, créez votre compte via l'interface du site. Ensuite, pour devenir administrateur, connectez-vous à la base de données sur le serveur pour changer votre rôle :
+
+```bash
+sqlite3 local.db
+sqlite> UPDATE users SET role = 'admin' WHERE email = 'votre-email@exemple.com';
+sqlite> .quit
+```
+
+Félicitations ! Votre application est maintenant déployée en local.
