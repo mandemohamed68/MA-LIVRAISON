@@ -12,8 +12,10 @@ db.exec(`
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password TEXT, -- For local auth
-    role TEXT CHECK(role IN ('client', 'driver', 'admin')) NOT NULL,
+    role TEXT CHECK(role IN ('client', 'driver', 'admin', 'superadmin')) NOT NULL,
     status TEXT DEFAULT 'offline',
+    accountStatus TEXT DEFAULT 'active', -- active, rejected, suspended
+    isVerified INTEGER DEFAULT 0,
     city TEXT,
     neighborhood TEXT,
     verificationStatus TEXT DEFAULT 'pending',
@@ -118,6 +120,21 @@ db.exec(`
     lng REAL NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(deliveryId) REFERENCES deliveries(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS bids (
+    id TEXT PRIMARY KEY,
+    deliveryId TEXT NOT NULL,
+    driverId TEXT NOT NULL,
+    driverName TEXT,
+    price REAL NOT NULL,
+    proposedTime INTEGER,
+    reason TEXT,
+    status TEXT DEFAULT 'pending', -- pending, accepted, rejected
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(deliveryId) REFERENCES deliveries(id),
+    FOREIGN KEY(driverId) REFERENCES users(userId)
   );
 `);
 

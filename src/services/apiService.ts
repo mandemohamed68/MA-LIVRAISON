@@ -39,21 +39,52 @@ export const api = {
     list: () => request('/deliveries'),
     create: (data: any) => request('/deliveries', 'POST', data),
     update: (id: string, data: any) => request(`/deliveries/${id}`, 'PATCH', data),
-    getMessages: (id: string) => request(`/deliveries/${id}/messages`),
-    sendMessage: (id: string, message: any) => request(`/deliveries/${id}/messages`, 'POST', message),
+    delete: (id: string) => request(`/deliveries/${id}`, 'DELETE'),
+    messages: {
+      list: (id: string) => request(`/deliveries/${id}/messages`),
+      send: (id: string, data: any) => request(`/deliveries/${id}/messages`, 'POST', data),
+    },
+    bids: {
+      list: (id: string) => request(`/deliveries/${id}/bids`),
+      place: (id: string, data: any) => request(`/deliveries/${id}/bids`, 'POST', data),
+    },
+    tracking: {
+      update: (id: string, data: any) => request(`/deliveries/${id}/tracking`, 'POST', data),
+    }
   },
   notifications: {
     list: () => request('/notifications'),
+    create: (data: any) => request('/notifications', 'POST', data),
+    markAsRead: (id: string) => request(`/notifications/${id}/read`, 'PATCH'),
+    delete: (id: string) => request(`/notifications/${id}`, 'DELETE'),
+  },
+  drivers: {
+    status: () => request('/drivers/status'),
   },
   config: {
     get: (key: string) => request(`/config/${key}`),
     update: (key: string, data: any) => request(`/config/${key}`, 'POST', data),
   },
+  health: () => request('/health'),
   admin: {
     users: {
       list: () => request('/admin/users'),
+      create: (data: any) => request('/admin/users', 'POST', data),
       update: (userId: string, data: any) => request(`/admin/users/${userId}`, 'PATCH', data),
+      delete: (userId: string) => request(`/admin/users/${userId}`, 'DELETE'),
       updateRole: (userId: string, role: string) => request(`/admin/users/${userId}/role`, 'PATCH', { role }),
-    }
+    },
+    reset: () => request('/admin/reset', 'POST'),
+    seed: () => request('/admin/seed', 'POST'),
+  },
+  announcements: {
+    list: () => request('/announcements'),
+    create: (data: any) => request('/announcements', 'POST', data),
+    delete: (id: string) => request(`/announcements/${id}`, 'DELETE'),
+  },
+  sectors: {
+    list: () => request('/sectors'),
+    create: (data: any) => request('/sectors', 'POST', data),
+    delete: (id: string) => request(`/sectors/${id}`, 'DELETE'),
   }
 };

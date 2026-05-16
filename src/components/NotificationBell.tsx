@@ -3,10 +3,8 @@ import { Bell, Info, Package, CheckCircle, Truck, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, where, orderBy, onSnapshot, deleteDoc, doc, updateDoc, writeBatch, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '../services/apiService';
 import { AppNotification } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 export default function NotificationBell() {
   const { user } = useAuth();
@@ -17,41 +15,54 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!user) return;
 
-    // Simplified query to avoid composite index requirements
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', user.uid),
-      limit(100)
-    );
+    const fetchNotifs = async () => {
+      try {
+        const list = await api.notifications.list();
+        const sorted = list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setNotifications(sorted);
+        setHasUnread(sorted.some((n: any) => !n.isRead));
+      } catch (err) {
+        console.error("Fetch notifications failed locally", err);
+      }
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const notifs = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as AppNotification))
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setNotifications(notifs);
-      setHasUnread(notifs.some(n => !n.isRead));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications'));
-
-    return () => unsubscribe();
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 10000); // Poll every 10s
+    return () => clearInterval(interval);
   }, [user]);
 
   const markAllAsRead = async () => {
     if (!user) return;
-    const batch = writeBatch(db);
-    notifications.filter(n => !n.isRead).forEach(n => {
-      batch.update(doc(db, 'notifications', n.id), { isRead: true });
-    });
-    await batch.commit();
+    try {
+      const unread = notifications.filter(n => !n.isRead);
+      await Promise.all(unread.map(n => api.notifications.markAsRead(n.id)));
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setHasUnread(false);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const deleteNotification = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    await deleteDoc(doc(db, 'notifications', id));
+    try {
+      await api.notifications.delete(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const markAsRead = async (id: string) => {
-    await updateDoc(doc(db, 'notifications', id), { isRead: true });
+    try {
+      await api.notifications.markAsRead(id);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      setHasUnread(notifications.some(n => n.id !== id && !n.isRead));
+    } catch (e) {
+      console.error(e);
+    }
   };
+
 
   const getIcon = (type: string) => {
     switch (type) {

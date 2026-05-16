@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -10,30 +10,15 @@ import {
   useMap,
 } from "react-leaflet";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../lib/firebase";
+import { api } from "../services/apiService";
 import {
-  collection,
-  addDoc,
-  doc,
-  getDoc,
-  query,
-  where,
-  onSnapshot,
-} from "firebase/firestore";
-import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
-import {
-  Navigation,
   ArrowLeft,
   Loader2,
   Crosshair,
   Package,
   ArrowRight,
   MapPin,
-  CheckCircle,
-  Plus,
   Info,
-  Wallet,
-  Smartphone,
   X,
 } from "lucide-react";
 import { cn, calculateDistance } from "../lib/utils";
@@ -255,77 +240,48 @@ export default function CreateDelivery() {
   >("cash");
 
   useEffect(() => {
-    getDoc(doc(db, "settings", "commissions")).then((snap) => {
-      if (snap.exists()) {
-        setCommissionSettings(snap.data() as CommissionSettings);
-      } else {
-        setCommissionSettings({
-          platformFeePercent: 10,
-          driverMinBalance: 1000,
-          withdrawalMinAmount: 5000,
-          maxSimultaneousDeliveries: 3
-        });
+    const fetchData = async () => {
+      try {
+        const commData = await api.config.get('commissions');
+        if (commData) setCommissionSettings(commData);
+        else {
+          setCommissionSettings({
+            platformFeePercent: 10,
+            driverMinBalance: 1000,
+            withdrawalMinAmount: 5000,
+            maxSimultaneousDeliveries: 3
+          });
+        }
+      } catch (e) {
+        console.error("Error fetching commissions locally:", e);
       }
-    });
-
-    let unsubRecent: (() => void) | undefined;
+    };
+    fetchData();
 
     // Pre-fill senderPhone per user request
     if (profile?.userId) {
       if (!senderPhone && profile.phone) {
         setSenderPhone(profile.phone);
       }
-      const deliveriesRef = collection(db, "deliveries");
-      const qRecent = query(
-        deliveriesRef,
-        where("clientId", "==", profile.userId)
-      );
-
-      unsubRecent = onSnapshot(
-        qRecent,
-        (snap) => {
-          if (!snap.empty) {
-            const docs = snap.docs.map((d) => d.data());
-            // Sort by createdAt manually since we might not have the index
-            const sorted = docs.sort(
-              (a, b) =>
-                new Date(b.createdAt || 0).getTime() -
-                new Date(a.createdAt || 0).getTime()
-            );
-          }
-        },
-        (error) =>
-          handleFirestoreError(error, OperationType.LIST, "deliveries (recent)")
-      );
     }
 
     detectLocation();
 
-    // Check for online drivers
-    const unsub = onSnapshot(
-      query(
-        collection(db, "users"),
-        where("role", "in", ["driver", "admin", "superadmin"])
-      ),
-      (snap) => {
-        const drivers = snap.docs.map((d) => d.data());
-        // A driver is available if they are online and NOT suspended
-        // We include those with pending_approval if they have at least gone online
-        const available = drivers.filter(
-          (d) => (d.status === "online") && d.accountStatus !== "suspended"
-        ).length;
-        const busy = drivers.filter(
-          (d) => d.status === "busy" && d.accountStatus !== "suspended"
-        ).length;
+    const fetchDriverStatus = async () => {
+      try {
+        const stats = await api.drivers.status();
+        setDriversAvailable(stats.available);
+        setDriversBusy(stats.busy);
+      } catch (err) {
+        console.error("Failed to fetch drivers status", err);
+      }
+    };
 
-        setDriversAvailable(available);
-        setDriversBusy(busy);
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, "users")
-    );
+    fetchDriverStatus();
+    const statusInterval = setInterval(fetchDriverStatus, 10000);
+
     return () => {
-      unsub();
-      if (unsubRecent) unsubRecent();
+      clearInterval(statusInterval);
     };
   }, [profile?.userId]);
 
@@ -428,7 +384,7 @@ export default function CreateDelivery() {
         // Since we are in the flow, we won't block the delivery but ideally we update Firestore
       }
 
-      const newDelivery = await addDoc(collection(db, "deliveries"), {
+      const newDelivery = await api.deliveries.create({
         clientId: profile.userId,
         clientName: profile.name,
         from: { ...from, precision: fromPrecision },

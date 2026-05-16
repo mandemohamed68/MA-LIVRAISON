@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-for-dev";
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3005;
+  const PORT = 3000;
 
   app.use(express.json());
 
@@ -27,6 +27,18 @@ async function startServer() {
     }
     next();
   });
+
+  // --- UTILS ---
+  function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+  }
 
   // --- MIDDLEWARE AUTH ---
   const authenticate = (req: any, res: any, next: any) => {
@@ -43,6 +55,10 @@ async function startServer() {
   };
 
   // --- AUTH ENDPOINTS ---
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.post("/api/auth/register", async (req, res) => {
     const { name, email, password, role } = req.body;
     try {
@@ -105,7 +121,19 @@ async function startServer() {
   app.post("/api/deliveries", authenticate, (req: any, res) => {
     const d = req.body;
     const id = uuidv4();
+    
     try {
+      // Get commission config
+      const commRow = db.prepare("SELECT value FROM config WHERE key = 'commissions'").get() as any;
+      const comm = commRow ? JSON.parse(commRow.value) : { minDeliveryCost: 500, tarifKm: 150, fraisFixes: 500 };
+
+      let calculatedCost = d.cost;
+      if (!calculatedCost && d.from && d.to) {
+        const dist = calculateDistance(d.from.lat, d.from.lng, d.to.lat, d.to.lng);
+        calculatedCost = Math.max(comm.minDeliveryCost, comm.fraisFixes + (dist * comm.tarifKm));
+        calculatedCost = Math.round(calculatedCost / 100) * 100; // Round to nearest 100
+      }
+
       const stmt = db.prepare(`
         INSERT INTO deliveries (id, clientId, clientName, origin, destination, cost, status, pickupCode, deliveryCode)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -113,13 +141,26 @@ async function startServer() {
       stmt.run(
         id, req.user.userId, d.clientName, 
         JSON.stringify(d.from), JSON.stringify(d.to), 
-        d.cost, "pending", 
+        calculatedCost || 1000, "pending", 
         Math.random().toString(36).substr(2, 6).toUpperCase(),
         Math.random().toString(36).substr(2, 6).toUpperCase()
       );
+      res.json({ id, cost: calculatedCost });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Creation failed" });
+    }
+  });
+
+  app.post("/api/notifications", authenticate, (req: any, res) => {
+    const { userId, title, message, type, link } = req.body;
+    const id = uuidv4();
+    try {
+      db.prepare("INSERT INTO notifications (id, userId, title, message, type, link) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(id, userId, title, message, type || 'info', link || null);
       res.json({ id });
     } catch (err) {
-      res.status(500).json({ error: "Creation failed" });
+      res.status(500).json({ error: "Failed to create notification" });
     }
   });
 
@@ -167,6 +208,17 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/deliveries/:id", authenticate, (req: any, res) => {
+    const { id } = req.params;
+    try {
+      db.prepare("DELETE FROM deliveries WHERE id = ?").run(id);
+      db.prepare("DELETE FROM messages WHERE deliveryId = ?").run(id);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Delete failed" });
+    }
+  });
+
   // --- MESSAGES ENDPOINTS ---
   app.post("/api/deliveries/:id/messages", authenticate, (req: any, res) => {
     const { id: deliveryId } = req.params;
@@ -193,6 +245,16 @@ async function startServer() {
     res.json(notifications);
   });
 
+  app.get("/api/drivers/status", (req, res) => {
+    try {
+      const available = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'driver' AND status = 'online' AND accountStatus = 'active'").get() as any;
+      const busy = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'driver' AND status = 'busy' AND accountStatus = 'active'").get() as any;
+      res.json({ available: available.count, busy: busy.count });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch driver status" });
+    }
+  });
+
   // --- CONFIG / SECTORS ---
   app.get("/api/config/:key", (req, res) => {
     const row = db.prepare("SELECT value FROM config WHERE key = ?").get(req.params.key) as any;
@@ -201,6 +263,64 @@ async function startServer() {
 
   app.get("/api/sectors", (req, res) => {
     res.json(db.prepare("SELECT * FROM sectors WHERE isActive = 1").all());
+  });
+
+  app.post("/api/sectors", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { name, city, isActive } = req.body;
+    const id = uuidv4();
+    try {
+      db.prepare("INSERT INTO sectors (id, name, city, isActive) VALUES (?, ?, ?, ?)")
+        .run(id, name, city || 'Ouagadougou', isActive === false ? 0 : 1);
+      res.json({ id, name, city });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to create sector" });
+    }
+  });
+
+  app.delete("/api/sectors/:id", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      db.prepare("DELETE FROM sectors WHERE id = ?").run(req.params.id);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete sector" });
+    }
+  });
+
+  app.get("/api/announcements", (req, res) => {
+    res.json(db.prepare("SELECT * FROM announcements ORDER BY createdAt DESC").all());
+  });
+
+  app.post("/api/announcements", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { title, message, type, targetRole, activeUntil } = req.body;
+    const id = uuidv4();
+    try {
+      db.prepare("INSERT INTO announcements (id, title, message, type, targetRole, activeUntil) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(id, title, message, type || 'info', targetRole || 'all', activeUntil || null);
+      res.json({ id, title });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to create announcement" });
+    }
+  });
+
+  app.delete("/api/announcements/:id", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      db.prepare("DELETE FROM announcements WHERE id = ?").run(req.params.id);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete announcement" });
+    }
   });
 
   // SAPPAY API Integration
@@ -389,6 +509,82 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/admin/users/:userId", authenticate, (req: any, res) => {
+    if (req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Superadmin only" });
+    }
+    const { userId } = req.params;
+    try {
+      db.prepare("DELETE FROM users WHERE userId = ?").run(userId);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Delete failed" });
+    }
+  });
+
+  app.post("/api/admin/users", authenticate, async (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Admin only" });
+    }
+    const { name, email, password, role, ...rest } = req.body;
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const userId = uuidv4();
+      const fields = ['id', 'userId', 'name', 'email', 'password', 'role', ...Object.keys(rest)];
+      const placeholders = fields.map(() => '?').join(', ');
+      const values = [userId, userId, name, email, hashedPassword, role, ...Object.values(rest).map(v => typeof v === 'object' ? JSON.stringify(v) : v)];
+      
+      const stmt = db.prepare(`INSERT INTO users (${fields.join(', ')}) VALUES (${placeholders})`);
+      stmt.run(...values);
+      res.json({ userId, name, email, role });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/reset", authenticate, (req: any, res) => {
+    if (req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Superadmin only" });
+    }
+    try {
+      db.prepare("DELETE FROM deliveries").run();
+      db.prepare("DELETE FROM messages").run();
+      db.prepare("DELETE FROM notifications").run();
+      db.prepare("DELETE FROM users WHERE role NOT IN ('admin', 'superadmin')").run();
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Reset failed" });
+    }
+  });
+
+  app.post("/api/admin/seed", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Admin only" });
+    }
+    try {
+      // Seed a client and a driver if they don't exist
+      const clientId = 'client_test_seed';
+      const driverId = 'driver_test_seed';
+      
+      db.prepare("INSERT OR IGNORE INTO users (id, userId, name, email, role, accountStatus) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(clientId, clientId, 'Client Test', 'client_test@example.com', 'client', 'active');
+      
+      db.prepare("INSERT OR IGNORE INTO users (id, userId, name, email, role, accountStatus, status, vehicleType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(driverId, driverId, 'Livreur Test', 'driver_test@example.com', 'driver', 'active', 'online', 'Moto');
+
+      // Seed some deliveries
+      const d1Id = uuidv4();
+      db.prepare(`
+        INSERT INTO deliveries (id, clientId, clientName, origin, destination, cost, status, pickupCode, deliveryCode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(d1Id, clientId, 'Client Test', JSON.stringify({ address: 'Marché Rood Woko', lat: 12.368, lng: -1.530 }), JSON.stringify({ address: 'ZAD', lat: 12.345, lng: -1.500 }), 1500, 'pending', '1A2B3C', 'X9Y8Z7');
+
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Seed failed" });
+    }
+  });
+
   app.post("/api/config/:key", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ error: "Access denied" });
@@ -443,6 +639,49 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  app.patch("/api/notifications/:id/read", authenticate, (req: any, res) => {
+    try {
+      db.prepare("UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?").run(req.params.id, req.user.userId);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Update notification failed" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", authenticate, (req: any, res) => {
+    try {
+      db.prepare("DELETE FROM notifications WHERE id = ? AND userId = ?").run(req.params.id, req.user.userId);
+      res.json({ status: "ok" });
+    } catch (err) {
+      res.status(500).json({ error: "Delete notification failed" });
+    }
+  });
+
+  // Bids API
+  app.get("/api/deliveries/:id/bids", authenticate, (req: any, res) => {
+    try {
+      const bids = db.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(req.params.id);
+      res.json(bids);
+    } catch (err) {
+      res.status(500).json({ error: "Fetch bids failed" });
+    }
+  });
+
+  app.post("/api/deliveries/:id/bids", authenticate, (req: any, res) => {
+    const { id } = req.params;
+    const { price, proposedTime, reason } = req.body;
+    try {
+      const bidId = `${id}_${req.user.userId}`;
+      db.prepare(`
+        INSERT OR REPLACE INTO bids (id, deliveryId, driverId, driverName, price, proposedTime, reason, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(bidId, id, req.user.userId, req.user.name, price, proposedTime, reason);
+      res.json({ status: "ok", id: bidId });
+    } catch (err) {
+      res.status(500).json({ error: "Place bid failed" });
+    }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

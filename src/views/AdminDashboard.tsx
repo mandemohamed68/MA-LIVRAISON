@@ -1,11 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { db } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp, limit } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { api } from '../services/apiService';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { DeliveryRequest, UserProfile, UserRole, CommissionSettings, AppConfig, DistancePricingRule, Sector, AppAnnouncement } from '../types';
 import { 
   ShieldCheck, Package, Users, Truck, DollarSign, 
@@ -25,7 +19,7 @@ import LiveMap from '../components/LiveMap';
 import { sendNotification } from '../lib/notificationService';
 
 export default function AdminDashboard() {
-  const { profile, updateRole, logout, isMasterAdmin } = useAuth();
+  const { profile, logout, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -67,16 +61,7 @@ export default function AdminDashboard() {
       alert('Modifications enregistrées avec succès sur le serveur local !');
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de l\'enregistrement local. Tentative Firestore...');
-      try {
-        await setDoc(doc(db, 'settings', 'app_config'), {
-          ...configForm,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-        alert('Enregistré sur Firestore.');
-      } catch (f) {
-        alert('Échec total de l\'enregistrement.');
-      }
+      alert('Erreur lors de l\'enregistrement local.');
     } finally {
       setIsSaving(false);
     }
@@ -131,6 +116,30 @@ export default function AdminDashboard() {
     prevPendingCount.current = totalPendingCount;
   }, [deliveries, users]);
 
+  const fetchData = async () => {
+    try {
+      const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData] = await Promise.all([
+        api.admin.users.list().catch(() => []),
+        api.deliveries.list().catch(() => []),
+        api.config.get('app_config').catch(() => ({ mode: 'prod' })),
+        api.config.get('commissions').catch(() => null),
+        api.sectors.list().catch(() => []),
+        api.announcements.list().catch(() => [])
+      ]);
+
+      setUsers(usersList);
+      setDeliveries(deliveriesList);
+      if (configData) setAppConfig(configData);
+      if (commissionsData) setCommission(commissionsData);
+      setSectors(sectorsData);
+      setAnnouncements(announcementsData);
+    } catch (err) {
+      console.error("Error polling local API:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Only subscribe if we have a valid admin profile
     const isAdmin = isMasterAdmin || profile?.role === 'admin' || profile?.role === 'superadmin';
@@ -139,125 +148,10 @@ export default function AdminDashboard() {
       return;
     }
 
-    const handleError = (collectionName: string) => (error: any) => {
-      console.warn(`Permission error on ${collectionName}:`, error.message);
-      // We don't want to crash, so we just log it. 
-      // If it's a critical failure, we could show a UI state.
-    };
-
-    const fetchData = async () => {
-      try {
-        const [usersList, deliveriesList, configData, commissionsData] = await Promise.all([
-          api.admin.users.list().catch(() => []),
-          api.deliveries.list().catch(() => []),
-          api.config.get('app_config').catch(() => ({ mode: 'prod' })),
-          api.config.get('commissions').catch(() => null)
-        ]);
-
-        setUsers(usersList);
-        setDeliveries(deliveriesList);
-        if (configData) setAppConfig(configData);
-        if (commissionsData) setCommission(commissionsData);
-      } catch (err) {
-        console.error("Error polling local API:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
     const interval = setInterval(fetchData, 10000); // Poll every 10s
 
-    const unsubDeliveries = onSnapshot(
-      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc')), 
-      (snap) => {
-        setDeliveries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'deliveries')
-    );
-
-    const unsubUsers = onSnapshot(
-      query(collection(db, 'users')), 
-      (snap) => {
-        setUsers(snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile)));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'users')
-    );
-
-    const unsubCommission = onSnapshot(
-      doc(db, 'settings', 'commissions'), 
-      (snap) => {
-        if (snap.exists()) {
-          setCommission(snap.data() as CommissionSettings);
-        } else {
-          const defaults: CommissionSettings = {
-            id: 'global_config',
-            platformFeePercent: 15,
-            driverSharePercent: 85,
-            minDeliveryCost: 500,
-            insuranceFeePercent: 2,
-            tarifKm: 150,
-            tarifPoids: 100,
-            fraisFixes: 500,
-            minRatioClient: 0.7,
-            maxRatioLivreur: 2.0,
-            maxSimultaneousDeliveries: 2,
-            promoEnabled: true,
-            distancePricingRules: [
-              { id: 'rule1', minKm: 0, maxKm: 10, price: 800 },
-              { id: 'rule2', minKm: 10, maxKm: 15, price: 1200 }
-            ],
-            updatedAt: new Date().toISOString(),
-            updatedBy: 'system'
-          };
-          setDoc(doc(db, 'settings', 'commissions'), defaults);
-        }
-        setLoading(false);
-      },
-      (error) => handleFirestoreError(error, OperationType.GET, 'settings/commissions')
-    );
-
-    const unsubConfig = onSnapshot(
-      doc(db, 'settings', 'app_config'), 
-      (snap) => {
-        if (snap.exists()) {
-          setAppConfig(snap.data() as AppConfig);
-        } else {
-          const defaults: AppConfig = {
-            mode: 'test',
-            updatedAt: new Date().toISOString()
-          };
-          setDoc(doc(db, 'settings', 'app_config'), defaults);
-        }
-      },
-      (error) => handleFirestoreError(error, OperationType.GET, 'settings/app_config')
-    );
-
-    const unsubSectors = onSnapshot(
-      collection(db, 'sectors'),
-      (snap) => {
-        setSectors(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sector)));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'sectors')
-    );
-
-    const unsubAnnouncements = onSnapshot(
-      collection(db, 'announcements'),
-      (snap) => {
-        setAnnouncements(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppAnnouncement)));
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, 'announcements')
-    );
-
-    return () => {
-      clearInterval(interval);
-      unsubDeliveries();
-      unsubUsers();
-      unsubCommission();
-      unsubConfig();
-      unsubSectors();
-      unsubAnnouncements();
-    };
+    return () => clearInterval(interval);
   }, [profile, isMasterAdmin]);
 
   const handleAddDistanceRule = () => {
@@ -295,17 +189,15 @@ export default function AdminDashboard() {
     if (!commission) return;
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'commissions'), {
+      await api.config.update('commissions', {
         ...commission,
         updatedAt: new Date().toISOString(),
         updatedBy: profile?.userId || 'admin'
-      }, { merge: true });
-      alert('Paramètres mis à jour avec succès !');
-      console.log('Paramètres mis à jour avec succès !');
-    } catch (error) {
-      console.error('Error updating commission:', error);
-      alert('Erreur lors de la mise à jour.');
-      console.log('Erreur lors de la mise à jour.');
+      });
+      alert('Paramètres de commission locaux mis à jour !');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de la mise à jour des commissions.');
     } finally {
       setIsSaving(false);
     }
@@ -314,101 +206,33 @@ export default function AdminDashboard() {
   const handleToggleMode = async () => {
     if (!appConfig) return;
     const newMode = appConfig.mode === 'test' ? 'prod' : 'test';
+    setIsProcessingAction(true);
     try {
       await api.config.update('app_config', {
         ...appConfig,
         mode: newMode,
         updatedAt: new Date().toISOString()
       });
-      // Fallback
-      setDoc(doc(db, 'settings', 'app_config'), {
-        mode: newMode,
-        updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(() => {});
-    } catch (error) {
-      console.error('Error updating mode:', error);
+      alert(`Mode ${newMode === 'test' ? 'Test' : 'Production'} activé sur le serveur local !`);
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors du changement de mode.');
+    } finally {
+      setIsProcessingAction(false);
     }
   };
 
   const handleSeedData = async () => {
+    if (!window.confirm('Voulez-vous injecter des données de test locales ?')) return;
+    setIsProcessingAction(true);
     try {
-      setIsSaving(true);
-      alert("Génération de données de test en cours (cela peut prendre quelques secondes)...");
-      const clientProfile = {
-        userId: 'client_test_' + Date.now(),
-        name: 'Client Test',
-        email: 'client_test@example.com',
-        role: 'client' as UserRole,
-        accountStatus: 'active',
-        createdAt: new Date().toISOString()
-      };
-      
-      const driverProfile = {
-        userId: 'driver_test_' + Date.now(),
-        name: 'Livreur Test',
-        email: 'driver_test@example.com',
-        role: 'driver' as UserRole,
-        accountStatus: 'active',
-        status: 'online',
-        vehicleType: 'Moto',
-        createdAt: new Date().toISOString()
-      };
-
-      await setDoc(doc(db, 'users', clientProfile.userId), clientProfile);
-      await setDoc(doc(db, 'users', driverProfile.userId), driverProfile);
-
-      const d1 = {
-        clientId: clientProfile.userId,
-        clientName: clientProfile.name,
-        senderPhone: "12345678",
-        from: { address: 'Marché Rood Woko', lat: 12.368, lng: -1.530 },
-        to: { address: 'ZAD', lat: 12.345, lng: -1.500 },
-        receiverName: 'Destinataire A',
-        receiverPhone: '87654321',
-        packageType: 'Colis standard',
-        weight: 'Moins de 5kg',
-        cost: 1500,
-        status: 'pending' as any,
-        isUrgent: false,
-        paymentStatus: 'pending' as any,
-        pickupCode: '1A2B3C',
-        deliveryCode: 'X9Y8Z7',
-        paymentMethod: 'mobile_money' as any,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      const d2 = {
-        clientId: clientProfile.userId,
-        clientName: clientProfile.name,
-        senderPhone: "12345678",
-        from: { address: 'Ouaga 2000', lat: 12.310, lng: -1.520 },
-        to: { address: 'Gounghin', lat: 12.370, lng: -1.550 },
-        receiverName: 'Destinataire B',
-        receiverPhone: '87654321',
-        packageType: 'Document',
-        cost: 2500,
-        status: 'accepted' as any,
-        driverId: driverProfile.userId,
-        driverName: driverProfile.name,
-        isUrgent: true,
-        paymentStatus: 'paid' as any,
-        pickupCode: '9A8B7C',
-        deliveryCode: 'Z1Y2X3',
-        paymentMethod: 'cash' as any,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      await setDoc(doc(db, 'deliveries', 'del_test_' + Date.now() + '_1'), d1);
-      await setDoc(doc(db, 'deliveries', 'del_test_' + Date.now() + '_2'), d2);
-
-      alert("Données de test générées avec succès !");
+      await api.admin.seed();
+      alert('Données de test injectées sur le serveur local !');
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la génération des données.");
+      alert('Erreur lors de l\'injection locale.');
     } finally {
-      setIsSaving(false);
+      setIsProcessingAction(false);
     }
   };
 
@@ -423,53 +247,15 @@ export default function AdminDashboard() {
     
     try {
       setIsSaving(true);
-      const promises: Promise<void>[] = [];
-
-      // 1. Delete all Tracking & Bids for each delivery, then the delivery itself
-      // Use local variable to avoid issues if state updates during loop
-      const deliveriesToDelete = [...deliveries];
-      
-      for (const delivery of deliveriesToDelete) {
-        try {
-          const bidsSnap = await getDocs(collection(db, 'deliveries', delivery.id, 'bids'));
-          bidsSnap.forEach(b => promises.push(deleteDoc(b.ref)));
-          
-          const trackSnap = await getDocs(collection(db, 'deliveries', delivery.id, 'tracking'));
-          trackSnap.forEach(t => promises.push(deleteDoc(t.ref)));
-
-          const msgSnap = await getDocs(collection(db, `deliveries/${delivery.id}/messages`));
-          msgSnap.forEach(m => promises.push(deleteDoc(m.ref)));
-
-          promises.push(deleteDoc(doc(db, 'deliveries', delivery.id)));
-        } catch (e) {
-          console.warn(`Could not delete delivery ${delivery.id}:`, e);
-        }
-      }
-
-      // 2. Delete all Messages
-      // Messages are now subcollections of deliveries, so they are deleted per delivery above
-      
-      // Wait, we need to add the messages deletion correctly inside the delivery loop:
-      // Done below
-
-      // 3. Delete non-admin Users
-      const usersToDelete = [...users];
-      for (const user of usersToDelete) {
-        if (user.role !== 'admin' && user.role !== 'superadmin' && !ADMIN_EMAILS.includes(user.email || '')) {
-          promises.push(deleteDoc(doc(db, 'users', user.userId)));
-        }
-      }
-
-      await Promise.all(promises);
-      
-      alert("Hard Reset terminé avec succès. Toutes les données (sauf admins) ont été effacées.");
+      await api.admin.reset();
+      alert("Application réinitialisée localement (Données supprimées) !");
       setShowResetConfirm(false);
+      setResetCode('');
     } catch (err) {
       console.error(err);
-      alert("Une erreur est survenue lors du hard reset. Vérifiez la console.");
+      alert("Erreur lors de la réinitialisation locale.");
     } finally {
       setIsSaving(false);
-      setResetCode('');
     }
   };
 
@@ -488,34 +274,21 @@ export default function AdminDashboard() {
     try {
       const driver = users.find(u => u.userId === driverId);
       if (!driver) return;
-      const currentWithdrawn = driver.totalWithdrawn || 0;
       
-      const timestamp = new Date().toISOString();
-      
-      // Update driver balance
-      await updateDoc(doc(db, 'users', driverId), {
+      setIsProcessingAction(true);
+      await api.admin.users.update(driverId, {
         withdrawalRequested: false,
         withdrawalAmount: 0,
-        totalWithdrawn: currentWithdrawn + amount,
-        updatedAt: timestamp
+        totalWithdrawn: (driver.totalWithdrawn || 0) + amount,
+        updatedAt: new Date().toISOString()
       });
 
-      // Log withdrawal
-      await addDoc(collection(db, 'withdrawals'), {
-        driverId,
-        driverName: driver.name,
-        amount,
-        status: 'completed',
-        method: driver.withdrawalMethod || 'mobile_money',
-        phone: driver.withdrawalPhone || driver.phone || '',
-        createdAt: driver.withdrawalRequestedAt || timestamp,
-        processedAt: timestamp
-      });
-
-      alert('Paiement enregistré avec succès');
+      alert('Paiement enregistré avec succès sur le serveur local');
     } catch (e) {
       console.error(e);
       alert('Erreur lors du paiement');
+    } finally {
+      setIsProcessingAction(false);
     }
   };
 
@@ -590,20 +363,13 @@ export default function AdminDashboard() {
     }
     
     setIsSubmittingNewUser(true);
-    let secondaryApp;
     try {
-      secondaryApp = initializeApp(firebaseConfig, 'SecondaryAppForCreation_' + Date.now());
-      const secondaryAuth = getAuth(secondaryApp);
-      
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, newUserData.email, newUserData.password);
-      
-      const newUserProfile: UserProfile = {
-        userId: cred.user.uid,
+      const newUserProfile: any = {
         name: newUserData.name,
         email: newUserData.email,
+        password: newUserData.password,
         phone: newUserData.phone || '',
         role: newUserData.role,
-        createdAt: new Date().toISOString(),
         accountStatus: 'active',
       };
 
@@ -611,12 +377,12 @@ export default function AdminDashboard() {
         newUserProfile.vehicleType = newUserData.vehicleType;
         newUserProfile.licensePlate = newUserData.licensePlate;
         newUserProfile.driverType = newUserData.driverType;
-        newUserProfile.sectors = newUserData.sectors;
+        newUserProfile.sectors = JSON.stringify(newUserData.sectors);
       }
 
-      await setDoc(doc(db, 'users', cred.user.uid), newUserProfile);
+      await api.admin.users.create(newUserProfile);
       
-      alert("Utilisateur créé avec succès !");
+      alert("Utilisateur créé avec succès sur le serveur local !");
       setShowCreateUserModal(false);
       setNewUserData({
         role: 'client',
@@ -625,21 +391,22 @@ export default function AdminDashboard() {
       });
     } catch (err: any) {
       console.error(err);
-      alert("Erreur lors de la création : " + err.message);
+      alert("Erreur lors de la création locale : " + (err.message || 'Erreur inconnue'));
     } finally {
-      if (secondaryApp) {
-        await deleteApp(secondaryApp);
-      }
       setIsSubmittingNewUser(false);
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
     if (!isSuperAdmin) return;
+    if (!window.confirm('Supprimer définitivement cet utilisateur ?')) return;
     try {
-      await deleteDoc(doc(db, 'users', userId));
+      await api.admin.users.delete(userId);
+      alert('Utilisateur supprimé.');
+      setSelectedUser(null);
     } catch (err) {
       console.error(err);
+      alert('Erreur lors de la suppression.');
     }
   };
 
@@ -650,37 +417,30 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!selectedChatDeliveryId) return;
-    const q = query(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), orderBy('createdAt', 'asc'), limit(200));
-    const unsub = onSnapshot(q, (snap) => {
-      setChatMessages(snap.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          timestamp: data.createdAt instanceof Timestamp 
-            ? data.createdAt.toDate().toISOString() 
-            : (data.createdAt || data.timestamp)
-        };
-      }));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `deliveries/${selectedChatDeliveryId}/messages`));
-    return () => unsub();
+    
+    const fetchMessages = async () => {
+      try {
+        const msgs = await api.deliveries.messages.list(selectedChatDeliveryId);
+        setChatMessages(msgs);
+      } catch (err) {
+        console.error("Error fetching chat messages:", err);
+      }
+    };
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000); // Polling chat every 3s
+    return () => clearInterval(interval);
   }, [selectedChatDeliveryId]);
 
   const handleSendAdminMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adminMessage.trim() || !selectedChatDeliveryId || !profile) return;
     try {
-      const now = new Date().toISOString();
-      await addDoc(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), {
+      await api.deliveries.messages.send(selectedChatDeliveryId, {
+        text: adminMessage,
         senderId: profile.userId,
         senderName: profile.name,
-        senderRole: 'admin',
-        text: adminMessage,
-        createdAt: serverTimestamp()
-      });
-      await updateDoc(doc(db, 'deliveries', selectedChatDeliveryId), {
-         lastMessageAt: now,
-         updatedAt: now
+        senderRole: 'admin'
       });
       setAdminMessage('');
     } catch (e) {
@@ -754,10 +514,9 @@ export default function AdminDashboard() {
                       <button 
                         onClick={async () => {
                           try {
-                             console.log('Confirming payment for:', d.id);
                              const pickupCode = generateCode();
                              const deliveryCode = generateCode();
-                             await updateDoc(doc(db, 'deliveries', d.id), {
+                             await api.deliveries.update(d.id, {
                                paymentStatus: 'confirmed',
                                isPaid: true,
                                pickupCode,
@@ -768,7 +527,8 @@ export default function AdminDashboard() {
                                await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
                              }
                              await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé. Les codes sont disponibles.`, 'success', '/client');
-                          } catch(e) { console.error('Error confirming payment:', e); }
+                             alert('Paiement confirmé localement !');
+                          } catch(e) { console.error('Error confirming payment:', e); alert('Erreur lors de la confirmation.'); }
                         }}
                         className="px-6 py-3 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
                       >
@@ -777,14 +537,14 @@ export default function AdminDashboard() {
                       <button 
                         onClick={async () => {
                           try {
-                             console.log('Rejecting payment for:', d.id);
-                             await updateDoc(doc(db, 'deliveries', d.id), {
+                             await api.deliveries.update(d.id, {
                                paymentStatus: 'rejected',
                                isPaid: false,
                                updatedAt: new Date().toISOString()
                              });
                              await sendNotification(d.clientId, "Paiement Rejeté", `Votre preuve de paiement pour la course #${d.id.slice(-6)} a été rejetée. Veuillez contacter le support.`, 'error', '/client');
-                          } catch(e) { console.error('Error rejecting payment:', e); }
+                             alert('Paiement rejeté localement !');
+                          } catch(e) { console.error('Error rejecting payment:', e); alert('Erreur lors du rejet.'); }
                         }}
                         className="px-4 py-3 bg-white text-rose-500 border border-red-100 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-50 transition-all"
                       >
@@ -1043,13 +803,14 @@ export default function AdminDashboard() {
                           try {
                             const pickupCode = generateCode();
                             const deliveryCode = generateCode();
-                            await updateDoc(doc(db, 'deliveries', d.id), { 
+                            await api.deliveries.update(d.id, { 
                               paymentStatus: 'confirmed', 
                               isPaid: true,
                               pickupCode,
                               deliveryCode,
                               updatedAt: new Date().toISOString() 
                             });
+                            fetchData();
                             if (d.driverId) {
                               await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
                             }
@@ -1159,8 +920,7 @@ export default function AdminDashboard() {
                               updatedAt: new Date().toISOString()
                             };
                             await api.admin.users.update(u.userId, updates);
-                            // Fallback
-                            updateDoc(doc(db, 'users', u.userId), updates).catch(() => {});
+                            fetchData();
                             
                             await sendNotification(
                               u.userId, 
@@ -1192,7 +952,7 @@ export default function AdminDashboard() {
                            onClick={async () => {
                              const action = u.accountStatus === 'suspended' ? 'active' : 'suspended';
                              try {
-                               await updateDoc(doc(db, 'users', u.userId), { 
+                               await api.admin.users.update(u.userId, { 
                                  accountStatus: action,
                                  updatedAt: new Date().toISOString()
                                });
@@ -1657,7 +1417,8 @@ export default function AdminDashboard() {
                  onClick={async () => {
                    const name = prompt('Nom du nouveau secteur (ex: Wayalghin) :');
                    if (name) {
-                     await addDoc(collection(db, 'sectors'), { name, city: 'Ouagadougou', isActive: true });
+                     await api.sectors.create({ name, city: 'Ouagadougou', isActive: true });
+                    fetchData();
                    }
                  }}
                  className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl"
@@ -1678,7 +1439,8 @@ export default function AdminDashboard() {
                     >
                       <button 
                         onClick={async () => {
-                          await deleteDoc(doc(db, 'sectors', s.id));
+                          await api.sectors.delete(s.id);
+                          fetchData();
                         }}
                         className="absolute top-4 right-4 w-6 h-6 bg-white rounded-lg flex items-center justify-center text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity border border-rose-100 hover:bg-rose-50"
                       >
@@ -1700,10 +1462,11 @@ export default function AdminDashboard() {
                 {sectors.length === 0 && (
                   <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
                     <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest leading-none">Aucun secteur défini dans la base de données</p>
-                    <p className="text-slate-300 font-bold text-[9px] uppercase tracking-widest mt-2 leading-none cursor-pointer" onClick={() => {
-                       ['Paspanga', 'Koulouba', 'Gounghin', 'Dassasgho', 'Ouaga 2000'].forEach(n => 
-                         addDoc(collection(db, 'sectors'), { name: n, city: 'Ouagadougou', isActive: true })
-                       )
+                    <p className="text-slate-300 font-bold text-[9px] uppercase tracking-widest mt-2 leading-none cursor-pointer" onClick={async () => {
+                       for (const n of ['Paspanga', 'Koulouba', 'Gounghin', 'Dassasgho', 'Ouaga 2000']) {
+                         await api.sectors.create({ name: n, city: 'Ouagadougou', isActive: true });
+                       }
+                       fetchData();
                     }}>Initialiser avec les secteurs par défaut</p>
                   </div>
                 )}
@@ -1770,7 +1533,7 @@ export default function AdminDashboard() {
                       <button 
                         onClick={async () => {
                           if (!newAnnonce.title || !newAnnonce.message) return;
-                          await addDoc(collection(db, 'announcements'), {
+                          await api.announcements.create({
                             ...newAnnonce,
                             targetRole: 'all',
                             activeUntil: new Date(Date.now() + 86400000 * 7).toISOString(),
@@ -1778,6 +1541,7 @@ export default function AdminDashboard() {
                           });
                           setNewAnnonce({ title: '', message: '', type: 'info' });
                           setShowNewAnnonceForm(false);
+                          fetchData();
                         }}
                         className="px-12 py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-orange-600 transition-all shadow-xl active:scale-95"
                       >
@@ -1805,7 +1569,10 @@ export default function AdminDashboard() {
                        </div>
                     </div>
                     <button 
-                      onClick={() => deleteDoc(doc(db, 'announcements', a.id))}
+                      onClick={async () => {
+                        await api.announcements.delete(a.id);
+                        fetchData();
+                      }}
                       className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-rose-500 border border-slate-100 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-50"
                     >
                        <Trash2 className="w-4 h-4" />
@@ -2672,7 +2439,7 @@ export default function AdminDashboard() {
                            onChange={async (e) => {
                              const newRole = e.target.value;
                              try {
-                               await updateDoc(doc(db, 'users', selectedUser.userId), { 
+                               await api.admin.users.update(selectedUser.userId, { 
                                  role: newRole,
                                  updatedAt: new Date().toISOString()
                                });
@@ -2865,23 +2632,25 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 mt-4">
-                      <motion.button 
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        disabled={selectedUser.verificationStatus === 'verified' || isProcessingAction}
+                        disabled={isProcessingAction || selectedUser.verificationStatus === 'verified'}
                         onClick={async (e) => {
                           e.stopPropagation();
                           setIsProcessingAction(true);
                           try {
-                            await updateDoc(doc(db, 'users', selectedUser.userId), {
+                            await api.admin.users.update(selectedUser.userId, {
                               verificationStatus: 'verified',
                               accountStatus: 'active',
                               isVerified: true,
                               updatedAt: new Date().toISOString()
                             });
                             setSelectedUser({ ...selectedUser, verificationStatus: 'verified', accountStatus: 'active', isVerified: true });
+                            fetchData();
                             await sendNotification(selectedUser.userId, "Dossier Validé ! 🎉", "Votre dossier a été approuvé. Bienvenue !", 'success');
                           } catch (err) {
-                            handleFirestoreError(err, OperationType.UPDATE, `users/${selectedUser.userId}`);
+                            console.error(err);
                           } finally {
                             setIsProcessingAction(false);
                           }
@@ -2891,25 +2660,26 @@ export default function AdminDashboard() {
                         {isProcessingAction ? <Clock className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                         {selectedUser.verificationStatus === 'verified' ? 'Déjà Validé' : (isProcessingAction ? 'Attente...' : 'Valider')}
                       </motion.button>
-                      
-                      <motion.button 
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        disabled={selectedUser.verificationStatus === 'rejected' || isProcessingAction}
+                        disabled={isProcessingAction || selectedUser.verificationStatus === 'rejected'}
                         onClick={async (e) => {
                           e.stopPropagation();
                           setIsProcessingAction(true);
                           const reason = "Documents incomplets ou non conformes";
                           try {
-                            await updateDoc(doc(db, 'users', selectedUser.userId), {
+                            await api.admin.users.update(selectedUser.userId, {
                               verificationStatus: 'rejected',
                               accountStatus: 'pending_approval',
                               isVerified: false,
                               updatedAt: new Date().toISOString()
                             });
                             setSelectedUser({ ...selectedUser, verificationStatus: 'rejected', accountStatus: 'pending_approval', isVerified: false });
+                            fetchData();
                             await sendNotification(selectedUser.userId, "Dossier à corriger ⚠️", `Rejeté. Raison : ${reason || "Doc non conformes"}`, 'warning');
                           } catch (err) {
-                            handleFirestoreError(err, OperationType.UPDATE, `users/${selectedUser.userId}`);
+                            console.error(err);
                           } finally {
                             setIsProcessingAction(false);
                           }

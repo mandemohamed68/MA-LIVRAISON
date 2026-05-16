@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Megaphone, Info, AlertTriangle, CheckCircle } from 'lucide-react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { X, Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import { api } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 import { AppAnnouncement } from '../types';
 import { cn } from '../lib/utils';
-
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 export default function AnnouncementBanner() {
   const { profile } = useAuth();
@@ -15,29 +12,28 @@ export default function AnnouncementBanner() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
-    // Fetch active announcements
-    const now = new Date().toISOString();
-    const q = query(
-      collection(db, 'announcements'),
-      where('activeUntil', '>=', now)
-    );
+    const fetchAnnouncements = async () => {
+      try {
+        const docs = await api.config.get('announcements').catch(() => []);
+        if (!Array.isArray(docs)) return;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppAnnouncement));
-      
-      // Filter by role
-      const filtered = docs.filter(a => 
-        a.targetRole === 'all' || 
-        (profile && a.targetRole === profile.role)
-      );
-      
-      // Sort by creation
-      filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      
-      setAnnouncements(filtered);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'announcements'));
+        const now = new Date().toISOString();
+        const filtered = docs.filter((a: AppAnnouncement) => 
+          a.activeUntil >= now &&
+          (a.targetRole === 'all' || (profile && a.targetRole === profile.role))
+        );
+        
+        filtered.sort((a: AppAnnouncement, b: AppAnnouncement) => b.createdAt.localeCompare(a.createdAt));
+        setAnnouncements(filtered);
+      } catch (err) {
+        console.error("Local announcements fetch failed", err);
+      }
+    };
 
-    return () => unsubscribe();
+    fetchAnnouncements();
+    const interval = setInterval(fetchAnnouncements, 15000); // Poll every 15s
+
+    return () => clearInterval(interval);
   }, [profile]);
 
   const current = announcements[currentIndex];

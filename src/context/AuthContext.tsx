@@ -1,40 +1,25 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut,
-  User,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
 import { UserProfile, UserRole, AppConfig } from '../types';
 import { AppLanguage, translations } from '../lib/translations';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { api } from '../services/apiService';
 
 interface AuthContextType {
-  user: User | null;
+  user: { userId: string; email: string; role: string; name: string } | null;
   profile: UserProfile | null;
-  loading: boolean; // For operation states (buttons, forms)
-  isAuthReady: boolean; // For initial boot/splash screen
+  loading: boolean;
+  isAuthReady: boolean;
   isMasterAdmin: boolean;
   language: AppLanguage;
   setLanguage: (lang: AppLanguage) => void;
   appConfig: AppConfig | null;
   t: (key: keyof typeof translations.fr, params?: Record<string, any>) => string;
-  login: () => Promise<void>;
+  login: (email: string, pass: string) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string, role: UserRole, extra?: Partial<UserProfile>) => Promise<void>;
-  loginWithPhone: (phone: string, recaptchaContainerId: string) => Promise<ConfirmationResult>;
   logout: () => Promise<void>;
   updateRole: (role: UserRole) => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,7 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail.com'];
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ userId: string; email: string; role: string; name: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,159 +46,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return text;
   };
 
-  // 1. Initial Listeners Setup
-  useEffect(() => {
-    let configReady = false;
-    let authHandled = false;
-
-    const checkReady = () => {
-      if (configReady && authHandled) {
-        setIsAuthReady(true);
-      }
-    };
-
-    // Global Config Fetch (Local Server First)
-    const fetchConfig = async () => {
-      try {
-        const config = await api.config.get('app_config');
-        if (config && config.mode) {
-           setAppConfig(config);
-        }
-      } catch (err) {
-        console.warn("Local config fetch failed, checking Firestore...", err);
-      } finally {
-        configReady = true;
-        checkReady();
-      }
-    };
-
-    fetchConfig();
-
-    const unsubConfig = onSnapshot(doc(db, 'settings', 'app_config'), (snap) => {
-      if (snap.exists()) {
-        setAppConfig(snap.data() as AppConfig);
-      }
-      configReady = true;
-      checkReady();
-    }, (error) => {
-      configReady = true; // Set to true BEFORE calling handleFirestoreError
-      checkReady();
-      try {
-        handleFirestoreError(error, OperationType.GET, 'settings/app_config');
-      } catch (e) {
-        console.warn("Firestore error during config boot:", e);
-      }
-    });
-
-    const fallbackConfigTimer = setTimeout(() => {
-      if (!configReady) {
-        configReady = true;
-        checkReady();
-      }
-    }, 2500);
-
-    // Auth State Listener
-    let unsubProfile: (() => void) | null = null;
-    const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
-      setUser(authUser);
-      if (unsubProfile) {
-        unsubProfile();
-        unsubProfile = null;
-      }
-
-      const finalizeAuth = () => {
-        authHandled = true;
-        checkReady();
-      };
-
-      if (authUser) {
-        // First check if user exists, if not create it
-        const userRef = doc(db, 'users', authUser.uid);
-        try {
-          const userDoc = await getDoc(userRef);
-          
-          if (!userDoc.exists()) {
-            const isAdm = authUser.email ? ADMIN_EMAILS.includes(authUser.email) : false;
-            const role: UserRole = isAdm ? 'superadmin' : 'client';
-            const newProfile: UserProfile = {
-              userId: authUser.uid,
-              name: isAdm ? 'Administrateur' : (authUser.displayName || 'Utilisateur'),
-              email: authUser.email || '',
-              role: role,
-              accountStatus: 'active',
-              createdAt: new Date().toISOString(),
-            };
-            await setDoc(userRef, newProfile);
-            setProfile(newProfile);
-          }
-
-          // Setup real-time listener for profile
-          unsubProfile = onSnapshot(userRef, (snap) => {
-            if (snap.exists()) {
-              setProfile(snap.data() as UserProfile);
-            }
-          }, (error) => {
-            try {
-              handleFirestoreError(error, OperationType.GET, `users/${authUser.uid}`);
-            } catch (e) {
-              console.warn("Firestore error on user profile:", e);
-            }
-          });
-        } catch (error) {
-          console.error("Error fetching user document during auth state change", error);
-        }
-      } else {
-        setProfile(null);
-      }
-      finalizeAuth();
-    });
-
-    return () => {
-      clearTimeout(fallbackConfigTimer);
-      unsubConfig();
-      unsubAuth();
-      if (unsubProfile) unsubProfile();
-    };
-  }, []);
-
-  const login = async () => {
-    setLoading(true);
+  const refreshProfile = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      setLoading(false);
-    } catch (err) {
-      setLoading(false);
-      throw err;
+      const p = await api.profile.get();
+      setProfile(p);
+      if (p) {
+        setUser({ userId: p.userId, email: p.email, role: p.role, name: p.name });
+      }
+    } catch (e) {
+      console.warn("Could not refresh profile", e);
     }
   };
+
+  // Initial Load
+  useEffect(() => {
+    const init = async () => {
+      const token = localStorage.getItem('auth_token');
+      
+      // Parallel fetch for speed
+      const [configRes, profileRes] = await Promise.allSettled([
+        api.config.get('app_config'),
+        token ? api.profile.get() : Promise.reject('No token')
+      ]);
+
+      if (configRes.status === 'fulfilled') {
+        setAppConfig(configRes.value);
+      }
+
+      if (profileRes.status === 'fulfilled') {
+        setProfile(profileRes.value);
+        setUser({ 
+          userId: profileRes.value.userId, 
+          email: profileRes.value.email, 
+          role: profileRes.value.role,
+          name: profileRes.value.name
+        });
+      }
+
+      setIsAuthReady(true);
+    };
+
+    init();
+
+    // Small polling for notifications or status if needed, but not for profile every 15s
+  }, []);
 
   const loginWithEmail = async (email: string, pass: string) => {
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      const res = await api.auth.login({ email, password: pass });
+      localStorage.setItem('auth_token', res.token);
+      setUser(res.user);
+      setProfile(res.user); // Initial profile match user object from server
       setLoading(false);
     } catch (err) {
       setLoading(false);
       throw err;
     }
   };
+
+  const login = loginWithEmail; // Alias for compatibility
 
   const registerWithEmail = async (email: string, pass: string, name: string, role: UserRole, extra?: Partial<UserProfile>) => {
     setLoading(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      const newProfile: UserProfile = {
-        userId: cred.user.uid,
-        name,
-        email,
-        role,
-        createdAt: new Date().toISOString(),
-        accountStatus: role === 'driver' ? 'pending_approval' : 'active',
-        ...extra
-      };
-      await setDoc(doc(db, 'users', cred.user.uid), newProfile);
-      setProfile(newProfile);
+      const res = await api.auth.register({ email, password: pass, name, role, ...extra });
+      localStorage.setItem('auth_token', res.token);
+      setUser(res.user);
+      setProfile(res.user);
       setLoading(false);
     } catch (err) {
       setLoading(false);
@@ -221,60 +121,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithPhone = async (phone: string, recaptchaContainerId: string) => {
-    const verifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
-      size: 'invisible'
-    });
-    return await signInWithPhoneNumber(auth, phone, verifier);
-  };
-
   const logout = async () => {
-    try {
-      await signOut(auth);
-    } catch (e) {
-      console.error("SignOut failed, forcing redirect", e);
-    } finally {
-      window.location.href = '/';
-    }
+    localStorage.removeItem('auth_token');
+    setUser(null);
+    setProfile(null);
+    window.location.href = '/';
   };
 
   const updateRole = async (role: UserRole) => {
-    if (!user) return;
     try {
-      // Priorité au serveur local
       await api.profile.update({ role });
-      // Fallback Firestore si disponible (silencieux)
-      setDoc(doc(db, 'users', user.uid), { role }, { merge: true }).catch(() => {});
+      await refreshProfile();
     } catch (e) {
-      console.warn("Local updateRole failed, trying Firestore fallback", e);
-      try {
-        await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
-      } catch (f) {
-        console.error("Total failure to update role", f);
-      }
+      console.error("Failed to update role", e);
+      alert("Erreur lors de la mise à jour du rôle.");
     }
-    setProfile(prev => prev ? { ...prev, role } : { userId: user.uid, role, name: user.displayName || 'Utilisateur', email: user.email || '' } as UserProfile);
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
-    if (!user) return;
     try {
       await api.profile.update(data);
-      // Sync Firestore si possible
-      setDoc(doc(db, 'users', user.uid), data, { merge: true }).catch(() => {});
+      await refreshProfile();
     } catch (e) {
-      console.warn("Local updateProfile failed, using Firestore only", e);
-      await setDoc(doc(db, 'users', user.uid), data, { merge: true });
+      console.error("Failed to update profile", e);
+      alert("Erreur lors de la mise à jour du profil.");
     }
-    setProfile(prev => prev ? { ...prev, ...data } : { userId: user.uid, name: user.displayName || 'Utilisateur', email: user.email || '', role: 'client', ...data } as UserProfile);
   };
 
   return (
     <AuthContext.Provider value={{ 
       user, profile, loading, isAuthReady, isMasterAdmin, language, setLanguage, t, 
       appConfig,
-      login, loginWithEmail, registerWithEmail, loginWithPhone,
-      logout, updateRole, updateProfile 
+      login, loginWithEmail, registerWithEmail,
+      logout, updateRole, updateProfile, refreshProfile
     }}>
       {children}
     </AuthContext.Provider>

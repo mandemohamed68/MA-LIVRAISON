@@ -3,29 +3,20 @@ import { motion } from 'motion/react';
 import { Truck } from 'lucide-react';
 
 export const LoadingScreen: React.FC = () => {
-  const [progress, setProgress] = React.useState(0);
   const [message, setMessage] = React.useState("Initialisation...");
 
   React.useEffect(() => {
-    const intervals = [
-      { p: 15, m: "Connexion sécurisée..." },
-      { p: 40, m: "Synchronisation Firebase..." },
-      { p: 65, m: "Chargement de votre profil..." },
-      { p: 85, m: "Configuration du tableau de bord..." },
-      { p: 100, m: "Prêt !" }
+    const messages = [
+      "Connexion au serveur local...",
+      "Chargement de votre profil...",
+      "Configuration du tableau de bord...",
+      "Préparation de vos livraisons..."
     ];
-
-    let current = 0;
+    let i = 0;
     const interval = setInterval(() => {
-      if (current < intervals.length) {
-        setProgress(intervals[current].p);
-        setMessage(intervals[current].m);
-        current++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 400);
-
+      setMessage(messages[i % messages.length]);
+      i++;
+    }, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -40,17 +31,12 @@ export const LoadingScreen: React.FC = () => {
                y: [0, -1, 0, -0.5, 0] 
              }}
              transition={{ 
-               x: { repeat: Infinity, duration: 2.5, ease: "linear" },
+               x: { repeat: Infinity, duration: 2, ease: "linear" },
                y: { repeat: Infinity, duration: 0.3, ease: "easeInOut" }
              }}
              className="text-orange-600 relative z-10"
           >
             <Truck size={72} strokeWidth={1.5} className="drop-shadow-xl" />
-            <motion.div 
-              animate={{ opacity: [0, 0.5, 0], scale: [0.5, 1.5], x: [-10, -30], y: [0, -10] }}
-              transition={{ repeat: Infinity, duration: 0.8 }}
-              className="absolute -left-2 bottom-2 w-3 h-3 bg-slate-400/30 rounded-full blur-sm"
-            />
           </motion.div>
           
           {/* Background Elements */}
@@ -69,26 +55,31 @@ export const LoadingScreen: React.FC = () => {
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
           className="text-center w-full"
         >
           <h2 className="text-slate-900 font-black italic text-4xl tracking-tighter mb-1 select-none">
             Livra <span className="text-orange-600">EXPRESS</span>
           </h2>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.4em] mb-8">{message}</p>
+          <motion.p 
+            key={message}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] h-4"
+          >
+            {message}
+          </motion.p>
           
-          {/* Progress Bar */}
-          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-            <motion.div 
-              animate={{ width: `${progress}%` }}
-              transition={{ type: "spring", stiffness: 50 }}
-              className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.4)]"
-            />
-          </div>
-          <div className="flex justify-between items-center px-1">
-             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">Status: OK</span>
-             <span className="text-[9px] font-black text-orange-500 font-mono leading-none">{progress}%</span>
+          <div className="mt-8 flex justify-center gap-2">
+            {[0, 1, 2].map(i => (
+              <motion.div
+                key={i}
+                animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.2 }}
+                className="w-2 h-2 bg-orange-500 rounded-full"
+              />
+            ))}
           </div>
         </motion.div>
       </div>

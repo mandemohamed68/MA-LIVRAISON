@@ -1,17 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  serverTimestamp,
-  Timestamp,
-  doc,
-  updateDoc 
-} from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { db } from '../lib/firebase';
+import { api } from '../services/apiService';
 import { ChatMessage, UserProfile } from '../types';
 import { Send, User, Shield, MessageSquare, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,33 +21,27 @@ export const Chat: React.FC<ChatProps> = ({ deliveryId, currentUser, isOpen, onC
   useEffect(() => {
     if (!deliveryId || !isOpen) return;
 
-    const messagesRef = collection(db, 'deliveries', deliveryId, 'messages');
-    const q = query(messagesRef, orderBy('createdAt', 'asc'));
+    const fetchMessages = async () => {
+      try {
+        const msgs = await api.deliveries.messages.get(deliveryId);
+        setMessages(msgs);
+        setIsLoading(false);
+        
+        // Auto scroll to bottom
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 100);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      }
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          // Handle both string and Timestamp for createdAt
-          createdAt: data.createdAt instanceof Timestamp 
-            ? data.createdAt.toDate().toISOString() 
-            : data.createdAt
-        } as ChatMessage;
-      });
-      setMessages(msgs);
-      setIsLoading(false);
-      
-      // Auto scroll to bottom
-      setTimeout(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-      }, 100);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, `deliveries/${deliveryId}/messages`));
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000); // Poll every 3 seconds for chat
 
-    return () => unsubscribe();
+    return () => clearInterval(interval);
   }, [deliveryId, isOpen]);
 
   const handleSend = async (e: React.FormEvent) => {
@@ -70,20 +52,24 @@ export const Chat: React.FC<ChatProps> = ({ deliveryId, currentUser, isOpen, onC
     setNewMessage('');
 
     try {
-      const messagesRef = collection(db, 'deliveries', deliveryId, 'messages');
       const now = new Date().toISOString();
-      await addDoc(messagesRef, {
+      await api.deliveries.messages.send(deliveryId, {
         text,
         senderId: currentUser.userId,
         senderName: currentUser.name,
         senderRole: currentUser.role === 'admin' || currentUser.role === 'superadmin' ? 'admin' : currentUser.role,
-        createdAt: serverTimestamp()
+        createdAt: now
       });
-      // Update delivery to notify admin/others about new activity
-      await updateDoc(doc(db, 'deliveries', deliveryId), {
+      
+      // Update delivery locally if needed, but the server handles lastMessageAt
+      await api.deliveries.update(deliveryId, {
         lastMessageAt: now,
         updatedAt: now
-      });
+      }).catch(() => {});
+      
+      // Refresh messages immediately for better UX
+      const msgs = await api.deliveries.messages.get(deliveryId);
+      setMessages(msgs);
     } catch (error) {
       console.error("Error sending message:", error);
     }

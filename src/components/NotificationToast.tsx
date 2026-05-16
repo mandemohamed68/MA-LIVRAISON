@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy, limit, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bell, X, CheckCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useNavigate } from 'react-router-dom';
 
 export default function NotificationToast() {
@@ -16,28 +14,28 @@ export default function NotificationToast() {
   useEffect(() => {
     if (!user) return;
 
-    // Simplified query to avoid composite index requirements
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', user.uid),
-      limit(20)
-    );
+    const fetchNotifs = async () => {
+      try {
+        const list = await api.notifications.list();
+        const unread = list
+          .filter((n: any) => !n.isRead)
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 3);
+        setNotifications(unread);
+      } catch (err) {
+        console.error("Fetch notifications failed locally", err);
+      }
+    };
 
-    const unsub = onSnapshot(q, (snap) => {
-      const docs = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as AppNotification))
-        .filter(n => !n.isRead)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 3);
-      setNotifications(docs);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'notifications (toast)'));
-
-    return () => unsub();
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 10000); // Poll every 10s
+    return () => clearInterval(interval);
   }, [user]);
 
   const markAsRead = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'notifications', id), { isRead: true });
+      await api.notifications.markAsRead(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (e) {
       console.error(e);
     }

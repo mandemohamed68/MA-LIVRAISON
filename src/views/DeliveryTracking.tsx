@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { db } from '../lib/firebase';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { doc, onSnapshot, updateDoc, collection, deleteDoc } from 'firebase/firestore';
+import { api } from '../services/apiService';
 import { DeliveryRequest, UserProfile } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
@@ -70,33 +68,39 @@ export default function DeliveryTracking() {
 
   useEffect(() => {
     if (!deliveryId) return;
-    const unsub = onSnapshot(doc(db, 'deliveries', deliveryId), (snap) => {
-      if (snap.exists()) {
-        const data = { id: snap.id, ...snap.data() } as DeliveryRequest;
-        setDelivery(data);
-        if (data.driverId) {
-          getDriverInfo(data.driverId);
+
+    const fetchData = async () => {
+      try {
+        const deliveries = await api.deliveries.list();
+        const found = deliveries.find((d: any) => d.id === deliveryId);
+        if (found) {
+          setDelivery(found);
+          if (found.driverId) {
+            const driversList = await api.admin.users.list();
+            const dInfo = driversList.find((u: any) => u.userId === found.driverId);
+            if (dInfo) setDriver(dInfo);
+          }
+          if (found.status === 'pending') {
+            const bidsList = await api.deliveries.bids.list(deliveryId);
+            setBids(bidsList);
+          }
+        } else {
+          setDelivery(null);
         }
-      } else {
-        setDelivery(null);
+      } catch (err) {
+        console.error("Local API fetch failed in tracking", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, (err) => { 
-      handleFirestoreError(err, OperationType.GET, `deliveries/${deliveryId}`);
-      setLoading(false); 
-    });
+    };
 
-    const unsubBids = onSnapshot(collection(db, 'deliveries', deliveryId, 'bids'), (snap) => {
-      setBids(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `deliveries/${deliveryId}/bids`));
-
-    return () => { unsub(); unsubBids(); };
+    fetchData();
+    const interval = setInterval(fetchData, 8000); // Polling every 8s
+    return () => clearInterval(interval);
   }, [deliveryId]);
 
-  const getDriverInfo = (driverId: string) => {
-     onSnapshot(doc(db, 'users', driverId), (snap) => {
-         if (snap.exists()) setDriver(snap.data() as UserProfile);
-     }, (err) => handleFirestoreError(err, OperationType.GET, `users/${driverId}`));
+  const getDriverInfo = async (driverId: string) => {
+    // Already handled in fetchData loop for consistency
   };
 
   const handlePayBid = async (method: string, transactionId?: string, isVerified?: boolean) => {
@@ -112,7 +116,7 @@ export default function DeliveryTracking() {
       const pickupCode = Math.random().toString(36).substring(2, 6).toUpperCase();
       const deliveryCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-      await updateDoc(doc(db, 'deliveries', delivery.id), {
+      await api.deliveries.update(delivery.id, {
         status: 'accepted',
         driverId: paymentBid.driverId,
         driverName: paymentBid.driverName,
@@ -127,9 +131,10 @@ export default function DeliveryTracking() {
       });
       setShowPaymentModal(false);
       setPaymentBid(null);
+      alert('Paiement enregistré sur le serveur local !');
     } catch (e) {
       console.error(e);
-      alert('Erreur de paiement');
+      alert('Erreur de paiement sur le serveur local.');
     }
   };
 
@@ -170,11 +175,11 @@ export default function DeliveryTracking() {
     if(!deliveryId) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'deliveries', deliveryId));
+      await api.deliveries.delete(deliveryId);
       navigate('/client', { replace: true });
     } catch (error: any) {
       console.error("Delete Error", error);
-      alert("Erreur de suppression : " + (error.code || error.message));
+      alert("Erreur de suppression locale : " + (error.message || 'Erreur inconnue'));
       setIsDeleting(false);
       setShowDeleteConfirm(false);
     }
@@ -185,12 +190,16 @@ export default function DeliveryTracking() {
     setIsBoosting(true);
     try {
       const newCost = (delivery.cost || 0) + 200;
-      await updateDoc(doc(db, 'deliveries', delivery.id), { 
+      await api.deliveries.update(delivery.id, { 
         cost: newCost, 
         clientProposedPrice: newCost,
         boostAmount: (delivery.boostAmount || 0) + 200,
         updatedAt: new Date().toISOString() 
       });
+      alert('Course boostée localement !');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors du boost local.');
     } finally {
       setIsBoosting(false);
     }

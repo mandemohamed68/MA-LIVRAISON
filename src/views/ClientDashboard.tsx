@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, limit } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { api } from '../services/apiService';
 import { Link, useNavigate } from 'react-router-dom';
 import { Package, Clock, CheckCircle, Navigation, User, Home, Plus, ChevronRight, X, Copy, Share } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { LoadingScreen } from '../components/LoadingScreen';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
 import PaymentModal from '../components/PaymentModal';
@@ -65,62 +62,53 @@ export default function ClientDashboard() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Poll every 10s
+    const interval = setInterval(fetchData, 8000); // Poll every 8s
 
-    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId));
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
-        jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setDeliveries(jobs);
-      },
-      (error) => {
-        console.warn("Firestore listener failed, using local polling only", error);
-      }
-    );
     return () => {
       clearInterval(interval);
-      unsubscribe();
     };
   }, [profile]);
 
   const activeDeliveries = deliveries.filter(d => ['pending', 'accepted', 'picked_up', 'ready_for_pickup'].includes(d.status));
   const recentDeliveries = deliveries.filter(d => !activeDeliveries.some(ad => ad.id === d.id)).slice(0, 3);
 
-      const copyCode = (code: string | undefined) => {
-        if(code) {
-          navigator.clipboard.writeText(code);
-          alert('Code copié !');
-        }
-      };
+  const copyCode = (code: string | undefined) => {
+    if(code) {
+      navigator.clipboard.writeText(code);
+      alert('Code copié !');
+    }
+  };
 
-      const handlePay = async (method: string, reference?: string, isVerified?: boolean) => {
-        if (!paymentDelivery) return;
-        try {
-          const isCash = method === 'cash';
-          const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
-          const isUssd = method.includes('ussd');
-          
-          const shouldAutoConfirm = isVerified || isCash || (isDemo && !isUssd && method !== 'aggregator');
-          
-          const pickupCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-          const deliveryCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const handlePay = async (method: string, reference?: string, isVerified?: boolean) => {
+    if (!paymentDelivery) return;
+    try {
+      const isCash = method === 'cash';
+      const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
+      const isUssd = method.includes('ussd');
+      
+      const shouldAutoConfirm = isVerified || isCash || (isDemo && !isUssd && method !== 'aggregator');
+      
+      const pickupCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const deliveryCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-          const updates: any = {
-            paymentMethod: method,
-            paymentReference: reference || null,
-            paymentStatus: shouldAutoConfirm ? 'confirmed' : 'pending_approval',
-            isPaid: shouldAutoConfirm,
-            pickupCode,
-            deliveryCode,
-            updatedAt: new Date().toISOString()
-          };
-          await updateDoc(doc(db, 'deliveries', paymentDelivery.id), updates);
-          setPaymentDelivery(null);
-        } catch (e) {
-          console.error(e);
-        }
+      const updates: any = {
+        paymentMethod: method,
+        paymentReference: reference || null,
+        paymentStatus: shouldAutoConfirm ? 'confirmed' : 'pending_approval',
+        isPaid: shouldAutoConfirm ? 1 : 0,
+        pickupCode,
+        deliveryCode,
+        updatedAt: new Date().toISOString()
       };
+      await api.deliveries.update(paymentDelivery.id, updates);
+      setPaymentDelivery(null);
+      // Refresh
+      const jobs = await api.deliveries.list();
+      setDeliveries(jobs);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const getPaymentLogo = (method?: string | null) => {
     if (!method) return null;

@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc, limit } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { api } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest } from '../types';
 import { Package, Calendar, MapPin, CheckCircle, ChevronRight, Search, X, FileText, Trash2 } from 'lucide-react';
@@ -21,23 +19,26 @@ export default function DeliveryHistory() {
   useEffect(() => {
     if (!profile) return;
 
-    const q = query(
-      collection(db, 'deliveries'),
-      where(profile.role === 'client' ? 'clientId' : 'driverId', '==', profile.userId),
-      where('status', 'in', ['delivered', 'cancelled'])
-    );
+    const fetchHistory = async () => {
+      try {
+        const jobs = await api.deliveries.list();
+        const filtered = jobs.filter(d => 
+          (profile.role === 'client' ? d.clientId === profile.userId : d.driverId === profile.userId) &&
+          ['delivered', 'cancelled'].includes(d.status)
+        );
+        filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setDeliveries(filtered);
+      } catch (err) {
+        console.error("Local history fetch failed", err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));
-      jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setDeliveries(jobs);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'deliveries (history)');
-      setLoading(false);
-    });
+    fetchHistory();
+    const interval = setInterval(fetchHistory, 10000); // Poll history every 10s
 
-    return () => unsubscribe();
+    return () => clearInterval(interval);
   }, [profile]);
 
   if (loading) return (

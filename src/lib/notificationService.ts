@@ -1,5 +1,4 @@
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { api } from '../services/apiService';
 import { AppNotification } from '../types';
 
 export const sendNotification = async (
@@ -10,7 +9,7 @@ export const sendNotification = async (
   link?: string
 ) => {
   try {
-    await addDoc(collection(db, 'notifications'), {
+    await api.notifications.create({
       userId,
       title,
       message,
@@ -20,6 +19,6 @@ export const sendNotification = async (
       createdAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error("Error sending notification:", error);
+    console.error("Error sending notification via local API:", error);
   }
 };

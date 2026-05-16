@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Truck, User, LogOut, Package, ShieldCheck, MapPin, Clock, CheckCircle, Navigation, Menu, X } from 'lucide-react';
+import { User, LogOut, Package, ShieldCheck, MapPin, CheckCircle, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import NotificationBell from './NotificationBell';
 import { cn } from '../lib/utils';
 import { AppLanguage } from '../lib/translations';
-import { db } from '../lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { api } from '../services/apiService';
 import { AppConfig } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 export default function Navbar() {
   const { user, profile, logout, language, setLanguage, t, isMasterAdmin } = useAuth();
@@ -19,15 +17,17 @@ export default function Navbar() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'app_config'), 
-      (snap) => {
-        if (snap.exists()) setAppConfig(snap.data() as AppConfig);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.GET, 'settings/app_config');
+    const fetchConfig = async () => {
+      try {
+        const config = await api.config.get('app_config').catch(() => null);
+        if (config) setAppConfig(config);
+      } catch (err) {
+        console.warn("Local config fetch failed in navbar");
       }
-    );
-    return () => unsub();
+    };
+    fetchConfig();
+    const interval = setInterval(fetchConfig, 30000); // Only poll every 30s
+    return () => clearInterval(interval);
   }, []);
 
   const isAdminView = location.pathname.startsWith('/admin') && (isMasterAdmin || profile?.role === 'admin' || profile?.role === 'superadmin');
