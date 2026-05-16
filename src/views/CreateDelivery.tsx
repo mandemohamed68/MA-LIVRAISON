@@ -19,7 +19,7 @@ import {
   query,
   where,
   onSnapshot,
-} from 'firebase/firestore';
+} from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
 import {
   Navigation,

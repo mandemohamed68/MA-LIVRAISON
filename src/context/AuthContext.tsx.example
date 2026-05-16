@@ -1,0 +1,135 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { UserProfile, UserRole, AppConfig } from '../types';
+import { AppLanguage, translations } from '../lib/translations';
+import { api } from '../services/apiService';
+
+interface AuthContextType {
+  user: any | null;
+  profile: UserProfile | null;
+  loading: boolean;
+  isAuthReady: boolean;
+  isMasterAdmin: boolean;
+  language: AppLanguage;
+  setLanguage: (lang: AppLanguage) => void;
+  appConfig: AppConfig | null;
+  t: (key: keyof typeof translations.fr, params?: Record<string, any>) => string;
+  login: () => Promise<void>;
+  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  registerWithEmail: (email: string, pass: string, name: string, role: UserRole, extra?: Partial<UserProfile>) => Promise<void>;
+  logout: () => Promise<void>;
+  updateRole: (role: UserRole) => Promise<void>;
+  updateProfile: (data: Partial<UserProfile>) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail.com'];
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<any | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [language, setLanguage] = useState<AppLanguage>('fr');
+
+  const isMasterAdmin = profile?.email ? ADMIN_EMAILS.includes(profile.email) : false;
+
+  const t = (key: keyof typeof translations.fr, params?: Record<string, any>) => {
+    let text = translations[language][key] || translations.fr[key] || key;
+    if (params) {
+      Object.keys(params).forEach(p => {
+        text = (text as string).replace(`\${${p}}`, params[p]);
+      });
+    }
+    return text;
+  };
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const profileData = await api.profile.get();
+          setProfile(profileData);
+          setUser({ uid: profileData.userId, email: profileData.email });
+        } catch (err) {
+          localStorage.removeItem('auth_token');
+        }
+      }
+
+      try {
+        const config = await api.config.get('app_config');
+        setAppConfig(config);
+      } catch (err) {
+        console.error("Config load failed", err);
+      }
+
+      setIsAuthReady(true);
+    };
+
+    initAuth();
+  }, []);
+
+  const loginWithEmail = async (email: string, pass: string) => {
+    setLoading(true);
+    try {
+      const { token, user: userData } = await api.auth.login({ email, password: pass });
+      localStorage.setItem('auth_token', token);
+      const profileData = await api.profile.get();
+      setProfile(profileData);
+      setUser({ uid: profileData.userId, email: profileData.email });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const registerWithEmail = async (email: string, pass: string, name: string, role: UserRole, extra?: Partial<UserProfile>) => {
+    setLoading(true);
+    try {
+      const { token } = await api.auth.register({ email, password: pass, name, role, ...extra });
+      localStorage.setItem('auth_token', token);
+      const profileData = await api.profile.get();
+      setProfile(profileData);
+      setUser({ uid: profileData.userId, email: profileData.email });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    localStorage.removeItem('auth_token');
+    setUser(null);
+    setProfile(null);
+  };
+
+  const updateRole = async (role: UserRole) => {
+    await api.profile.update({ role });
+    setProfile(prev => prev ? { ...prev, role } : null);
+  };
+
+  const updateProfile = async (data: Partial<UserProfile>) => {
+    await api.profile.update(data);
+    setProfile(prev => prev ? { ...prev, ...data } : null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ 
+      user, profile, loading, isAuthReady, isMasterAdmin, language, setLanguage, t, 
+      appConfig,
+      login: () => Promise.resolve(), // Google login not supported in simple local version
+      loginWithEmail, registerWithEmail,
+      logout, updateRole, updateProfile 
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

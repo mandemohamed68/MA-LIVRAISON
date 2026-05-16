@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { UserRole } from '../types';
 import { LoadingScreen } from '../components/LoadingScreen';
-import logoUrl from '../assets/logo.png';
 
 type AuthMode = 'login' | 'register' | 'phone';
 
@@ -226,7 +225,7 @@ export default function LandingView() {
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-12">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-2">
-              <img src={logoUrl} alt="Livra Express" className="w-full h-full object-contain" />
+              <img src="/splash.png" alt="Livra Express" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, setDoc, getDoc, orderBy, limit } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest, CommissionSettings } from '../types';
@@ -286,7 +286,7 @@ export default function DriverDashboard() {
       }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (pending)'));
 
-    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId)), (snap) => {
+    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId), orderBy('createdAt', 'desc'), limit(200)), (snap) => {
       const allMyJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryRequest));
       const actives = allMyJobs.filter(j => ['accepted', 'picked_up', 'delivered_pending', 'picked_up_pending'].includes(j.status) || (j.status === 'accepted' || j.status === 'picked_up')); // Wait, logic might be simpler
       

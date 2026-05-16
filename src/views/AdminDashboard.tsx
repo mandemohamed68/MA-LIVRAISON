@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, getDocs, addDoc, writeBatch, Timestamp, serverTimestamp, limit } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -136,7 +136,7 @@ export default function AdminDashboard() {
     };
 
     const unsubDeliveries = onSnapshot(
-      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc')), 
+      query(collection(db, 'deliveries'), orderBy('createdAt', 'desc'), limit(500)), 
       (snap) => {
         setDeliveries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));
       },
@@ -144,7 +144,7 @@ export default function AdminDashboard() {
     );
 
     const unsubUsers = onSnapshot(
-      collection(db, 'users'), 
+      query(collection(db, 'users'), limit(1000)), 
       (snap) => {
         setUsers(snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile)));
       },
@@ -526,7 +526,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!selectedChatDeliveryId) return;
-    const q = query(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), orderBy('createdAt', 'asc'));
+    const q = query(collection(db, `deliveries/${selectedChatDeliveryId}/messages`), orderBy('createdAt', 'asc'), limit(200));
     const unsub = onSnapshot(q, (snap) => {
       setChatMessages(snap.docs.map(doc => {
         const data = doc.data();

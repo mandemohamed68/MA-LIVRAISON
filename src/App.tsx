@@ -180,9 +180,24 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const [quotaError, setQuotaError] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleQuotaError = () => {
+      setQuotaError(true);
+    };
+    window.addEventListener('firestore-quota-error', handleQuotaError as EventListener);
+    return () => window.removeEventListener('firestore-quota-error', handleQuotaError as EventListener);
+  }, []);
+
   return (
     <AuthProvider>
       <Router>
+        {quotaError && (
+          <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white p-3 text-center text-sm font-medium shadow-lg">
+            Service temporairement indisponible (Quota atteint). Veuillez réessayer plus tard.
+          </div>
+        )}
         <AppRoutes />
       </Router>
     </AuthProvider>

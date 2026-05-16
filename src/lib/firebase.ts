@@ -4,5 +4,14 @@ import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+
+// Optimisation Professionnelle :
+// 1. Le cache local en mémoire est activé par défaut par Firebase, ce qui maintient les quotas bas
+//    pendant une session active.
+// 2. Des limites (limit) ont été ajoutées sur les requêtes pour réduire le nombre de lectures.
+// Note: Le cache persistant (IndexedDB) peut causer des erreurs "client is offline" dans 
+// certains environnements restreints (comme les iframes), nous l'avons donc désactivé pour la stabilité.
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
 export const auth = getAuth(app);
+

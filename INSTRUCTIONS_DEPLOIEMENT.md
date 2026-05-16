@@ -1,67 +1,90 @@
-# Instructions de Déploiement Local Intégral (Sans quotas Firebase)
+# Guide de Déploiement Local - Livra Express
 
-L'application a été mise à jour ! Elle ne dépend plus de Firestore (et de ses quotas éventuels) mais inclut un **serveur Node.js (Express)** couplé à une base de données **SQLite locale (`local.db`)**. Vos données résident désormais entièrement sur votre machine, sans blocage lié au cloud.
+Ce guide explique comment déployer l'application Livra Express sur un serveur local Debian 12 sans dépendre de Firebase.
 
-## 1. Comment Lancer l'Application en Local
+## Prérequis
 
-Pour exécuter cette plateforme sur votre propre réseau (par exemple dans votre entreprise à Ouagadougou) :
+- Un serveur avec **Debian 12**
+- **Node.js 18+** installé
+- **npm** ou **yarn**
+- **SQLite3** ou un moteur SQL compatible
+- Un serveur web (Nginx recommandé pour le reverse proxy)
 
-1.  Assurez-vous d'avoir installé **Node.js** (version 18+ recommandée) depuis https://nodejs.org.
-2.  Téléchargez (exportez) le projet sur votre machine (fichier ZIP) et extrayez-le.
-3.  Ouvrez un terminal ou invite de commandes dans le dossier extrait.
-4.  Installez **PM2** globalement sur votre machine (optionnel mais recommandé pour que l'app tourne en arrière-plan) :
-    ```bash
-    npm install -g pm2
-    ```
-5.  Exécutez la commande pour installer les dépendances du projet :
-    ```bash
-    npm install
-    ```
-6.  Construisez l'application en mode production :
-    ```bash
-    npm run build
-    ```
-7.  Lancez le serveur avec PM2 (qui utilisera la configuration `ecosystem.config.cjs` et le PORT 3005) :
-    ```bash
-    pm2 start ecosystem.config.cjs
-    ```
-    Si vous devez redémarrer l'application à l'avenir (ou après des modifications), tapez simplement :
-    ```bash
-    pm2 restart all
-    ```
-    *(Si vous ne souhaitez pas utiliser PM2, vous pouvez juste faire `PORT=3005 npm start`)*
-8.  L'application sera accessible sur `http://localhost:3005`. Si vous souhaitez l'exposer à votre réseau local (téléphones, autres PC de votre bureau), remplacez `localhost` par l'adresse IP de votre machine (ex: `http://192.168.1.50:3005`).
+## Étape 1 : Préparation de l'environnement
 
-## 2. Accès hors ligne et Base de données
-- Tout votre historique (livraisons, devis, utilisateurs) sera sauvegardé dans le fichier **`local.db`** présent à la racine du projet. 
-- Pensez à faire une sauvegarde régulière du fichier `local.db` (en le copiant sur une clé USB ou un disque dur externe).
+1. Installez Node.js :
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+   sudo apt-get install -y nodejs
+   ```
 
-## 3. Comment Générer l'APK Android (Application Mobile)
+2. Clonez votre projet et installez les dépendances :
+   ```bash
+   cd /var/www/livra-express
+   npm install
+   ```
 
-L'application Mobile (Android) a été configurée avec **Capacitor**. Le code pour l'application a aussi été mis à jour pour se connecter au serveur backend plutôt qu'à Firebase afin d'éviter les quotas.
+## Étape 2 : Configuration
 
-> **IMPORTANT POUR LE MODE MOBILE :** 
-> Puisqu'on ne dépend plus des serveurs centraux Firebase, votre téléphone Android aura besoin de communiquer avec votre ordinateur (serveur). Plus tard, si vous mettez ce système sur un serveur distant, vous pourrez changer l'adresse de connexion API.
+1. Copiez le fichier `.env.example` vers `.env` :
+   ```bash
+   cp .env.example .env
+   ```
+2. Modifiez le fichier `.env` pour définir vos secrets :
+   - `JWT_SECRET` : Une clé forte pour la sécurité des sessions.
+   - `DATABASE_URL` : Chemin vers votre fichier `local.db` (par défaut la racine).
+   - `SAPPAY_*` : Vos identifiants de paiement Sappay.
 
-Voici les étapes pour générer l'APK :
+## Étape 3 : Initialisation de la Base de Données
 
-1. Téléchargez et installez **Android Studio**.
-2. Dans le terminal du projet sur votre PC, assurez-vous que tout est compilé avec la commande :
+Le serveur initialise automatiquement le fichier `local.db` au premier lancement. Pour importer des données manuellement, vous pouvez utiliser le fichier `schema.sql.example`.
+
+```bash
+sqlite3 local.db < schema.sql.example
+```
+
+## Étape 4 : Compilation et Lancement
+
+1. Build de l'application :
    ```bash
    npm run build
    ```
-3. Synchronisez les fichiers web compilés vers le projet Android :
-   ```bash
-   npx cap sync
-   ```
-4. Ouvrez le projet dans Android Studio :
-   ```bash
-   npx cap open android
-   ```
-5. Dans Android Studio, patientez pour la synchronisation Gradle (cela peut prendre du temps au Burkina Faso selon votre connexion, la première fois).
-6. Allez dans le menu : **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
-7. Quand la notification s'affiche, cliquez sur **"locate"** pour obtenir votre fichier `.apk` que vous pouvez installer sur les téléphones des livreurs et clients.
 
-## Bon à savoir (Réalités du Burkina Faso)
-- Les notifications Web, le suivi des livreurs, l'acceptation de devis (avec les options Orange Money, Moov Money, Coris, Sank) fonctionnent désormais via votre serveur central SQLite. Cela permet une totale indépendance.
-- Sauvegardez bien le projet de base et votre base de données `local.db`.
+2. Lancement du serveur :
+   ```bash
+   npm start
+   ```
+
+## Étape 5 : Configuration Nginx (Reverse Proxy)
+
+Créez un fichier de configuration `/etc/nginx/sites-available/livra` :
+
+```nginx
+server {
+    listen 80;
+    server_name votre-domaine.com;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+Activez le site et redémarrez Nginx :
+```bash
+sudo ln -s /etc/nginx/sites-available/livra /etc/nginx/sites-enabled/
+sudo systemctl restart nginx
+```
+
+## Notes sur l'authentification local
+
+L'application utilise désormais un système JWT local. Les utilisateurs doivent se créer un compte via l'interface. Pour le premier administrateur, vous devrez probablement modifier manuellement le rôle dans la base de données :
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'votre-email@admin.com';
+```

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, limit } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
@@ -52,7 +52,7 @@ export default function ClientDashboard() {
       setLoading(false);
       return;
     }
-    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId), orderBy('createdAt', 'desc'), limit(100));
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         setDeliveries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest)));

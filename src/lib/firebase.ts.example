@@ -1,0 +1,6 @@
+// Ce fichier est un exemple de remplacement pour lib/firebase.ts en mode local
+// Dans la version locale sans Firebase, ce fichier ne serait plus utilisé 
+// au profit de src/services/apiService.ts
+
+export const db = {};
+export const auth = {};

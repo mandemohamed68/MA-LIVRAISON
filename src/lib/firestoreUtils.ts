@@ -45,5 +45,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
   const errorString = JSON.stringify(errInfo);
   console.error('Firestore Error: ', errorString);
-  throw new Error(errorString);
+  
+  // Prevent crashing the app on Quota or offline issues
+  const isTargetError = errInfo.error.includes('resource-exhausted') || errInfo.error.includes('client is offline');
+  if (!isTargetError) {
+    throw new Error(errorString);
+  } else {
+    // Optionally trigger a custom event or store to show a banner in the UI
+    window.dispatchEvent(new CustomEvent('firestore-quota-error', { detail: errInfo }));
+  }
 }
