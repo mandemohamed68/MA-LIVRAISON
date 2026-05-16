@@ -52,7 +52,7 @@ export default function ClientDashboard() {
       setLoading(false);
       return;
     }
-    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId), limit(100));
+    const q = query(collection(db, 'deliveries'), where('clientId', '==', profile.userId));
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DeliveryRequest));

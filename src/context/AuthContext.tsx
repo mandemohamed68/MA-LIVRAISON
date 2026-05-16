@@ -211,7 +211,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return await signInWithPhoneNumber(auth, phone, verifier);
   };
 
-  const logout = () => signOut(auth);
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("SignOut failed, forcing redirect", e);
+      window.location.href = '/';
+    }
+  };
 
   const updateRole = async (role: UserRole) => {
     if (!user) return;

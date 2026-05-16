@@ -24,8 +24,7 @@ export default function DeliveryHistory() {
     const q = query(
       collection(db, 'deliveries'),
       where(profile.role === 'client' ? 'clientId' : 'driverId', '==', profile.userId),
-      where('status', 'in', ['delivered', 'cancelled']),
-      limit(100)
+      where('status', 'in', ['delivered', 'cancelled'])
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

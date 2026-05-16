@@ -286,7 +286,7 @@ export default function DriverDashboard() {
       }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'deliveries (pending)'));
 
-    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId), limit(200)), (snap) => {
+    const unsubActive = onSnapshot(query(collection(db, 'deliveries'), where('driverId', '==', profile.userId)), (snap) => {
       const allMyJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryRequest));
       allMyJobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       

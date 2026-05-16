@@ -256,8 +256,16 @@ export default function CreateDelivery() {
 
   useEffect(() => {
     getDoc(doc(db, "settings", "commissions")).then((snap) => {
-      if (snap.exists())
+      if (snap.exists()) {
         setCommissionSettings(snap.data() as CommissionSettings);
+      } else {
+        setCommissionSettings({
+          platformFeePercent: 10,
+          driverMinBalance: 1000,
+          withdrawalMinAmount: 5000,
+          maxSimultaneousDeliveries: 3
+        });
+      }
     });
 
     let unsubRecent: (() => void) | undefined;
