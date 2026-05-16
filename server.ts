@@ -625,6 +625,27 @@ async function startServer() {
 
   seedConfig();
 
+  const seedAdmin = async () => {
+    const adminEmail = "mandemohamed68@gmail.com";
+    const adminPass = "mm@27071986@";
+    
+    try {
+      const existingAdmin = db.prepare("SELECT * FROM users WHERE email = ?").get(adminEmail);
+      if (!existingAdmin) {
+        console.log("Seeding default super-admin...");
+        const hashedPassword = await bcrypt.hash(adminPass, 10);
+        const userId = uuidv4();
+        db.prepare("INSERT INTO users (id, userId, name, email, password, role, accountStatus) VALUES (?, ?, ?, ?, ?, ?, ?)")
+          .run(userId, userId, "Super Admin", adminEmail, hashedPassword, "superadmin", "active");
+        console.log("Default super-admin created successfully.");
+      }
+    } catch (err) {
+      console.error("Failed to seed admin:", err);
+    }
+  };
+
+  seedAdmin();
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
