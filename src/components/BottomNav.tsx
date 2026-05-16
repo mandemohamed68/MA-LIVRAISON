@@ -12,7 +12,7 @@ export default function BottomNav() {
   if (location.pathname.startsWith('/admin') && profile.role !== 'admin' && profile.role !== 'superadmin' && !isMasterAdmin) return null;
 
   const isDriver = profile.role === 'driver';
-  const isAdmin = profile.role === 'admin' || profile.role === 'superadmin' || isMasterAdmin;
+  const isAdmin = profile.role === 'admin' || profile.role === 'superadmin';
 
   const navItems = isDriver ? [
     { to: '/driver', icon: Home, label: 'ACCUEIL', match: '/driver', exact: true },

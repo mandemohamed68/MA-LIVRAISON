@@ -88,6 +88,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
+    const fallbackConfigTimer = setTimeout(() => {
+      if (!configReady) {
+        configReady = true;
+        checkReady();
+      }
+    }, 2500);
+
     // Auth State Listener
     let unsubProfile: (() => void) | null = null;
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
@@ -145,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
+      clearTimeout(fallbackConfigTimer);
       unsubConfig();
       unsubAuth();
       if (unsubProfile) unsubProfile();
@@ -207,7 +215,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateRole = async (role: UserRole) => {
     if (!user) return;
-    await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
+    try {
+      await setDoc(doc(db, 'users', user.uid), { role }, { merge: true });
+    } catch (e) {
+      console.warn("Could not update role in Firestore, updating locally only", e);
+    }
     setProfile(prev => prev ? { ...prev, role } : null);
   };
 

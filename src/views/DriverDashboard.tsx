@@ -396,6 +396,8 @@ export default function DriverDashboard() {
     return Math.floor((dailyTotal * share) / 100);
   }, [deliveredJobs, commissionSettings]);
 
+  const [isBidding, setIsBidding] = useState(false);
+
   const submitBid = async (jobId: string, isDirectAccept = false) => {
     if (!profile) return;
     const maxSimultaneous = commissionSettings?.maxSimultaneousDeliveries || 2;
@@ -406,6 +408,7 @@ export default function DriverDashboard() {
     const job = pendingJobs.find(j => j.id === jobId);
     if (!job) return;
 
+    setIsBidding(true);
     if (isDirectAccept) {
       try {
         await updateDoc(doc(db, 'deliveries', jobId), {
@@ -421,13 +424,14 @@ export default function DriverDashboard() {
       } catch (e) {
         setToastMessage("Erreur d'acceptation");
       }
+      setIsBidding(false);
       return;
     }
 
     // Bid logic
     const price = Number(bidPrice);
     const time = Number(bidTime);
-    if (!price || !time) { setToastMessage("Remplissez prix et temps"); return; }
+    if (!price || !time) { setToastMessage("Remplissez prix et temps"); setIsBidding(false); return; }
 
     try {
       await setDoc(doc(db, 'deliveries', jobId, 'bids', profile.userId), {
@@ -444,6 +448,7 @@ export default function DriverDashboard() {
       setSelectedPendingJob(null);
       setBidPrice(''); setBidTime(''); setBidReason('');
     } catch(e) { setToastMessage("Erreur réseau"); }
+    setIsBidding(false);
   };
 
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
@@ -721,7 +726,7 @@ export default function DriverDashboard() {
                    </div>
 
                    {/* Footer Info (Active Mission) */}
-                   <div className="mt-auto pointer-events-none pb-24">
+                   <div className="mt-auto pointer-events-none pb-32">
                        <div className="pointer-events-auto px-4 w-full max-w-sm mx-auto relative">
                           {/* FOCUS MODE BOTTOM SHEET */}
                           {radarMode === 'focus' && focusedJob && !showKeypadFor && (
@@ -897,7 +902,7 @@ export default function DriverDashboard() {
 
                       {/* SEARCH MODE BOTTOM SHEET (Selected Job) */}
                       {radarMode === 'search' && selectedPendingJob && (
-                        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 z-[110]">
+                      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-32 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 z-[110]">
                            <div className="flex justify-between items-start mb-4">
                               <div>
                                 <div className="flex gap-2">
@@ -936,13 +941,13 @@ export default function DriverDashboard() {
                            </div>
 
                            <div className="flex gap-2">
-                              <button onClick={() => submitBid(selectedPendingJob.id, true)} className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-800 shadow-xl shadow-slate-900/20 active:scale-95 transition-all">
-                                 Accepter
+                              <button onClick={() => submitBid(selectedPendingJob.id, true)} disabled={isBidding} className={cn("flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-900/20 active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-slate-800")}>
+                                 {isBidding ? "..." : "Accepter"}
                               </button>
                               <button onClick={() => {
                                  setBidPrice(selectedPendingJob.clientProposedPrice || selectedPendingJob.cost || '');
                                  setRadarMode('search'); // keep search mode
-                              }} className="flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-orange-100 active:scale-95 transition-all text-center">
+                              }} disabled={isBidding} className={cn("flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-orange-100")}>
                                  Négocier
                               </button>
                               <button onClick={() => handleRejectJob(selectedPendingJob.id)} className="w-12 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-100 active:scale-95 transition-all" title="Refuser">
@@ -979,7 +984,7 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 100, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-32 left-4 right-4 z-[40]"
+                      className="absolute bottom-52 left-4 right-4 z-[40]"
                     >
                       <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
                         <AnimatePresence>
