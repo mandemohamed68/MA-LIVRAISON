@@ -5,7 +5,7 @@ module.exports = {
       script: "dist/server.cjs", // Point d'entrée de notre serveur compilé en CJS
       env: {
         NODE_ENV: "production",
-        PORT: 3000 // Vous pouvez changer le port ici si nécessaire
+        PORT: 3006 // Port configuré à 3006 au lieu de 3000
       },
       instances: 1, // Changez en "max" si vous voulez un cluster selon vos CPU
       autorestart: true,
