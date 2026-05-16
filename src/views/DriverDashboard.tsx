@@ -897,7 +897,7 @@ export default function DriverDashboard() {
 
                       {/* SEARCH MODE BOTTOM SHEET (Selected Job) */}
                       {radarMode === 'search' && selectedPendingJob && (
-                        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 z-[60]">
+                        <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 z-[110]">
                            <div className="flex justify-between items-start mb-4">
                               <div>
                                 <div className="flex gap-2">

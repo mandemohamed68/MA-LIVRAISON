@@ -79,9 +79,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       configReady = true;
       checkReady();
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'settings/app_config');
-      configReady = true; // Still allow boot, but might use defaults
+      configReady = true; // Set to true BEFORE calling handleFirestoreError
       checkReady();
+      try {
+        handleFirestoreError(error, OperationType.GET, 'settings/app_config');
+      } catch (e) {
+        console.warn("Firestore error during config boot:", e);
+      }
     });
 
     // Auth State Listener
@@ -93,39 +97,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unsubProfile = null;
       }
 
+      const finalizeAuth = () => {
+        authHandled = true;
+        checkReady();
+      };
+
       if (authUser) {
         // First check if user exists, if not create it
         const userRef = doc(db, 'users', authUser.uid);
-        const userDoc = await getDoc(userRef);
-        
-        if (!userDoc.exists()) {
-          const isAdm = authUser.email ? ADMIN_EMAILS.includes(authUser.email) : false;
-          const role: UserRole = isAdm ? 'superadmin' : 'client';
-          const newProfile: UserProfile = {
-            userId: authUser.uid,
-            name: isAdm ? 'Administrateur' : (authUser.displayName || 'Utilisateur'),
-            email: authUser.email || '',
-            role: role,
-            accountStatus: 'active',
-            createdAt: new Date().toISOString(),
-          };
-          await setDoc(userRef, newProfile);
-          setProfile(newProfile);
-        }
-
-        // Setup real-time listener for profile
-        unsubProfile = onSnapshot(userRef, (snap) => {
-          if (snap.exists()) {
-            setProfile(snap.data() as UserProfile);
+        try {
+          const userDoc = await getDoc(userRef);
+          
+          if (!userDoc.exists()) {
+            const isAdm = authUser.email ? ADMIN_EMAILS.includes(authUser.email) : false;
+            const role: UserRole = isAdm ? 'superadmin' : 'client';
+            const newProfile: UserProfile = {
+              userId: authUser.uid,
+              name: isAdm ? 'Administrateur' : (authUser.displayName || 'Utilisateur'),
+              email: authUser.email || '',
+              role: role,
+              accountStatus: 'active',
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(userRef, newProfile);
+            setProfile(newProfile);
           }
-        }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `users/${authUser.uid}`);
-        });
+
+          // Setup real-time listener for profile
+          unsubProfile = onSnapshot(userRef, (snap) => {
+            if (snap.exists()) {
+              setProfile(snap.data() as UserProfile);
+            }
+          }, (error) => {
+            try {
+              handleFirestoreError(error, OperationType.GET, `users/${authUser.uid}`);
+            } catch (e) {
+              console.warn("Firestore error on user profile:", e);
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching user document during auth state change", error);
+        }
       } else {
         setProfile(null);
       }
-      authHandled = true;
-      checkReady();
+      finalizeAuth();
     });
 
     return () => {
