@@ -1,8 +1,33 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 
 const dbPath = process.env.DATABASE_URL || path.join(process.cwd(), 'local.db');
-const db = new Database(dbPath);
+let db = new Database(dbPath);
+
+// Detect if database foreign keys are corrupted by the '_users_old' SQLite bug
+let isCorrupted = false;
+try {
+  db.prepare("SELECT 1 FROM deliveries LIMIT 1").get();
+} catch (err: any) {
+  if (err.message && err.message.includes('_users_old')) {
+    isCorrupted = true;
+  }
+}
+
+if (isCorrupted) {
+  console.warn("Database structure is corrupted by SQLite foreign key bug (_users_old). Auto-rebuilding local.db...");
+  db.close();
+  try {
+    if (fs.existsSync(dbPath)) {
+      fs.unlinkSync(dbPath);
+    }
+  } catch (fsErr) {
+    console.error("Failed to delete corrupted local.db:", fsErr);
+  }
+  // Re-open clean database
+  db = new Database(dbPath);
+}
 
 // Initialize schema
 db.exec(`
@@ -161,8 +186,9 @@ try {
   if (tableInfo && tableInfo.sql && !tableInfo.sql.includes('superadmin')) {
     console.log("Migration: Upgrading 'users' table check constraint to support 'superadmin'...");
     
-    // Disable foreign keys temporarily
+    // Disable foreign keys temporarily and turn on legacy_alter_table to prevent ref corruption
     db.exec("PRAGMA foreign_keys=OFF;");
+    db.exec("PRAGMA legacy_alter_table=ON;");
     
     db.transaction(() => {
       // Rename existing table
@@ -204,6 +230,7 @@ try {
       db.exec("DROP TABLE _users_old;");
     })();
     
+    db.exec("PRAGMA legacy_alter_table=OFF;");
     db.exec("PRAGMA foreign_keys=ON;");
     console.log("Migration: 'users' table check constraint upgraded successfully.");
   }
