@@ -322,27 +322,35 @@ export default function ClientDashboard() {
                             )
                           ) : (
                             (activeDelivery.status === 'accepted' || activeDelivery.status === 'picked_up' || activeDelivery.status === 'ready_for_pickup') && (
-                            <div className="bg-slate-950 rounded-xl p-5 border border-slate-800 shadow-2xl relative group overflow-hidden">
-                                <div className="absolute top-0 right-0 w-16 h-16 bg-white/5 rounded-bl-[40px] pointer-events-none" />
-                                <div className="absolute top-2 right-4">
-                                  <div className="flex gap-1">
-                                    <div className="w-1 h-1 rounded-full bg-emerald-500" />
-                                    <div className="w-1 h-1 rounded-full bg-emerald-500/50" />
+                            <div className="flex flex-col gap-2">
+                              <div className="bg-slate-950 rounded-xl p-5 border border-slate-800 shadow-2xl relative group overflow-hidden">
+                                  <div className="absolute top-0 right-0 w-16 h-16 bg-white/5 rounded-bl-[40px] pointer-events-none" />
+                                  <div className="absolute top-2 right-4">
+                                    <div className="flex gap-1">
+                                      <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                                      <div className="w-1 h-1 rounded-full bg-emerald-500/50" />
+                                    </div>
                                   </div>
-                                </div>
-                                <p className="text-[8px] font-black uppercase tracking-[0.5em] text-slate-400 mb-3 text-center">
-                                  SÉCURITÉ • {activeDelivery.status === 'ready_for_pickup' || activeDelivery.status === 'accepted' ? 'CODE ENLÈVEMENT' : 'CODE LIVRAISON'}
-                                </p>
-                                <div className="flex items-center justify-between gap-4 px-2">
-                                  <div className="flex-1 text-center">
-                                    <p className="text-4xl font-black tracking-[0.2em] text-white font-mono">
-                                      {activeDelivery.status === 'ready_for_pickup' || activeDelivery.status === 'accepted' ? activeDelivery.pickupCode : activeDelivery.deliveryCode}
-                                    </p>
+                                  <p className="text-[8px] font-black uppercase tracking-[0.5em] text-slate-400 mb-3 text-center">
+                                    SÉCURITÉ • {activeDelivery.status === 'ready_for_pickup' || activeDelivery.status === 'accepted' ? 'CODE ENLÈVEMENT' : 'CODE LIVRAISON'}
+                                  </p>
+                                  <div className="flex items-center justify-between gap-4 px-2">
+                                    <div className="flex-1 text-center">
+                                      <p className="text-4xl font-black tracking-[0.2em] text-white font-mono">
+                                        {activeDelivery.status === 'ready_for_pickup' || activeDelivery.status === 'accepted' ? activeDelivery.pickupCode : activeDelivery.deliveryCode}
+                                      </p>
+                                    </div>
+                                    <button onClick={() => copyCode(activeDelivery.status === 'ready_for_pickup' || activeDelivery.status === 'accepted' ? activeDelivery.pickupCode! : activeDelivery.deliveryCode!)} className="p-3.5 bg-white/5 rounded-[18px] hover:bg-white/10 text-white transition-all active:scale-90 border border-white/5 shadow-inner">
+                                      <Copy className="w-5 h-5" />
+                                    </button>
                                   </div>
-                                  <button onClick={() => copyCode(activeDelivery.status === 'ready_for_pickup' || activeDelivery.status === 'accepted' ? activeDelivery.pickupCode! : activeDelivery.deliveryCode!)} className="p-3.5 bg-white/5 rounded-[18px] hover:bg-white/10 text-white transition-all active:scale-90 border border-white/5 shadow-inner">
-                                    <Copy className="w-5 h-5" />
-                                  </button>
-                                </div>
+                              </div>
+                              <button 
+                                onClick={() => navigate(`/delivery/${activeDelivery.id}`)}
+                                className="w-full bg-slate-100 text-slate-900 border border-slate-200 font-black py-3.5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95 mt-1"
+                              >
+                                Ouvrir les détails
+                              </button>
                             </div>
                             )
                           )}

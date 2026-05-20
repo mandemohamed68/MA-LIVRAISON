@@ -113,7 +113,7 @@ export default function DriverDashboard() {
   
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [isDemoGPS, setIsDemoGPS] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatDeliveryId, setChatDeliveryId] = useState<string | null>(null);
@@ -221,23 +221,8 @@ export default function DriverDashboard() {
   }, []);
 
   const requestGeolocation = () => {
-    if (isDemoGPS) {
-      setGpsError(null);
-      setLoading(false);
-      const fallbackCoords = { lat: 12.3714, lng: -1.5197 };
-      setUserLocation(fallbackCoords);
-      if (profile?.role === 'driver') {
-        api.profile.update({
-          currentLocation: fallbackCoords,
-          updatedAt: new Date().toISOString()
-        }).catch(() => {});
-      }
-      return undefined;
-    }
-
     if (!("geolocation" in navigator)) {
-      setGpsError("GPS non supporté. Mode démo activé.");
-      setUserLocation({ lat: 12.3714, lng: -1.5197 });
+      setGpsError("GPS non supporté sur cet appareil.");
       return undefined;
     }
 
@@ -270,27 +255,13 @@ export default function DriverDashboard() {
       },
       (err) => {
         setLoading(false);
-        // Automatically fallback to a real, valid Ouagadougou location for the demo simulation so the app is NOT blocked
-        const fallbackCoords = { lat: 12.3714, lng: -1.5197 };
-        setUserLocation(fallbackCoords);
-        
-        // Let's also update the server profile with these fallback coordinates so they appear on the maps & Admin Live tracking correctly
-        if (profile?.role === 'driver') {
-          api.profile.update({
-            currentLocation: fallbackCoords,
-            updatedAt: new Date().toISOString()
-          }).catch(() => {});
-        }
 
         if (err.code === 1) setGpsError("GPS refusé par le navigateur.");
         else if (err.code === 2) setGpsError("GPS indisponible sur cet appareil.");
         else if (err.code === 3) setGpsError("Timeout lors de la recherche GPS.");
         else setGpsError("Erreur GPS inconnue.");
-        
-        // Always activate Demo mode implicitly when real GPS fails so the user can continue
-        setIsDemoGPS(true);
       },
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
     return id;
   };
@@ -336,7 +307,7 @@ export default function DriverDashboard() {
       if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
       clearInterval(interval);
     };
-  }, [profile, isOnline, isDemoGPS]);
+  }, [profile, isOnline]);
 
   // Keep track of previous active jobs length to only auto-switch when a new job is accepted
   const prevActiveJobsLength = useRef(0);
@@ -635,11 +606,11 @@ export default function DriverDashboard() {
              <motion.div key="radar" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0">
                 {/* MAP BACKGROUND */}
                 <div className="absolute inset-0 z-0 bg-slate-200">
-                   {isDemoGPS && (
+                   {gpsError && (
                      <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[40]">
-                       <div className="bg-amber-500/90 backdrop-blur text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
+                       <div className="bg-rose-500/90 backdrop-blur text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                         Mode Démo / Simulation
+                         {gpsError}
                        </div>
                      </div>
                    )}
@@ -679,18 +650,6 @@ export default function DriverDashboard() {
 
                    {/* Map Controls */}
                    <div className="absolute top-28 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
-                     {isDemoGPS && (
-                       <button 
-                         onClick={() => {
-                           setIsDemoGPS(false);
-                           setGpsError("GPS Réel réactivé. En attente d'autorisation...");
-                         }} 
-                         title="Mode Simulation Actif. Cliquer pour revenir au GPS Réel" 
-                         className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-full shadow-lg flex items-center justify-center hover:bg-emerald-100 transition-all cursor-pointer animate-pulse"
-                       >
-                         <Zap className="w-4 h-4 sm:w-5 sm:h-5 fill-emerald-500" />
-                       </button>
-                     )}
                      <button onClick={() => setIsListView(!isListView)} className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg border border-slate-100 flex items-center justify-center text-slate-700 hover:text-indigo-600 transition-colors">
                         {isListView ? <Compass className="w-4 h-4 sm:w-5 sm:h-5" /> : <List className="w-4 h-4 sm:w-5 sm:h-5" />}
                      </button>
