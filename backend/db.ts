@@ -3,21 +3,41 @@ import path from 'path';
 import fs from 'fs';
 
 const dbPath = process.env.DATABASE_URL || path.join(process.cwd(), 'local.db');
-let db = new Database(dbPath);
-
-// Detect if database foreign keys are corrupted by the '_users_old' SQLite bug
+let db: any;
 let isCorrupted = false;
+
+// Attempt to open and run a health check
 try {
-  db.prepare("SELECT 1 FROM deliveries LIMIT 1").get();
-} catch (err: any) {
-  if (err.message && err.message.includes('_users_old')) {
+  db = new Database(dbPath);
+  
+  // Integrity check
+  const integrity = db.prepare("PRAGMA integrity_check").get() as any;
+  if (integrity && integrity.integrity_check !== 'ok' && integrity['integrity_check'] !== 'ok') {
     isCorrupted = true;
   }
+
+  if (!isCorrupted) {
+    // Quick probe to ensure tables operate
+    try {
+      db.prepare("SELECT 1 FROM deliveries LIMIT 1").get();
+    } catch (err: any) {
+      if (err.message && (err.message.includes('_users_old') || err.message.includes('malformed') || err.message.includes('corrupt') || err.message.includes('disk image'))) {
+        isCorrupted = true;
+      }
+    }
+  }
+} catch (err: any) {
+  console.error("Early database load failure:", err);
+  isCorrupted = true;
 }
 
 if (isCorrupted) {
-  console.warn("Database structure is corrupted by SQLite foreign key bug (_users_old). Auto-rebuilding local.db...");
-  db.close();
+  console.warn("Database structure is corrupted or malformed. Auto-rebuilding a fresh local.db...");
+  if (db) {
+    try {
+      db.close();
+    } catch {}
+  }
   try {
     if (fs.existsSync(dbPath)) {
       fs.unlinkSync(dbPath);
@@ -25,12 +45,13 @@ if (isCorrupted) {
   } catch (fsErr) {
     console.error("Failed to delete corrupted local.db:", fsErr);
   }
-  // Re-open clean database
+  // Open fresh database
   db = new Database(dbPath);
 }
 
-// Initialize schema
-db.exec(`
+// Initialize schema under safety checks
+try {
+  db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     userId TEXT UNIQUE,
@@ -162,6 +183,9 @@ db.exec(`
     FOREIGN KEY(driverId) REFERENCES users(userId)
   );
 `);
+} catch (err) {
+  console.error("Critical error during database schema creation:", err);
+}
 
 // MIGRATIONS: Add columns if they do not exist
 function addColumnIfNotExists(tableName: string, columnName: string, columnDef: string) {
