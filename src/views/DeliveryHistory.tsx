@@ -162,7 +162,8 @@ export default function DeliveryHistory() {
                               onClick={async (e) => {
                                 e.preventDefault();
                                 try {
-                                  await deleteDoc(doc(db, 'deliveries', delivery.id));
+                                  await api.deliveries.delete(delivery.id);
+                                  setDeliveries(prev => prev.filter(d => d.id !== delivery.id));
                                   setDeletingId(null);
                                 } catch (error: any) {
                                   console.error("Delete Error", error);

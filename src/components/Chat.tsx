@@ -23,7 +23,7 @@ export const Chat: React.FC<ChatProps> = ({ deliveryId, currentUser, isOpen, onC
 
     const fetchMessages = async () => {
       try {
-        const msgs = await api.deliveries.messages.get(deliveryId);
+        const msgs = await api.deliveries.messages.list(deliveryId);
         setMessages(msgs);
         setIsLoading(false);
         
@@ -68,7 +68,7 @@ export const Chat: React.FC<ChatProps> = ({ deliveryId, currentUser, isOpen, onC
       }).catch(() => {});
       
       // Refresh messages immediately for better UX
-      const msgs = await api.deliveries.messages.get(deliveryId);
+      const msgs = await api.deliveries.messages.list(deliveryId);
       setMessages(msgs);
     } catch (error) {
       console.error("Error sending message:", error);

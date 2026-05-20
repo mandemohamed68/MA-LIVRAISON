@@ -47,7 +47,16 @@ async function startServer() {
     const token = authHeader.split(" ")[1];
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
-      req.user = decoded;
+      const user = db.prepare("SELECT role, name, email FROM users WHERE userId = ?").get(decoded.userId) as any;
+      if (!user) {
+        return res.status(401).json({ error: "User not found or role mismatch" });
+      }
+      req.user = {
+        ...decoded,
+        role: user.role,
+        name: user.name,
+        email: user.email
+      };
       next();
     } catch (err) {
       res.status(401).json({ error: "Invalid token" });

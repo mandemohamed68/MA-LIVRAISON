@@ -19,7 +19,7 @@ import LiveMap from '../components/LiveMap';
 import { sendNotification } from '../lib/notificationService';
 
 export default function AdminDashboard() {
-  const { profile, logout, isMasterAdmin } = useAuth();
+  const { profile, logout, isMasterAdmin, updateRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -528,6 +528,7 @@ export default function AdminDashboard() {
                              }
                              await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé. Les codes sont disponibles.`, 'success', '/client');
                              alert('Paiement confirmé localement !');
+                             fetchData();
                           } catch(e) { console.error('Error confirming payment:', e); alert('Erreur lors de la confirmation.'); }
                         }}
                         className="px-6 py-3 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
@@ -544,6 +545,7 @@ export default function AdminDashboard() {
                              });
                              await sendNotification(d.clientId, "Paiement Rejeté", `Votre preuve de paiement pour la course #${d.id.slice(-6)} a été rejetée. Veuillez contacter le support.`, 'error', '/client');
                              alert('Paiement rejeté localement !');
+                             fetchData();
                           } catch(e) { console.error('Error rejecting payment:', e); alert('Erreur lors du rejet.'); }
                         }}
                         className="px-4 py-3 bg-white text-rose-500 border border-red-100 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-50 transition-all"
@@ -956,6 +958,7 @@ export default function AdminDashboard() {
                                  accountStatus: action,
                                  updatedAt: new Date().toISOString()
                                });
+                                fetchData();
                              } catch(err) {
                                console.error('Erreur lors de la modification');
                              }
@@ -2444,6 +2447,7 @@ export default function AdminDashboard() {
                                  updatedAt: new Date().toISOString()
                                });
                                setSelectedUser({ ...selectedUser, role: newRole as any });
+                                fetchData();
                              } catch (err) {
                                console.error(err);
                              }

@@ -12,6 +12,7 @@ import { LoadingScreen } from '../components/LoadingScreen';
 import AnnouncementBanner from '../components/AnnouncementBanner';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { Chat } from '../components/Chat';
+import { sendNotification } from '../lib/notificationService';
 
 const mockChartData = [
   { name: 'Lun', amount: 15000 },
@@ -265,6 +266,32 @@ export default function DriverDashboard() {
     return id;
   };
 
+  const fetchData = async () => {
+    if (!profile) return;
+    try {
+      const jobs = await api.deliveries.list();
+      
+      const allMyJobs = jobs.filter((j: any) => j.driverId === profile.userId);
+      allMyJobs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      const activeList = allMyJobs.filter((j: any) => ['accepted', 'picked_up', 'ready_for_pickup'].includes(j.status));
+      const deliveredList = allMyJobs.filter((j: any) => j.status === 'delivered');
+      
+      setActiveJobs(activeList);
+      setDeliveredJobs(deliveredList);
+      
+      if (isOnline) {
+        setPendingJobs(jobs.filter((j: any) => j.status === 'pending'));
+      } else {
+        setPendingJobs([]);
+      }
+    } catch (err) {
+      console.warn("Local API fetch failed in driver dashboard", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!profile) {
       setLoading(false);
@@ -272,31 +299,6 @@ export default function DriverDashboard() {
     }
 
     const watchId = requestGeolocation();
-
-    const fetchData = async () => {
-      try {
-        const jobs = await api.deliveries.list();
-        
-        const allMyJobs = jobs.filter((j: any) => j.driverId === profile.userId);
-        allMyJobs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        
-        const activeList = allMyJobs.filter((j: any) => ['accepted', 'picked_up', 'ready_for_pickup'].includes(j.status));
-        const deliveredList = allMyJobs.filter((j: any) => j.status === 'delivered');
-        
-        setActiveJobs(activeList);
-        setDeliveredJobs(deliveredList);
-        
-        if (isOnline) {
-          setPendingJobs(jobs.filter((j: any) => j.status === 'pending'));
-        } else {
-          setPendingJobs([]);
-        }
-      } catch (err) {
-        console.warn("Local API fetch failed in driver dashboard", err);
-      } finally {
-        setLoading(false);
-      }
-    };
 
     fetchData();
     const interval = setInterval(fetchData, 8000);
@@ -422,6 +424,7 @@ export default function DriverDashboard() {
       await sendNotification(job.clientId, "Livreur assigné", `${profile.name} a accepté la course. Veuillez payer pour générer les codes.`, 'success', `/client`);
       setToastMessage("Mission acceptée !");
       setSelectedPendingJob(null);
+      await fetchData();
     } catch (e) {
       console.error(e);
       setToastMessage("Erreur d'acceptation");
@@ -447,6 +450,7 @@ export default function DriverDashboard() {
       setToastMessage("Offre envoyée !");
       setSelectedPendingJob(null);
       setBidPrice(''); setBidTime(''); setBidReason('');
+      await fetchData();
     } catch(e) { setToastMessage("Erreur réseau"); }
     setIsBidding(false);
   };
@@ -531,6 +535,7 @@ export default function DriverDashboard() {
     setProofImage(null);
     setEnteredCode('');
     setIsProcessingAction(false);
+    await fetchData();
   };
 
   const cancelJob = async (jobId: string) => {
@@ -541,6 +546,7 @@ export default function DriverDashboard() {
       driverName: null, 
       updatedAt: new Date().toISOString()
     });
+    await fetchData();
   };
 
   const toggleOnline = async () => {

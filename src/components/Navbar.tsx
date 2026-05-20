@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, LogOut, Package, ShieldCheck, MapPin, CheckCircle, Menu, X } from 'lucide-react';
+import { User, LogOut, Package, ShieldCheck, MapPin, CheckCircle, Menu, X, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import NotificationBell from './NotificationBell';
 import { cn } from '../lib/utils';
@@ -10,11 +10,22 @@ import { api } from '../services/apiService';
 import { AppConfig } from '../types';
 
 export default function Navbar() {
-  const { user, profile, logout, language, setLanguage, t, isMasterAdmin } = useAuth();
+  const { user, profile, logout, language, setLanguage, t, isMasterAdmin, updateRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+
+  const handleRoleChangeInNavbar = async (role: any) => {
+    try {
+      await updateRole(role);
+      if (role === 'client') navigate('/client');
+      else if (role === 'driver') navigate('/driver');
+      else navigate('/admin');
+    } catch (e) {
+      console.error("Error switching role:", e);
+    }
+  };
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -107,6 +118,33 @@ export default function Navbar() {
         )}
       </AnimatePresence>
 
+      {/* Mini Bar for Master Admin role testing */}
+      {isMasterAdmin && (
+        <div className="bg-black/20 border-b border-white/5 text-orange-200 text-[10px] font-bold uppercase tracking-wider py-1.5 px-6 flex flex-wrap items-center justify-center gap-3">
+          <span className="text-[9px] font-black tracking-widest text-orange-300">Tester Rôle :</span>
+          <div className="flex gap-2">
+            {[
+              { id: 'client', label: 'Client' },
+              { id: 'driver', label: 'Livreur' },
+              { id: 'admin', label: 'Admin' }
+            ].map(r => (
+              <button
+                key={r.id}
+                onClick={() => handleRoleChangeInNavbar(r.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[9px] font-black tracking-wider transition-all cursor-pointer",
+                  profile?.role === r.id 
+                    ? "bg-orange-500 text-white shadow-md" 
+                    : "text-white/60 hover:text-white hover:bg-white/10"
+                )}
+              >
+                {r.label.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="w-full">
         <div className={cn(
           "mx-auto flex justify-between items-center transition-all duration-300",
@@ -115,7 +153,7 @@ export default function Navbar() {
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1.5 shrink-0">
-              <img src="/splash.png" alt="Livra Express" className="w-full h-full object-contain" />
+              <img src="/logo-web.png" alt="Livra Express" className="w-full h-full object-contain" />
             </div>
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">
