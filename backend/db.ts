@@ -138,4 +138,21 @@ db.exec(`
   );
 `);
 
+// MIGRATIONS: Add columns if they do not exist
+function addColumnIfNotExists(tableName: string, columnName: string, columnDef: string) {
+  try {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+    console.log(`Migration: Added ${columnName} to ${tableName}`);
+  } catch (e: any) {
+    // If error is because column already exists, ignore it.
+    if (!e.message.includes('duplicate column name')) {
+      console.warn(`Migration notice for ${tableName}.${columnName}: ${e.message}`);
+    }
+  }
+}
+
+addColumnIfNotExists('users', 'accountStatus', "TEXT DEFAULT 'active'");
+addColumnIfNotExists('users', 'verificationStatus', "TEXT DEFAULT 'pending'");
+addColumnIfNotExists('users', 'isVerified', "INTEGER DEFAULT 0");
+
 export default db;
