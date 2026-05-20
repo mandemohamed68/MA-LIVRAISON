@@ -155,4 +155,60 @@ addColumnIfNotExists('users', 'accountStatus', "TEXT DEFAULT 'active'");
 addColumnIfNotExists('users', 'verificationStatus', "TEXT DEFAULT 'pending'");
 addColumnIfNotExists('users', 'isVerified', "INTEGER DEFAULT 0");
 
+// MIGRATION: Upgrade the check constraint on 'role' in 'users' table to support 'superadmin'
+try {
+  const tableInfo = db.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='users'").get() as { sql: string } | undefined;
+  if (tableInfo && tableInfo.sql && !tableInfo.sql.includes('superadmin')) {
+    console.log("Migration: Upgrading 'users' table check constraint to support 'superadmin'...");
+    
+    // Disable foreign keys temporarily
+    db.exec("PRAGMA foreign_keys=OFF;");
+    
+    db.transaction(() => {
+      // Rename existing table
+      db.exec("ALTER TABLE users RENAME TO _users_old;");
+      
+      // Create new table with updated constraints
+      db.exec(`
+        CREATE TABLE users (
+          id TEXT PRIMARY KEY,
+          userId TEXT UNIQUE,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password TEXT,
+          role TEXT CHECK(role IN ('client', 'driver', 'admin', 'superadmin')) NOT NULL,
+          status TEXT DEFAULT 'offline',
+          accountStatus TEXT DEFAULT 'active',
+          isVerified INTEGER DEFAULT 0,
+          city TEXT,
+          neighborhood TEXT,
+          verificationStatus TEXT DEFAULT 'pending',
+          guarantorName TEXT,
+          guarantorPhone TEXT,
+          identityCardUrl TEXT,
+          criminalRecordUrl TEXT,
+          currentLocation TEXT,
+          balance REAL DEFAULT 0,
+          earnings REAL DEFAULT 0,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
+      // Copy data from old table matching columns dynamically
+      const pragma = db.prepare("PRAGMA table_info(_users_old)").all() as Array<{ name: string }>;
+      const cols = pragma.map(col => col.name).join(', ');
+      
+      db.exec(`INSERT INTO users (${cols}) SELECT ${cols} FROM _users_old;`);
+      
+      // Drop old table
+      db.exec("DROP TABLE _users_old;");
+    })();
+    
+    db.exec("PRAGMA foreign_keys=ON;");
+    console.log("Migration: 'users' table check constraint upgraded successfully.");
+  }
+} catch (migrationError: any) {
+  console.error("Migration to support superadmin failed:", migrationError);
+}
+
 export default db;
