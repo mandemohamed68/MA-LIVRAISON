@@ -667,7 +667,7 @@ export default function DriverDashboard() {
                    </div>
                 </div>
 
-                      <div className="absolute inset-0 z-20 pointer-events-none p-4">
+                      <div className="absolute inset-0 z-20 pointer-events-none p-4 flex flex-col justify-between">
                    {/* Top HUD Layout */}
                    <div className="flex justify-between items-start gap-2">
                        {/* Left HUD: Status */}
@@ -749,7 +749,7 @@ export default function DriverDashboard() {
                    </div>
 
                    {/* Footer Info (Active Mission) */}
-                   <div className="mt-auto pointer-events-none pb-32">
+                   <div className="mt-auto pointer-events-none pb-8">
                        <div className="pointer-events-auto px-4 w-full max-w-sm mx-auto relative">
                           {/* FOCUS MODE BOTTOM SHEET */}
                           {radarMode === 'focus' && focusedJob && !showKeypadFor && (
@@ -925,7 +925,7 @@ export default function DriverDashboard() {
 
                       {/* SEARCH MODE BOTTOM SHEET (Selected Job) */}
                       {radarMode === 'search' && selectedPendingJob && (
-                      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-32 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 z-[110]">
+                      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-100 z-[110] max-h-[85vh] overflow-y-auto hide-scrollbar">
                            <div className="flex justify-between items-start mb-4">
                               <div>
                                 <div className="flex gap-2">
@@ -1007,7 +1007,7 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 100, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-52 left-4 right-4 z-[40]"
+                      className="absolute bottom-8 left-4 right-4 z-[40] max-w-lg mx-auto"
                     >
                       <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
                         <AnimatePresence>

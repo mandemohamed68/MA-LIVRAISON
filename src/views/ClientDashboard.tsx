@@ -83,7 +83,7 @@ export default function ClientDashboard() {
     if (!paymentDelivery) return;
     try {
       const isCash = method === 'cash';
-      const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
+      const isDemo = false;
       const isUssd = method.includes('ussd');
       
       const shouldAutoConfirm = isVerified || isCash || (isDemo && !isUssd && method !== 'aggregator');

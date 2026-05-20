@@ -218,11 +218,11 @@ async function startServer() {
     query += " ORDER BY createdAt DESC LIMIT 100";
     const deliveries = db.prepare(query).all(...params) as any[];
     deliveries.forEach(d => {
-      d.origin = JSON.parse(d.origin);
-      d.destination = JSON.parse(d.destination);
-      d.from = d.origin;
-      d.to = d.destination;
-      if (d.rejectedBy) d.rejectedBy = JSON.parse(d.rejectedBy);
+      try { if (typeof d.origin === 'string') d.origin = JSON.parse(d.origin); } catch(e){}
+      try { if (typeof d.destination === 'string') d.destination = JSON.parse(d.destination); } catch(e){}
+      d.from = d.origin || {};
+      d.to = d.destination || {};
+      try { if (typeof d.rejectedBy === 'string') d.rejectedBy = JSON.parse(d.rejectedBy); } catch(e){}
     });
     res.json(deliveries);
   });
@@ -233,13 +233,14 @@ async function startServer() {
       if (!d) {
         return res.status(404).json({ error: "Delivery not found" });
       }
-      d.origin = JSON.parse(d.origin);
-      d.destination = JSON.parse(d.destination);
-      d.from = d.origin;
-      d.to = d.destination;
-      if (d.rejectedBy) d.rejectedBy = JSON.parse(d.rejectedBy);
+      try { if (typeof d.origin === 'string') d.origin = JSON.parse(d.origin); } catch(e){}
+      try { if (typeof d.destination === 'string') d.destination = JSON.parse(d.destination); } catch(e){}
+      d.from = d.origin || {};
+      d.to = d.destination || {};
+      try { if (typeof d.rejectedBy === 'string') d.rejectedBy = JSON.parse(d.rejectedBy); } catch(e){}
       res.json(d);
     } catch (err) {
+      console.error(err);
       res.status(500).json({ error: "Failed to fetch delivery details" });
     }
   });

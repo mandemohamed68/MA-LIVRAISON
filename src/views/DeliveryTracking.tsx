@@ -110,7 +110,7 @@ export default function DeliveryTracking() {
     if (!delivery || !paymentBid) return;
     try {
       const isCash = method === 'cash';
-      const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
+      const isDemo = false;
       
       const isUssd = method.includes('ussd');
       // For demo, we auto confirm if it's not USSD or standard mobile money that needs approval

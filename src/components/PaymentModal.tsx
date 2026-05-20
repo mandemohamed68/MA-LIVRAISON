@@ -101,7 +101,7 @@ export default function PaymentModal({
   const [sappayStep, setSappayStep] = useState<'init' | 'otp' | 'pending'>('init');
   const [error, setError] = useState<string | null>(null);
 
-  const isDemo = !((window as any).Capacitor) && (window.location.hostname.includes('ais-dev') || window.location.hostname.includes('localhost'));
+  const isDemo = false;
 
   const getUssdString = () => {
     let syntax = "";
