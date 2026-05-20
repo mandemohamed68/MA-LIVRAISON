@@ -265,7 +265,7 @@ export default function CreateDelivery() {
       }
     }
 
-    detectLocation();
+    // detectLocation() deactivated automatically on load as requested
 
     const fetchDriverStatus = async () => {
       try {

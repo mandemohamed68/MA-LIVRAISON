@@ -193,6 +193,8 @@ async function startServer() {
     deliveries.forEach(d => {
       d.origin = JSON.parse(d.origin);
       d.destination = JSON.parse(d.destination);
+      d.from = d.origin;
+      d.to = d.destination;
       if (d.rejectedBy) d.rejectedBy = JSON.parse(d.rejectedBy);
     });
     res.json(deliveries);
