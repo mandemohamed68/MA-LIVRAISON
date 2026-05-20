@@ -22,7 +22,7 @@ export default function NotificationBell() {
         setNotifications(sorted);
         setHasUnread(sorted.some((n: any) => !n.isRead));
       } catch (err) {
-        console.error("Fetch notifications failed locally", err);
+        console.error("Fetch notifications failed locally", err instanceof Error ? err.message : err);
       }
     };
 

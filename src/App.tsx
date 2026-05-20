@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { cn } from './lib/utils';
 import { ShieldCheck } from 'lucide-react';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import Navbar from './components/Navbar';
 import NotificationToast from './components/NotificationToast';
@@ -198,7 +199,9 @@ export default function App() {
             Service temporairement indisponible (Quota atteint). Veuillez réessayer plus tard.
           </div>
         )}
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </Router>
     </AuthProvider>
   );

@@ -5,7 +5,7 @@ import App from './App.tsx';
 
 registerSW({ immediate: true });
 import './index.css';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import ErrorBoundary from './components/ErrorBoundary';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

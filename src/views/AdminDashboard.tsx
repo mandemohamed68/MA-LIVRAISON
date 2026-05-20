@@ -61,7 +61,7 @@ export default function AdminDashboard() {
       alert('Modifications enregistrées avec succès sur le serveur local !');
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de l\'enregistrement local.');
+      alert('Erreur lors de l\'enregistrement: ' + (err instanceof Error ? err.message : 'Une erreur inconnue est survenue'));
     } finally {
       setIsSaving(false);
     }
