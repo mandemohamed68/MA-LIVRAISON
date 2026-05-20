@@ -2,6 +2,7 @@
 // Remplace les appels directs à Firebase SDK
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+console.log('API_BASE being used:', API_BASE);
 
 async function request(endpoint: string, method = 'GET', body?: any, retryCount = 0): Promise<any> {
   const token = localStorage.getItem('auth_token');

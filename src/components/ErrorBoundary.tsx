@@ -1,14 +1,14 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import * as React from 'react';
 
 interface Props {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 interface State {
   hasError: boolean;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+export default class MainErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false
   };
@@ -17,7 +17,7 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
 
@@ -36,8 +36,6 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
-
-export default ErrorBoundary;

@@ -132,20 +132,21 @@ export default function LandingView() {
       }
     } catch (err: any) {
       setLocalLoading(false);
-      if (err.code === 'auth/operation-not-allowed') {
+      const msg = err.message || '';
+      if (msg.includes('Not allowed') || err.code === 'auth/operation-not-allowed') {
         setError("L'authentification par email/mot de passe n'est pas activée.");
-      } else if (err.code === 'auth/invalid-credential') {
+      } else if (msg.includes('Invalid credentials') || err.code === 'auth/invalid-credential') {
         setError("L'adresse email ou le mot de passe est incorrect.");
-      } else if (err.code === 'auth/too-many-requests') {
+      } else if (msg.includes('Rate limit') || err.code === 'auth/too-many-requests') {
         setError("Trop de tentatives. Veuillez réessayer plus tard.");
-      } else if (err.code === 'auth/email-already-in-use') {
+      } else if (msg.includes('Email already exists') || err.code === 'auth/email-already-in-use') {
         setError("Un compte existe déjà avec cette adresse email.");
-      } else if (err.code === 'auth/user-not-found') {
+      } else if (msg.includes('User not found') || err.code === 'auth/user-not-found') {
         setError("Aucun compte ne correspond à cette adresse email.");
-      } else if (err.code === 'auth/wrong-password') {
+      } else if (msg.includes('wrong-password') || err.code === 'auth/wrong-password') {
         setError("Le mot de passe renseigné est incorrect.");
       } else {
-        setError("Erreur : Impossible de s'authentifier avec ces informations.");
+        setError(msg || "Erreur : Impossible de s'authentifier avec ces informations.");
       }
     }
   };

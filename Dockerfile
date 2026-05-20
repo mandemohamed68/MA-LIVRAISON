@@ -1,21 +1,21 @@
-# Use Node.js for the build stage
+# Stage 1: Build
 FROM node:20-alpine AS build
-
-# Set working directory
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
-
-# Copy the rest of the application
 COPY . .
-
-# Build the Vite application
 RUN npm run build
 
-# Start the Node.js server
+# Stage 2: Production
+FROM node:20-alpine
+WORKDIR /app
+# Copy the compiled server, static files, and package files
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package.json ./
+COPY --from=build /app/package-lock.json ./
+# Install only production dependencies
+RUN npm install --production
+
+# Expose port and start server
 EXPOSE 3000
 CMD ["node", "dist/server.cjs"]

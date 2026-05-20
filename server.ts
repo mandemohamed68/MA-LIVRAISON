@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
@@ -15,18 +16,11 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-  app.use(express.json());
+  // Use standard CORS configuration
+  app.use(cors());
 
-  // Permettre les requêtes CORS depuis l'application mobile (Capacitor) vers l'API Express
-  app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-    if (req.method === 'OPTIONS') {
-        res.header('Access-Control-Allow-Methods', 'PUT, POST, PATCH, DELETE, GET');
-        return res.status(200).json({});
-    }
-    next();
-  });
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // --- UTILS ---
   function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -216,7 +210,7 @@ async function startServer() {
     } else if (role === 'driver') {
       query += " WHERE (status = 'pending' OR driverId = ?)";
       params.push(userId);
-    } else if (role !== 'admin') {
+    } else if (role !== 'admin' && role !== 'superadmin') {
       return res.status(403).json({ error: "Access denied" });
     }
 
