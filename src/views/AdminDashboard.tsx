@@ -119,12 +119,12 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     try {
       const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData] = await Promise.all([
-        api.admin.users.list().catch(() => []),
-        api.deliveries.list().catch(() => []),
-        api.config.get('app_config').catch(() => ({ mode: 'prod' })),
-        api.config.get('commissions').catch(() => null),
-        api.sectors.list().catch(() => []),
-        api.announcements.list().catch(() => [])
+        api.admin.users.list().then(res => res || []).catch(() => []),
+        api.deliveries.list().then(res => res || []).catch(() => []),
+        api.config.get('app_config').then(res => res || { mode: 'prod' }).catch(() => ({ mode: 'prod' })),
+        api.config.get('commissions').then(res => res || null).catch(() => null),
+        api.sectors.list().then(res => res || []).catch(() => []),
+        api.announcements.list().then(res => res || []).catch(() => [])
       ]);
 
       setUsers(usersList);

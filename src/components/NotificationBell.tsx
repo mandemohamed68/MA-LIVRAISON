@@ -17,7 +17,7 @@ export default function NotificationBell() {
 
     const fetchNotifs = async () => {
       try {
-        const list = await api.notifications.list();
+        const list = await api.notifications.list() || [];
         const sorted = list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setNotifications(sorted);
         setHasUnread(sorted.some((n: any) => !n.isRead));
