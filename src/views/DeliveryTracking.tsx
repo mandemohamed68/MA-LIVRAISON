@@ -71,8 +71,7 @@ export default function DeliveryTracking() {
 
     const fetchData = async () => {
       try {
-        const deliveries = await api.deliveries.list();
-        const found = deliveries.find((d: any) => d.id === deliveryId);
+        const found = await api.deliveries.get(deliveryId);
         if (found) {
           setDelivery(found);
           if (found.driverId) {
@@ -89,6 +88,7 @@ export default function DeliveryTracking() {
         }
       } catch (err) {
         console.error("Local API fetch failed in tracking", err);
+        setDelivery(null);
       } finally {
         setLoading(false);
       }

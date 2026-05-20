@@ -37,6 +37,7 @@ export const api = {
   },
   deliveries: {
     list: () => request('/deliveries'),
+    get: (id: string) => request(`/deliveries/${id}`),
     create: (data: any) => request('/deliveries', 'POST', data),
     update: (id: string, data: any) => request(`/deliveries/${id}`, 'PATCH', data),
     delete: (id: string) => request(`/deliveries/${id}`, 'DELETE'),

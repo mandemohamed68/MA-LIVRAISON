@@ -200,6 +200,23 @@ async function startServer() {
     res.json(deliveries);
   });
 
+  app.get("/api/deliveries/:id", authenticate, (req: any, res) => {
+    try {
+      const d = db.prepare("SELECT * FROM deliveries WHERE id = ?").get(req.params.id) as any;
+      if (!d) {
+        return res.status(404).json({ error: "Delivery not found" });
+      }
+      d.origin = JSON.parse(d.origin);
+      d.destination = JSON.parse(d.destination);
+      d.from = d.origin;
+      d.to = d.destination;
+      if (d.rejectedBy) d.rejectedBy = JSON.parse(d.rejectedBy);
+      res.json(d);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch delivery details" });
+    }
+  });
+
   app.patch("/api/deliveries/:id", authenticate, (req: any, res) => {
     const { id } = req.params;
     const updates = req.body;
