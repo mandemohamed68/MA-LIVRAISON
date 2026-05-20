@@ -282,12 +282,15 @@ export default function DriverDashboard() {
           }).catch(() => {});
         }
 
-        if (err.code === 1) setGpsError("GPS refusé (Mode Démo / Simulation activé)");
-        else if (err.code === 2) setGpsError("GPS indisponible (Mode Démo / Simulation activé)");
-        else if (err.code === 3) setGpsError("Timeout GPS (Mode Démo / Simulation activé)");
-        else setGpsError("Erreur GPS (Mode Démo / Simulation activé)");
+        if (err.code === 1) setGpsError("GPS refusé par le navigateur.");
+        else if (err.code === 2) setGpsError("GPS indisponible sur cet appareil.");
+        else if (err.code === 3) setGpsError("Timeout lors de la recherche GPS.");
+        else setGpsError("Erreur GPS inconnue.");
+        
+        // Always activate Demo mode implicitly when real GPS fails so the user can continue
+        setIsDemoGPS(true);
       },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
     );
     return id;
   };
@@ -632,43 +635,12 @@ export default function DriverDashboard() {
              <motion.div key="radar" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0">
                 {/* MAP BACKGROUND */}
                 <div className="absolute inset-0 z-0 bg-slate-200">
-                   {gpsError && (
-                     <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-3xl border border-white/10 shadow-2xl flex flex-col items-center gap-2.5 max-w-[90vw] text-center">
-                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-rose-400">
-                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                         <span>{gpsError}</span>
+                   {isDemoGPS && (
+                     <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[40]">
+                       <div className="bg-amber-500/90 backdrop-blur text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
+                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                         Mode Démo / Simulation
                        </div>
-                       <p className="text-[10px] text-slate-300 leading-normal max-w-[280px]">
-                         Le GPS de votre appareil est bloqué ou inactif. Activez la Simulation pour débloquer la carte et simuler vos déplacements à Ouagadougou.
-                       </p>
-                       <div className="flex gap-2 mt-1">
-                         <button 
-                           onClick={() => {
-                             setIsDemoGPS(true);
-                             setGpsError(null);
-                           }} 
-                           className="bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all shadow-md active:scale-95 shadow-emerald-500/20"
-                         >
-                           Activer Simulation
-                         </button>
-                         <button 
-                           onClick={() => requestGeolocation()} 
-                           className="bg-white/10 hover:bg-white/20 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all active:scale-95"
-                         >
-                           Réessayer réel
-                         </button>
-                       </div>
-                     </div>
-                   )}
-                   {false && gpsError && (
-                     <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-amber-600 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl flex items-center gap-2">
-                       <ShieldCheck className="w-4 h-4" /> {gpsError}
-                       <button 
-                         onClick={() => requestGeolocation()} 
-                         className="ml-2 bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded-full transition-colors"
-                       >
-                         Réessayer
-                       </button>
                      </div>
                    )}
 
@@ -1122,23 +1094,23 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 50, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-52 left-4 right-4 z-[40]"
+                      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[40]"
                     >
-                      <div className="bg-slate-900/95 backdrop-blur-xl p-5 rounded-3xl shadow-2xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 pointer-events-auto">
-                        <div className="flex items-center gap-3">
+                      <div className="bg-slate-900/95 backdrop-blur-xl p-5 rounded-3xl shadow-2xl border border-slate-800 flex flex-col items-center justify-between gap-4 pointer-events-auto">
+                        <div className="flex items-center gap-3 w-full">
                           <div className="w-10 h-10 bg-rose-500/10 text-rose-400 rounded-full flex items-center justify-center shrink-0">
-                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                           </div>
-                          <div className="text-left">
+                          <div className="text-left flex-1">
                             <h4 className="text-white text-xs font-black uppercase tracking-wider">Vous êtes Hors Ligne</h4>
                             <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">
-                              Activez votre statut pour voir et accepter les courses de livraison en temps réel à Ouagadougou.
+                              Activez votre statut pour recevoir les requêtes de livraison.
                             </p>
                           </div>
                         </div>
                         <button 
                           onClick={toggleOnline} 
-                          className="w-full md:w-auto px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all text-center shrink-0 cursor-pointer"
+                          className="w-full px-5 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all text-center cursor-pointer"
                         >
                           Passer En Ligne
                         </button>
@@ -1150,21 +1122,23 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 50, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-52 left-4 right-4 z-[40]"
+                      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[40]"
                     >
-                      <div className="bg-slate-900/90 backdrop-blur-xl p-5 rounded-3xl shadow-2xl border border-slate-800 flex items-center gap-4 pointer-events-auto">
-                        <div className="relative w-12 h-12 shrink-0 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center">
-                          <div className="absolute inset-0 rounded-full border border-indigo-500/35 animate-ping opacity-75" />
-                          <Compass className="w-5 h-5 animate-spin-slow" />
-                        </div>
-                        <div className="text-left">
-                          <h4 className="text-white text-xs font-black uppercase tracking-wider flex items-center gap-2">
-                            <span>Radar Actif (En Ligne)</span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          </h4>
-                          <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">
-                            Recherche de commandes à proximité de votre position. Les demandes de livraison s'afficheront instantanément ici dès qu'un client passera commande.
-                          </p>
+                      <div className="bg-slate-900/90 backdrop-blur-xl p-4 rounded-3xl shadow-2xl border border-slate-800 flex flex-col items-center gap-3 pointer-events-auto">
+                        <div className="flex items-center gap-3 w-full">
+                          <div className="relative w-10 h-10 shrink-0 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center">
+                            <div className="absolute inset-0 rounded-full border border-indigo-500/35 animate-ping opacity-75" />
+                            <Compass className="w-4 h-4 animate-spin-slow" />
+                          </div>
+                          <div className="text-left flex-1">
+                            <h4 className="text-white text-[11px] font-black uppercase tracking-wider flex items-center gap-2">
+                              <span>Radar Actif (En Ligne)</span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            </h4>
+                            <p className="text-[9px] text-slate-400 mt-0.5 leading-normal">
+                              Recherche de commandes à proximité de votre position...
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </motion.div>
