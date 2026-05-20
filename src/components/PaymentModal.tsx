@@ -177,7 +177,8 @@ export default function PaymentModal({
         let errorMsg = "Erreur de connexion à Sappay.";
         try {
           const errorData = await initRes.json();
-          errorMsg = errorData.message || errorData.error || errorMsg;
+          // Prioriser le message de la passerelle s'il existe
+          errorMsg = errorData.response?.gateway_message || errorData.message || errorData.error || errorMsg;
         } catch (e) {
           errorMsg = "Impossible d'initialiser la facture. Vérifiez vos identifiants Sappay dans les Secrets.";
         }
@@ -260,12 +261,10 @@ export default function PaymentModal({
            let errorMsg = "Transaction refusée par l'opérateur.";
            try {
              const errorData = await performRes.json();
-             errorMsg = errorData.message || errorData.error_description || errorData.error || errorData.details?.message || errorMsg;
+             // Prioriser le message de la passerelle s'il existe
+             errorMsg = errorData.response?.gateway_message || errorData.message || errorData.error_description || errorData.error || errorData.details?.message || errorMsg;
            } catch (e) {
              errorMsg = "Erreur réseau lors de la validation. Vérifiez votre solde.";
-           }
-           if (errorMsg === "Transaction Failed") {
-             errorMsg = "Échec de la transaction. Veuillez vérifier votre solde et votre code de validation.";
            }
            throw new Error(errorMsg);
         }
