@@ -153,7 +153,7 @@ export default function Navbar() {
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1.5 shrink-0">
-              <img src="/logo-web.png" alt="Livra Express" className="w-full h-full object-contain" />
+              <img src="/logo.png" alt="Livra Express" className="w-full h-full object-contain" />
             </div>
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">

@@ -29,7 +29,12 @@ export const ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<{ userId: string; email: string; role: string; name: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  // Use localStorage to cache appConfig to avoid Hammering API on boot
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(() => {
+    const cached = localStorage.getItem('app_config');
+    return cached ? JSON.parse(cached) : null;
+  });
+
   const [loading, setLoading] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [language, setLanguage] = useState<AppLanguage>('fr');
@@ -63,17 +68,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const init = async () => {
       const token = localStorage.getItem('auth_token');
       
-      // Parallel fetch for speed
+      // Load config from cache first, then refresh in background
       const [configRes, profileRes] = await Promise.allSettled([
-        api.config.get('app_config'),
-        token ? api.profile.get() : Promise.reject('No token')
+        api.config.get('app_config').catch(() => null),
+        token ? api.profile.get().catch(() => null) : Promise.reject('No token')
       ]);
 
-      if (configRes.status === 'fulfilled') {
+      if (configRes.status === 'fulfilled' && configRes.value) {
         setAppConfig(configRes.value);
+        localStorage.setItem('app_config', JSON.stringify(configRes.value));
       }
 
-      if (profileRes.status === 'fulfilled') {
+      if (profileRes.status === 'fulfilled' && profileRes.value) {
         setProfile(profileRes.value);
         setUser({ 
           userId: profileRes.value.userId, 
@@ -85,10 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setIsAuthReady(true);
     };
-
     init();
-
-    // Small polling for notifications or status if needed, but not for profile every 15s
   }, []);
 
   const loginWithEmail = async (email: string, pass: string) => {

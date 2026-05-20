@@ -1,9 +1,9 @@
 // Service central pour les appels API vers le serveur local (Debian)
 // Remplace les appels directs à Firebase SDK
 
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
-async function request(endpoint: string, method = 'GET', body?: any) {
+async function request(endpoint: string, method = 'GET', body?: any, retryCount = 0): Promise<any> {
   const token = localStorage.getItem('auth_token');
   const headers: any = {
     'Content-Type': 'application/json',
@@ -18,6 +18,13 @@ async function request(endpoint: string, method = 'GET', body?: any) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
+  if (response.status === 429 && retryCount < 3) {
+    const delay = Math.pow(2, retryCount) * 1000;
+    console.warn(`API Rate limit hit. Retrying in ${delay}ms... (Attempt ${retryCount + 1})`);
+    await new Promise(r => setTimeout(r, delay));
+    return request(endpoint, method, body, retryCount + 1);
+  }
+
   if (!response.ok) {
     const text = await response.text();
     console.error(`API Request failed: ${endpoint} ${method} - Status: ${response.status}`, text);
@@ -30,7 +37,11 @@ async function request(endpoint: string, method = 'GET', body?: any) {
     throw new Error(err.details || err.error || `Request failed with status ${response.status}`);
   }
 
-  return response.json();
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.includes("application/json")) {
+    return response.json();
+  }
+  return null;
 }
 
 export const api = {
