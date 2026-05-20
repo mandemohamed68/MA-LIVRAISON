@@ -406,9 +406,9 @@ export default function CreateDelivery() {
         updatedAt: new Date().toISOString(),
       });
       navigate(`/delivery/${newDelivery.id}`);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Erreur création");
+      alert(`Erreur création: ${e?.message || e?.toString()}`);
     } finally {
       setIsSubmitting(false);
     }

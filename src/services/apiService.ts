@@ -20,7 +20,7 @@ async function request(endpoint: string, method = 'GET', body?: any) {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `Request failed with status ${response.status}`);
+    throw new Error(err.details || err.error || `Request failed with status ${response.status}`);
   }
 
   return response.json();

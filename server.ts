@@ -155,9 +155,9 @@ async function startServer() {
         Math.random().toString(36).substr(2, 6).toUpperCase()
       );
       res.json({ id, cost: calculatedCost });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      res.status(500).json({ error: "Creation failed" });
+      res.status(500).json({ error: "Creation failed", details: err?.message || err?.toString() });
     }
   });
 
