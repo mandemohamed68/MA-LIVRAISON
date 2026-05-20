@@ -113,21 +113,14 @@ export default function DriverDashboard() {
   
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [isDemoGPS, setIsDemoGPS] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatDeliveryId, setChatDeliveryId] = useState<string | null>(null);
   
   const [commissionSettings, setCommissionSettings] = useState<CommissionSettings | null>(null);
   const [toastMessage, setToastMessage] = useState('');
-  const [isOnline, setIsOnline] = useState(false);
-  const [hasInitializedOnlineState, setHasInitializedOnlineState] = useState(false);
-
-  useEffect(() => {
-    if (profile && !hasInitializedOnlineState) {
-      setIsOnline(profile.status === 'online' || profile.status === 'busy');
-      setHasInitializedOnlineState(true);
-    }
-  }, [profile, hasInitializedOnlineState]);
+  const isOnline = profile ? (profile.status === 'online' || profile.status === 'busy') : false;
 
   const filteredPendingJobs = useMemo(() => {
     if (!profile) return [];
@@ -135,19 +128,17 @@ export default function DriverDashboard() {
   }, [pendingJobs, profile]);
   
   useEffect(() => {
-    if (!profile || !hasInitializedOnlineState || (profile.role !== 'driver' && profile.role !== 'admin' && profile.role !== 'superadmin')) return;
+    if (!profile || profile.role !== 'driver') return;
+    const isCurrentlyOnline = profile.status === 'online' || profile.status === 'busy';
+    if (!isCurrentlyOnline) return;
 
-    // Determine current logical online state (from local state)
-    // If local state says online, refine based on quota
     const maxSimultaneous = commissionSettings?.maxSimultaneousDeliveries || 2;
-    const newStatus = !isOnline ? 'offline' : (activeJobs.length >= maxSimultaneous ? 'busy' : 'online');
+    const newStatus = activeJobs.length >= maxSimultaneous ? 'busy' : 'online';
     
     if (newStatus !== profile.status) {
-      updateProfile({
-        status: newStatus
-      }).catch(() => {});
+      api.profile.update({ status: newStatus }).catch(() => {});
     }
-  }, [activeJobs.length, isOnline, profile, hasInitializedOnlineState]);
+  }, [activeJobs.length, profile?.status, commissionSettings]);
 
   // Radar State
   const [radarMode, setRadarMode] = useState<'search' | 'focus'>('search');
@@ -230,10 +221,24 @@ export default function DriverDashboard() {
   }, []);
 
   const requestGeolocation = () => {
+    if (isDemoGPS) {
+      setGpsError(null);
+      setLoading(false);
+      const fallbackCoords = { lat: 12.3714, lng: -1.5197 };
+      setUserLocation(fallbackCoords);
+      if (profile?.role === 'driver') {
+        api.profile.update({
+          currentLocation: fallbackCoords,
+          updatedAt: new Date().toISOString()
+        }).catch(() => {});
+      }
+      return undefined;
+    }
+
     if (!("geolocation" in navigator)) {
       setGpsError("GPS non supporté. Mode démo activé.");
       setUserLocation({ lat: 12.3714, lng: -1.5197 });
-      return;
+      return undefined;
     }
 
     setLoading(true);
@@ -328,7 +333,7 @@ export default function DriverDashboard() {
       if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
       clearInterval(interval);
     };
-  }, [profile, isOnline]);
+  }, [profile, isOnline, isDemoGPS]);
 
   // Keep track of previous active jobs length to only auto-switch when a new job is accepted
   const prevActiveJobsLength = useRef(0);
@@ -580,7 +585,6 @@ export default function DriverDashboard() {
 
     const currentIsOnline = profile.status === 'online' || profile.status === 'busy';
     const newLogicalOnline = !currentIsOnline;
-    setIsOnline(newLogicalOnline);
     
     const newStatus = newLogicalOnline ? (activeJobs.length >= (commissionSettings?.maxSimultaneousDeliveries || 2) ? 'busy' : 'online') : 'offline';
     
@@ -593,7 +597,6 @@ export default function DriverDashboard() {
     } catch (err) {
       console.error("Failed to update status", err);
       setToastMessage("Erreur de connexion. Réessayez.");
-      setIsOnline(currentIsOnline); // Revert UI
     }
   };
 
@@ -630,6 +633,34 @@ export default function DriverDashboard() {
                 {/* MAP BACKGROUND */}
                 <div className="absolute inset-0 z-0 bg-slate-200">
                    {gpsError && (
+                     <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-3xl border border-white/10 shadow-2xl flex flex-col items-center gap-2.5 max-w-[90vw] text-center">
+                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-rose-400">
+                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                         <span>{gpsError}</span>
+                       </div>
+                       <p className="text-[10px] text-slate-300 leading-normal max-w-[280px]">
+                         Le GPS de votre appareil est bloqué ou inactif. Activez la Simulation pour débloquer la carte et simuler vos déplacements à Ouagadougou.
+                       </p>
+                       <div className="flex gap-2 mt-1">
+                         <button 
+                           onClick={() => {
+                             setIsDemoGPS(true);
+                             setGpsError(null);
+                           }} 
+                           className="bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all shadow-md active:scale-95 shadow-emerald-500/20"
+                         >
+                           Activer Simulation
+                         </button>
+                         <button 
+                           onClick={() => requestGeolocation()} 
+                           className="bg-white/10 hover:bg-white/20 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all active:scale-95"
+                         >
+                           Réessayer réel
+                         </button>
+                       </div>
+                     </div>
+                   )}
+                   {false && gpsError && (
                      <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-amber-600 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl flex items-center gap-2">
                        <ShieldCheck className="w-4 h-4" /> {gpsError}
                        <button 
@@ -676,6 +707,18 @@ export default function DriverDashboard() {
 
                    {/* Map Controls */}
                    <div className="absolute top-28 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
+                     {isDemoGPS && (
+                       <button 
+                         onClick={() => {
+                           setIsDemoGPS(false);
+                           setGpsError("GPS Réel réactivé. En attente d'autorisation...");
+                         }} 
+                         title="Mode Simulation Actif. Cliquer pour revenir au GPS Réel" 
+                         className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-full shadow-lg flex items-center justify-center hover:bg-emerald-100 transition-all cursor-pointer animate-pulse"
+                       >
+                         <Zap className="w-4 h-4 sm:w-5 sm:h-5 fill-emerald-500" />
+                       </button>
+                     )}
                      <button onClick={() => setIsListView(!isListView)} className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-lg border border-slate-100 flex items-center justify-center text-slate-700 hover:text-indigo-600 transition-colors">
                         {isListView ? <Compass className="w-4 h-4 sm:w-5 sm:h-5" /> : <List className="w-4 h-4 sm:w-5 sm:h-5" />}
                      </button>
@@ -1071,6 +1114,58 @@ export default function DriverDashboard() {
                              </motion.div>
                           ))}
                         </AnimatePresence>
+                      </div>
+                    </motion.div>
+                 )}
+
+                 {!isOnline && (
+                    <motion.div 
+                      initial={{ y: 50, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      className="absolute bottom-52 left-4 right-4 z-[40]"
+                    >
+                      <div className="bg-slate-900/95 backdrop-blur-xl p-5 rounded-3xl shadow-2xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 pointer-events-auto">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-rose-500/10 text-rose-400 rounded-full flex items-center justify-center shrink-0">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                          </div>
+                          <div className="text-left">
+                            <h4 className="text-white text-xs font-black uppercase tracking-wider">Vous êtes Hors Ligne</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">
+                              Activez votre statut pour voir et accepter les courses de livraison en temps réel à Ouagadougou.
+                            </p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={toggleOnline} 
+                          className="w-full md:w-auto px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all text-center shrink-0 cursor-pointer"
+                        >
+                          Passer En Ligne
+                        </button>
+                      </div>
+                    </motion.div>
+                 )}
+
+                 {isOnline && filteredPendingJobs.length === 0 && activeJobs.length === 0 && !selectedPendingJob && (
+                    <motion.div 
+                      initial={{ y: 50, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      className="absolute bottom-52 left-4 right-4 z-[40]"
+                    >
+                      <div className="bg-slate-900/90 backdrop-blur-xl p-5 rounded-3xl shadow-2xl border border-slate-800 flex items-center gap-4 pointer-events-auto">
+                        <div className="relative w-12 h-12 shrink-0 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center">
+                          <div className="absolute inset-0 rounded-full border border-indigo-500/35 animate-ping opacity-75" />
+                          <Compass className="w-5 h-5 animate-spin-slow" />
+                        </div>
+                        <div className="text-left">
+                          <h4 className="text-white text-xs font-black uppercase tracking-wider flex items-center gap-2">
+                            <span>Radar Actif (En Ligne)</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          </h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">
+                            Recherche de commandes à proximité de votre position. Les demandes de livraison s'afficheront instantanément ici dès qu'un client passera commande.
+                          </p>
+                        </div>
                       </div>
                     </motion.div>
                  )}

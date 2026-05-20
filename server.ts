@@ -111,7 +111,17 @@ async function startServer() {
 
   app.patch("/api/profile", authenticate, (req: any, res) => {
     const updates = req.body;
-    const fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');
+    let fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');
+    
+    // Dynamic schema validation to filter out any fields that are not actual database columns
+    try {
+      const dbColumns = db.prepare("PRAGMA table_info(users)").all() as any[];
+      const validColumns = new Set(dbColumns.map(c => c.name));
+      fields = fields.filter(f => validColumns.has(f));
+    } catch (schemaErr) {
+      console.warn("Failed to retrieve users schema during validation:", schemaErr);
+    }
+
     if (fields.length === 0) return res.json({ status: "no changes" });
 
     const setClause = fields.map(f => `${f} = ?`).join(", ");
@@ -121,8 +131,9 @@ async function startServer() {
       const stmt = db.prepare(`UPDATE users SET ${setClause} WHERE userId = ?`);
       stmt.run(...values, req.user.userId);
       res.json({ status: "ok" });
-    } catch (err) {
-      res.status(500).json({ error: "Update failed" });
+    } catch (err: any) {
+      console.error("Profile update DB error:", err);
+      res.status(500).json({ error: "Update failed", details: err?.message || err?.toString() });
     }
   });
 
@@ -729,6 +740,21 @@ async function startServer() {
       res.json({ status: "ok", id: bidId });
     } catch (err) {
       res.status(500).json({ error: "Place bid failed" });
+    }
+  });
+
+  app.post("/api/deliveries/:id/tracking", authenticate, (req: any, res) => {
+    const { id } = req.params;
+    const { lat, lng } = req.body;
+    try {
+      const trackingId = uuidv4();
+      db.prepare(`
+        INSERT INTO tracking (id, deliveryId, lat, lng, timestamp)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(trackingId, id, lat, lng);
+      res.json({ status: "ok", id: trackingId });
+    } catch (err) {
+      res.status(500).json({ error: "Tracking update failed" });
     }
   });
 

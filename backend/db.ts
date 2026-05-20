@@ -187,23 +187,6 @@ try {
   console.error("Critical error during database schema creation:", err);
 }
 
-// MIGRATIONS: Add columns if they do not exist
-function addColumnIfNotExists(tableName: string, columnName: string, columnDef: string) {
-  try {
-    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
-    console.log(`Migration: Added ${columnName} to ${tableName}`);
-  } catch (e: any) {
-    // If error is because column already exists, ignore it.
-    if (!e.message.includes('duplicate column name')) {
-      console.warn(`Migration notice for ${tableName}.${columnName}: ${e.message}`);
-    }
-  }
-}
-
-addColumnIfNotExists('users', 'accountStatus', "TEXT DEFAULT 'active'");
-addColumnIfNotExists('users', 'verificationStatus', "TEXT DEFAULT 'pending'");
-addColumnIfNotExists('users', 'isVerified', "INTEGER DEFAULT 0");
-
 // MIGRATION: Upgrade the check constraint on 'role' in 'users' table to support 'superadmin'
 try {
   const tableInfo = db.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='users'").get() as { sql: string } | undefined;
@@ -244,11 +227,20 @@ try {
         );
       `);
       
-      // Copy data from old table matching columns dynamically
-      const pragma = db.prepare("PRAGMA table_info(_users_old)").all() as Array<{ name: string }>;
-      const cols = pragma.map(col => col.name).join(', ');
+      // We only insert the intersection of old and new columns.
+      // But since we will add the new dynamic columns AFTER this block, we can just insert the base columns.
+      // Wait, if _users_old has columns that the new "users" table doesn't have yet, 
+      // the INSERT INTO will fail if we select all cols from _users_old.
+      // So we must select only columns that exist in the newly created 'users' table.
+      const pragmaOld = db.prepare("PRAGMA table_info(_users_old)").all() as Array<{ name: string }>;
+      const pragmaNew = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
       
-      db.exec(`INSERT INTO users (${cols}) SELECT ${cols} FROM _users_old;`);
+      const oldColNames = new Set(pragmaOld.map(c => c.name));
+      const newColNames = pragmaNew.map(c => c.name);
+      
+      const commonCols = newColNames.filter(c => oldColNames.has(c)).join(', ');
+      
+      db.exec(`INSERT INTO users (${commonCols}) SELECT ${commonCols} FROM _users_old;`);
       
       // Drop old table
       db.exec("DROP TABLE _users_old;");
@@ -261,5 +253,46 @@ try {
 } catch (migrationError: any) {
   console.error("Migration to support superadmin failed:", migrationError);
 }
+
+// MIGRATIONS: Add columns if they do not exist
+function addColumnIfNotExists(tableName: string, columnName: string, columnDef: string) {
+  try {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+    console.log(`Migration: Added ${columnName} to ${tableName}`);
+  } catch (e: any) {
+    // If error is because column already exists, ignore it.
+    if (!e.message.includes('duplicate column name')) {
+      console.warn(`Migration notice for ${tableName}.${columnName}: ${e.message}`);
+    }
+  }
+}
+
+addColumnIfNotExists('users', 'accountStatus', "TEXT DEFAULT 'active'");
+addColumnIfNotExists('users', 'verificationStatus', "TEXT DEFAULT 'pending'");
+addColumnIfNotExists('users', 'isVerified', "INTEGER DEFAULT 0");
+addColumnIfNotExists('users', 'phone', "TEXT");
+addColumnIfNotExists('users', 'vehicleType', "TEXT");
+addColumnIfNotExists('users', 'licensePlate', "TEXT");
+addColumnIfNotExists('users', 'identityCardBackUrl', "TEXT");
+addColumnIfNotExists('users', 'idCardFront', "TEXT");
+addColumnIfNotExists('users', 'idCardBack', "TEXT");
+addColumnIfNotExists('users', 'guarantorCniUrl', "TEXT");
+addColumnIfNotExists('users', 'walletBalance', "REAL DEFAULT 0");
+addColumnIfNotExists('users', 'driverType', "TEXT");
+addColumnIfNotExists('users', 'parentCompanyId', "TEXT");
+addColumnIfNotExists('users', 'withdrawalRequested', "INTEGER DEFAULT 0");
+addColumnIfNotExists('users', 'withdrawalAmount', "REAL DEFAULT 0");
+addColumnIfNotExists('users', 'withdrawalMethod', "TEXT");
+addColumnIfNotExists('users', 'withdrawalPhone', "TEXT");
+addColumnIfNotExists('users', 'totalWithdrawn', "REAL DEFAULT 0");
+addColumnIfNotExists('users', 'withdrawalRequestedAt', "TEXT");
+addColumnIfNotExists('users', 'updatedAt', "TEXT");
+addColumnIfNotExists('users', 'termsAcceptedAt', "TEXT");
+addColumnIfNotExists('users', 'sectors', "TEXT");
+addColumnIfNotExists('users', 'favoriteAddresses', "TEXT");
+addColumnIfNotExists('users', 'performanceScore', "REAL DEFAULT 100");
+addColumnIfNotExists('users', 'cancellationRate', "REAL DEFAULT 0");
+addColumnIfNotExists('users', 'totalEarnings', "REAL DEFAULT 0");
+addColumnIfNotExists('users', 'dailyGoal', "REAL DEFAULT 0");
 
 export default db;
