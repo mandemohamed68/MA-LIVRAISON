@@ -141,7 +141,12 @@ async function startServer() {
     if (fields.length === 0) return res.json({ status: "no changes" });
 
     const setClause = fields.map(f => `${f} = ?`).join(", ");
-    const values = fields.map(f => typeof updates[f] === 'object' ? JSON.stringify(updates[f]) : updates[f]);
+    const values = fields.map(f => {
+      let val = updates[f];
+      if (typeof val === 'boolean') return val ? 1 : 0;
+      if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+      return val;
+    });
     
     try {
       const stmt = db.prepare(`UPDATE users SET ${setClause} WHERE userId = ?`);
@@ -253,7 +258,12 @@ async function startServer() {
     if (fields.length === 0) return res.json({ status: "no changes" });
 
     const setClause = fields.map(f => `${f} = ?`).join(", ");
-    const values = fields.map(f => typeof updates[f] === 'object' ? JSON.stringify(updates[f]) : updates[f]);
+    const values = fields.map(f => {
+      let val = updates[f];
+      if (typeof val === 'boolean') return val ? 1 : 0;
+      if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+      return val;
+    });
     
     try {
       const stmt = db.prepare(`UPDATE deliveries SET ${setClause}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`);
@@ -540,7 +550,12 @@ async function startServer() {
     if (fields.length === 0) return res.json({ status: "no changes" });
 
     const setClause = fields.map(f => `${f} = ?`).join(", ");
-    const values = fields.map(f => typeof updates[f] === 'object' ? JSON.stringify(updates[f]) : updates[f]);
+    const values = fields.map(f => {
+      let val = updates[f];
+      if (typeof val === 'boolean') return val ? 1 : 0;
+      if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+      return val;
+    });
     
     try {
       const stmt = db.prepare(`UPDATE users SET ${setClause} WHERE userId = ?`);
@@ -741,6 +756,7 @@ async function startServer() {
       const bids = db.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(req.params.id);
       res.json(bids);
     } catch (err) {
+      console.error(err);
       res.status(500).json({ error: "Fetch bids failed" });
     }
   });

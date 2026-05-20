@@ -83,8 +83,13 @@ export default function DeliveryTracking() {
             }
           }
           if (found.status === 'pending') {
-            const bidsList = await api.deliveries.bids.list(deliveryId);
-            setBids(bidsList);
+            try {
+              const bidsList = await api.deliveries.bids.list(deliveryId);
+              setBids(bidsList);
+            } catch (err) {
+              console.warn("Could not fetch bids", err);
+              setBids([]);
+            }
           }
         } else {
           setDelivery(null);
