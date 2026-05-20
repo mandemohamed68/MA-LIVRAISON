@@ -109,6 +109,22 @@ async function startServer() {
     res.json(user);
   });
 
+  app.get("/api/users/:id", authenticate, (req: any, res) => {
+    try {
+      const user = db.prepare("SELECT * FROM users WHERE userId = ?").get(req.params.id) as any;
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      delete user.password;
+      if (user.currentLocation) {
+        try { user.currentLocation = JSON.parse(user.currentLocation); } catch { }
+      }
+      res.json(user);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
   app.patch("/api/profile", authenticate, (req: any, res) => {
     const updates = req.body;
     let fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');

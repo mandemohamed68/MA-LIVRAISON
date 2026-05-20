@@ -75,9 +75,12 @@ export default function DeliveryTracking() {
         if (found) {
           setDelivery(found);
           if (found.driverId) {
-            const driversList = await api.admin.users.list();
-            const dInfo = driversList.find((u: any) => u.userId === found.driverId);
-            if (dInfo) setDriver(dInfo);
+            try {
+              const dInfo = await api.users.get(found.driverId);
+              if (dInfo) setDriver(dInfo);
+            } catch (err) {
+              console.warn("Could not fetch driver info");
+            }
           }
           if (found.status === 'pending') {
             const bidsList = await api.deliveries.bids.list(deliveryId);

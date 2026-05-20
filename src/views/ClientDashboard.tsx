@@ -208,7 +208,7 @@ export default function ClientDashboard() {
                       {/* Decorative Background Element */}
                       <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-indigo-50/80 to-transparent rounded-bl-[100px] z-0 pointer-events-none" />
 
-                      <div className="relative z-10 flex flex-col h-full">
+                      <div className="relative z-10 flex flex-col">
                         <div className="flex items-center gap-4 mb-4 pb-4 border-b border-slate-100">
                           <div className="w-12 h-12 bg-indigo-50 rounded-[20px] flex items-center justify-center text-indigo-600 border border-indigo-100/50 shadow-inner shrink-0 relative">
                             {activeDelivery.status === 'pending' && <div className="absolute inset-0 bg-indigo-200/40 rounded-[20px] animate-ping" />}

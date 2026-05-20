@@ -27,6 +27,9 @@ async function request(endpoint: string, method = 'GET', body?: any) {
 }
 
 export const api = {
+  users: {
+    get: (id: string) => request(`/users/${id}`),
+  },
   auth: {
     login: (credentials: any) => request('/auth/login', 'POST', credentials),
     register: (userData: any) => request('/auth/register', 'POST', userData),
