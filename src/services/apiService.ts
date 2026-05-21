@@ -106,14 +106,14 @@ export const api = {
   health: () => request('/health'),
   admin: {
     users: {
-      list: () => request('/admin/users'),
-      create: (data: any) => request('/admin/users', 'POST', data),
-      update: (userId: string, data: any) => request(`/admin/users/${userId}`, 'PATCH', data),
-      delete: (userId: string) => request(`/admin/users/${userId}`, 'DELETE'),
-      updateRole: (userId: string, role: string) => request(`/admin/users/${userId}/role`, 'PATCH', { role }),
+      list: () => request('/backoffice/users'),
+      create: (data: any) => request('/backoffice/users', 'POST', data),
+      update: (userId: string, data: any) => request(`/backoffice/users/${userId}`, 'PATCH', data),
+      delete: (userId: string) => request(`/backoffice/users/${userId}`, 'DELETE'),
+      updateRole: (userId: string, role: string) => request(`/backoffice/users/${userId}/role`, 'PATCH', { role }),
     },
-    reset: () => request('/admin/reset', 'POST'),
-    seed: () => request('/admin/seed', 'POST'),
+    reset: () => request('/backoffice/reset', 'POST'),
+    seed: () => request('/backoffice/seed', 'POST'),
   },
   announcements: {
     list: () => request('/announcements'),

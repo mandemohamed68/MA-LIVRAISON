@@ -59,7 +59,7 @@ try {
     email TEXT UNIQUE NOT NULL,
     password TEXT, -- For local auth
     role TEXT CHECK(role IN ('client', 'driver', 'admin', 'superadmin')) NOT NULL,
-    status TEXT DEFAULT 'offline',
+    status TEXT DEFAULT 'online',
     accountStatus TEXT DEFAULT 'active', -- active, rejected, suspended
     isVerified INTEGER DEFAULT 0,
     city TEXT,
@@ -234,7 +234,7 @@ try {
           email TEXT UNIQUE NOT NULL,
           password TEXT,
           role TEXT CHECK(role IN ('client', 'driver', 'admin', 'superadmin')) NOT NULL,
-          status TEXT DEFAULT 'offline',
+          status TEXT DEFAULT 'online',
           accountStatus TEXT DEFAULT 'active',
           isVerified INTEGER DEFAULT 0,
           city TEXT,

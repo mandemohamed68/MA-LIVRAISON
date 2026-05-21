@@ -128,6 +128,7 @@ export default function LandingView() {
           phone,
           idCardFront,
           idCardBack,
+          status: role === 'driver' ? 'online' : 'offline',
           termsAcceptedAt: new Date().toISOString()
         });
       } else {

@@ -121,7 +121,7 @@ export default function ClientDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col relative pb-20 selection:bg-indigo-500/10 selection:text-indigo-600">
+    <div className="min-h-screen bg-transparent flex flex-col relative pb-20 selection:bg-indigo-500/10 selection:text-indigo-600">
       {loading && (
         <div className="fixed top-0 left-0 right-0 z-[100] h-1 overflow-hidden bg-indigo-100">
           <motion.div 
@@ -134,28 +134,30 @@ export default function ClientDashboard() {
       )}
       <AnnouncementBanner userRole="client" />
       {/* Map Background Wrapper for active delivery or generic center */}
-      <div className="absolute inset-0 h-[40vh] w-full z-0 overflow-hidden bg-slate-100 mask-image-b pointer-events-none">
-         <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-slate-50/80 to-slate-50 z-10" />
-         {(activeDeliveries.length > 0 && (activeDeliveries[0].from || activeDeliveries[0].to)) ? (
-            <MapContainer 
-               center={(activeDeliveries[0].from && activeDeliveries[0].from.lat) ? [activeDeliveries[0].from.lat, activeDeliveries[0].from.lng] : [12.3714, -1.5197]} 
-               zoom={14} 
-               style={{ height: '100%', width: '100%' }}
-               zoomControl={false}
-               dragging={false}
-               scrollWheelZoom={false}
-            >
-               <TileLayer 
-                 url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-                 subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
-               />
-               {activeDeliveries[0].from && <Marker position={[activeDeliveries[0].from.lat, activeDeliveries[0].from.lng]} icon={customMarkerIcon} />}
-               {activeDeliveries[0].to && <Marker position={[activeDeliveries[0].to.lat, activeDeliveries[0].to.lng]} icon={customMarkerIcon} />}
-            </MapContainer>
-         ) : (
-            <div className="w-full h-full bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-         )}
-      </div>
+      {activeDeliveries.length > 0 && (
+        <div className="absolute inset-0 h-[40vh] w-full z-0 overflow-hidden bg-slate-100 mask-image-b pointer-events-none">
+           <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-slate-50/80 to-slate-50 z-10" />
+           {(activeDeliveries[0].from || activeDeliveries[0].to) ? (
+              <MapContainer 
+                 center={(activeDeliveries[0].from && activeDeliveries[0].from.lat) ? [activeDeliveries[0].from.lat, activeDeliveries[0].from.lng] : [12.3714, -1.5197]} 
+                 zoom={14} 
+                 style={{ height: '100%', width: '100%' }}
+                 zoomControl={false}
+                 dragging={false}
+                 scrollWheelZoom={false}
+              >
+                 <TileLayer 
+                   url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+                   subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
+                 />
+                 {activeDeliveries[0].from && <Marker position={[activeDeliveries[0].from.lat, activeDeliveries[0].from.lng]} icon={customMarkerIcon} />}
+                 {activeDeliveries[0].to && <Marker position={[activeDeliveries[0].to.lat, activeDeliveries[0].to.lng]} icon={customMarkerIcon} />}
+              </MapContainer>
+           ) : (
+              <div className="w-full h-full bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+           )}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="relative z-10 flex-1 flex flex-col p-4 sm:p-6 max-w-lg xl:max-w-5xl mx-auto w-full">

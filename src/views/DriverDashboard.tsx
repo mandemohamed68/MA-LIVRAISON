@@ -130,6 +130,17 @@ export default function DriverDashboard() {
   useEffect(() => {
     if (!profile || profile.role !== 'driver') return;
     const isCurrentlyOnline = profile.status === 'online' || profile.status === 'busy';
+    
+    // Auto-go-online by default once per session on mount
+    const hasCheckedSession = sessionStorage.getItem('driver_default_online_set');
+    if (!isCurrentlyOnline && !hasCheckedSession) {
+      sessionStorage.setItem('driver_default_online_set', 'true');
+      const maxSimultaneous = commissionSettings?.maxSimultaneousDeliveries || 2;
+      const initialStatus = activeJobs.length >= maxSimultaneous ? 'busy' : 'online';
+      updateProfile({ status: initialStatus }).catch(() => {});
+      return;
+    }
+
     if (!isCurrentlyOnline) return;
 
     const maxSimultaneous = commissionSettings?.maxSimultaneousDeliveries || 2;
