@@ -87,6 +87,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: profileRes.value.role,
           name: profileRes.value.name
         });
+      } else {
+        if (token) {
+          localStorage.removeItem('auth_token');
+        }
       }
 
       setIsAuthReady(true);

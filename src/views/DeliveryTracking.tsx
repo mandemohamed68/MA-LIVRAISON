@@ -91,7 +91,7 @@ export default function DeliveryTracking() {
           if (found.status === 'pending') {
             try {
               const bidsList = await api.deliveries.bids.list(deliveryId);
-              setBids(bidsList);
+              setBids(Array.isArray(bidsList) ? bidsList : []);
             } catch (err) {
               console.warn("Could not fetch bids", err);
               setBids([]);
@@ -478,7 +478,7 @@ export default function DeliveryTracking() {
                       </div>
                    </div>
                 ) : (
-                  delivery.status === 'pending' && bids.length > 0 && (
+                  delivery.status === 'pending' && Array.isArray(bids) && bids.length > 0 && (
                     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-600 mb-6">Offres reçues ({bids.length})</h3>
                        <div className="space-y-4">
