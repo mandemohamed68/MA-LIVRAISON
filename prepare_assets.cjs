@@ -2,6 +2,20 @@ const fs = require('fs');
 if (!fs.existsSync('assets')) {
   fs.mkdirSync('assets');
 }
-fs.copyFileSync('public/logo-web.png', 'assets/icon.png');
-fs.copyFileSync('public/logo-web.png', 'assets/splash.png');
+
+// Use the newly generated minimalist square courier icon for the app launcher icon
+if (fs.existsSync('public/favicon.png')) {
+  fs.copyFileSync('public/favicon.png', 'assets/icon.png');
+} else if (fs.existsSync('public/logo-web.png')) {
+  fs.copyFileSync('public/logo-web.png', 'assets/icon.png');
+}
+
+// Use the proper splash screen image for the splash asset
+if (fs.existsSync('public/splash.png')) {
+  fs.copyFileSync('public/splash.png', 'assets/splash.png');
+} else if (fs.existsSync('public/logo-web.png')) {
+  fs.copyFileSync('public/logo-web.png', 'assets/splash.png');
+}
+
 console.log('Assets prepared successfully.');
+
