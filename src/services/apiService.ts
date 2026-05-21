@@ -1,5 +1,6 @@
 // Service central pour les appels API vers le serveur local (Debian)
 // Remplace les appels directs à Firebase SDK
+import { Capacitor } from '@capacitor/core';
 
 const getApiBase = () => {
   if (import.meta.env.VITE_API_BASE) {
@@ -7,8 +8,14 @@ const getApiBase = () => {
   }
   if (typeof window !== 'undefined') {
     const origin = window.location.origin;
-    // On native mobile (Capacitor), or file-based builds, origin lacks standard web hosting domains
-    if (origin.startsWith('capacitor://') || (origin.startsWith('http://localhost') && !window.location.port)) {
+    // On native mobile (Capacitor) or localhost with Capacitor active schemes
+    const isMobileCapacitor = 
+      Capacitor.isNativePlatform() ||
+      origin.startsWith('capacitor://') ||
+      origin.startsWith('https://localhost') ||
+      (origin.startsWith('http://localhost') && !window.location.port);
+
+    if (isMobileCapacitor) {
       return "https://ais-dev-sziuwgy6vpibvj2wdcjxmo-252816219526.europe-west1.run.app/api";
     }
     return `${origin}/api`;
