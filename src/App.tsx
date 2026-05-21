@@ -85,9 +85,12 @@ function AppRoutes() {
     return <Navigate to={defaultPath} replace />;
   }
 
+  const isDev = import.meta.env.DEV || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
+
   return (
     <div className={cn(
-      "min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col selection:bg-primary/20",
+      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20",
+      isDev ? "bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px]" : "bg-slate-50",
       isAdminView && "lg:h-screen lg:overflow-hidden"
     )}>
       <AnnouncementBanner />
@@ -176,6 +179,14 @@ function AppRoutes() {
         </AnimatePresence>
       </main>
       <BottomNav />
+      {isDev && (
+        <div className="fixed bottom-4 right-4 z-[9999] pointer-events-none select-none opacity-85">
+          <div className="px-3 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/15 rounded-full font-mono text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            serveur local
+          </div>
+        </div>
+      )}
     </div>
   );
 }

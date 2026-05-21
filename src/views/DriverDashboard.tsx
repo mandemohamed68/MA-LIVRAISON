@@ -972,8 +972,10 @@ export default function DriverDashboard() {
                               <button onClick={() => submitBid(selectedPendingJob.id, true)} disabled={isBidding} className={cn("flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-900/20 active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-slate-800")}>
                                  {isBidding ? "..." : "Accepter"}
                               </button>
-                              <button onClick={() => {
+                               <button onClick={() => {
                                  setBidPrice(selectedPendingJob.clientProposedPrice || selectedPendingJob.cost || '');
+                                 const dist = calculateDistance(selectedPendingJob.from.lat, selectedPendingJob.from.lng, selectedPendingJob.to.lat, selectedPendingJob.to.lng);
+                                 setBidTime(Math.max(15, Math.ceil(dist * 4) + 10)); // realistic default time based on distance
                                  setRadarMode('search'); // keep search mode
                               }} disabled={isBidding} className={cn("flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-orange-100")}>
                                  Négocier

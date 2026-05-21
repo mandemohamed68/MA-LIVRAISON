@@ -541,7 +541,8 @@ async function startServer() {
   // --- ADMIN ENDPOINTS ---
   app.get("/api/admin/users", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Access denied" });
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/admin/users, but role is: '${req.user.role}'`);
+      return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const users = db.prepare("SELECT * FROM users").all() as any[];
     users.forEach(u => delete u.password);
@@ -550,7 +551,8 @@ async function startServer() {
 
   app.patch("/api/admin/users/:userId", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Access denied" });
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH /api/admin/users/${req.params.userId}, but role is: '${req.user.role}'`);
+      return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { userId } = req.params;
     const updates = req.body;
@@ -576,7 +578,8 @@ async function startServer() {
 
   app.patch("/api/admin/users/:userId/role", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Access denied" });
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH role /api/admin/users/${req.params.userId}/role, but role is: '${req.user.role}'`);
+      return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { userId } = req.params;
     const { role } = req.body;
@@ -590,7 +593,8 @@ async function startServer() {
 
   app.delete("/api/admin/users/:userId", authenticate, (req: any, res) => {
     if (req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Superadmin only" });
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to DELETE user /api/admin/users/${req.params.userId}, but role is: '${req.user.role}'`);
+      return res.status(403).json({ error: `Access denied. Superadmin role is required (your role is '${req.user.role}').` });
     }
     const { userId } = req.params;
     try {
@@ -603,7 +607,8 @@ async function startServer() {
 
   app.post("/api/admin/users", authenticate, async (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Admin only" });
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to POST /api/admin/users, but role is: '${req.user.role}'`);
+      return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { name, email, password, role, ...rest } = req.body;
     try {
@@ -761,7 +766,11 @@ async function startServer() {
   // Bids API
   app.get("/api/deliveries/:id/bids", authenticate, (req: any, res) => {
     try {
-      const bids = db.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(req.params.id);
+      const bids = db.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(req.params.id) as any[];
+      bids.forEach(b => {
+        // Map backend 'proposedTime' to frontend's expected 'timeEstimateMins' and vice versa
+        b.timeEstimateMins = b.proposedTime;
+      });
       res.json(bids);
     } catch (err) {
       console.error(err);
@@ -771,15 +780,17 @@ async function startServer() {
 
   app.post("/api/deliveries/:id/bids", authenticate, (req: any, res) => {
     const { id } = req.params;
-    const { price, proposedTime, reason } = req.body;
+    const { price, proposedTime, timeEstimateMins, reason } = req.body;
+    const actualTime = proposedTime !== undefined ? proposedTime : timeEstimateMins;
     try {
       const bidId = `${id}_${req.user.userId}`;
       db.prepare(`
         INSERT OR REPLACE INTO bids (id, deliveryId, driverId, driverName, price, proposedTime, reason, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(bidId, id, req.user.userId, req.user.name, price, proposedTime, reason);
+      `).run(bidId, id, req.user.userId, req.user.name, price, actualTime, reason);
       res.json({ status: "ok", id: bidId });
     } catch (err) {
+      console.error(err);
       res.status(500).json({ error: "Place bid failed" });
     }
   });
