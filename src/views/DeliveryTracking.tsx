@@ -166,7 +166,11 @@ export default function DeliveryTracking() {
         })
         .catch((e) => {
            console.log("Routing error", e);
-           setRouteCoords([[delivery.from.lat, delivery.from.lng], [delivery.to.lat, delivery.to.lng]]);
+           if (typeof delivery?.from?.lat === 'number' && typeof delivery?.to?.lat === 'number') {
+             setRouteCoords([[delivery.from.lat, delivery.from.lng], [delivery.to.lat, delivery.to.lng]]);
+           } else {
+             setRouteCoords([]);
+           }
         });
     }
   }, [delivery?.from, delivery?.to]);

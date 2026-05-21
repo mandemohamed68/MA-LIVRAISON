@@ -170,15 +170,27 @@ async function startServer() {
       }
 
       const stmt = db.prepare(`
-        INSERT INTO deliveries (id, clientId, clientName, origin, destination, cost, status, pickupCode, deliveryCode)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO deliveries (
+          id, clientId, clientName, origin, destination, cost, status, pickupCode, deliveryCode,
+          vehicleType, senderPhone, recipientPhone, packageDetails, baseCost, clientProposedPrice, isUrgent, urgentFee, boostAmount
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       stmt.run(
-        id, req.user.userId, d.clientName, 
-        JSON.stringify(d.from), JSON.stringify(d.to), 
-        calculatedCost || 1000, "pending", 
-        Math.random().toString(36).substr(2, 6).toUpperCase(),
-        Math.random().toString(36).substr(2, 6).toUpperCase()
+        id, req.user.userId, d.clientName || req.user.name || "", 
+        JSON.stringify(d.from || {}), JSON.stringify(d.to || {}), 
+        calculatedCost || 1000, d.status || "pending", 
+        d.pickupCode || Math.random().toString(36).substr(2, 6).toUpperCase(),
+        d.deliveryCode || Math.random().toString(36).substr(2, 6).toUpperCase(),
+        d.vehicleType || "moto",
+        d.senderPhone || "",
+        d.recipientPhone || "",
+        d.packageDetails ? JSON.stringify(d.packageDetails) : null,
+        d.baseCost || d.estimatedCost || calculatedCost || 1000,
+        d.clientProposedPrice || d.cost || calculatedCost || 1000,
+        d.isUrgent ? 1 : 0,
+        d.urgentFee || 0,
+        d.boostAmount || 0
       );
       res.json({ id, cost: calculatedCost });
     } catch (err: any) {
@@ -222,6 +234,7 @@ async function startServer() {
       d.from = d.origin || {};
       d.to = d.destination || {};
       try { if (typeof d.rejectedBy === 'string') d.rejectedBy = JSON.parse(d.rejectedBy); } catch(e){}
+      try { if (typeof d.packageDetails === 'string') d.packageDetails = JSON.parse(d.packageDetails); } catch(e){}
     });
     res.json(deliveries);
   });
@@ -237,6 +250,7 @@ async function startServer() {
       d.from = d.origin || {};
       d.to = d.destination || {};
       try { if (typeof d.rejectedBy === 'string') d.rejectedBy = JSON.parse(d.rejectedBy); } catch(e){}
+      try { if (typeof d.packageDetails === 'string') d.packageDetails = JSON.parse(d.packageDetails); } catch(e){}
       res.json(d);
     } catch (err) {
       console.error(err);

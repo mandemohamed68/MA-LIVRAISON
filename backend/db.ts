@@ -187,6 +187,30 @@ try {
   console.error("Critical error during database schema creation:", err);
 }
 
+// MIGRATION: Added columns to deliveries table
+const colsToAdd = [
+  { name: 'vehicleType', type: 'TEXT' },
+  { name: 'senderPhone', type: 'TEXT' },
+  { name: 'recipientPhone', type: 'TEXT' },
+  { name: 'packageDetails', type: 'TEXT' },
+  { name: 'baseCost', type: 'REAL' },
+  { name: 'clientProposedPrice', type: 'REAL' },
+  { name: 'isUrgent', type: 'INTEGER DEFAULT 0' },
+  { name: 'urgentFee', type: 'REAL DEFAULT 0' },
+  { name: 'boostAmount', type: 'REAL DEFAULT 0' }
+];
+
+colsToAdd.forEach(col => {
+  try {
+    db.exec(`ALTER TABLE deliveries ADD COLUMN ${col.name} ${col.type}`);
+    console.log(`Migration: Added column ${col.name} to deliveries table`);
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn(`Migration notice for column ${col.name}:`, err.message);
+    }
+  }
+});
+
 // MIGRATION: Upgrade the check constraint on 'role' in 'users' table to support 'superadmin'
 try {
   const tableInfo = db.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='users'").get() as { sql: string } | undefined;

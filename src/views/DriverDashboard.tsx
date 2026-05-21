@@ -366,7 +366,11 @@ export default function DriverDashboard() {
           })
           .catch((e) => {
              console.log("Routing error", e);
-             setRouteCoords([[userLocation.lat, userLocation.lng], [target.lat, target.lng]]);
+             if (userLocation && typeof userLocation.lat === 'number' && target && typeof target.lat === 'number') {
+               setRouteCoords([[userLocation.lat, userLocation.lng], [target.lat, target.lng]]);
+             } else {
+               setRouteCoords([]);
+             }
           });
       }
     } else {

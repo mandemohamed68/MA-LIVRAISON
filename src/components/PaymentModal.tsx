@@ -147,8 +147,11 @@ export default function PaymentModal({
   };
 
   const getApiUrl = (path: string) => {
-    if (typeof window !== 'undefined' && ((window as any).Capacitor || window.location.hostname === 'localhost' || window.location.protocol.includes('file'))) {
-      return `https://ais-pre-sziuwgy6vpibvj2wdcjxmo-252816219526.europe-west1.run.app${path}`;
+    const apiBase = import.meta.env.VITE_API_BASE || "http://41.78.54.60:3006/api";
+    if (path.startsWith('/api')) {
+      if (apiBase.startsWith('http')) {
+        return path.replace('/api', apiBase);
+      }
     }
     return path;
   };
