@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { UserRole } from '../types';
 import { LoadingScreen } from '../components/LoadingScreen';
+import Logo from '../components/Logo';
 
 type AuthMode = 'login' | 'register' | 'phone';
 
@@ -70,6 +71,8 @@ export default function LandingView() {
   } = useAuth();
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [logoUrl, setLogoUrl] = useState("/logo-web.png");
+  const [logoError, setLogoError] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [role, setRole] = useState<UserRole>('client');
   const [email, setEmail] = useState('');
@@ -225,8 +228,8 @@ export default function LandingView() {
         
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-12">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-2">
-              <img src="/logo-web.png" alt="Livra Express" className="w-full h-full object-contain" />
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1">
+              <Logo className="w-full h-full text-orange-600" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">

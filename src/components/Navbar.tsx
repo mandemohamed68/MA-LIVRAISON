@@ -8,6 +8,7 @@ import { cn } from '../lib/utils';
 import { AppLanguage } from '../lib/translations';
 import { api } from '../services/apiService';
 import { AppConfig } from '../types';
+import Logo from './Logo';
 
 export default function Navbar() {
   const { user, profile, logout, language, setLanguage, t, isMasterAdmin, updateRole } = useAuth();
@@ -15,6 +16,8 @@ export default function Navbar() {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [logoUrl, setLogoUrl] = useState("/logo.png");
+  const [logoError, setLogoError] = useState(false);
 
   const handleRoleChangeInNavbar = async (role: any) => {
     try {
@@ -152,8 +155,8 @@ export default function Navbar() {
           isAdminView && "h-16 px-10 max-w-[1900px]"
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1.5 shrink-0">
-              <img src="/logo.png" alt="Livra Express" className="w-full h-full object-contain" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
+              <Logo className="w-full h-full text-orange-600" />
             </div>
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">
