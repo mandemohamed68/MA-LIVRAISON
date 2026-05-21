@@ -1,7 +1,22 @@
 // Service central pour les appels API vers le serveur local (Debian)
 // Remplace les appels directs à Firebase SDK
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://41.78.54.60:3006/api";
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_BASE) {
+    return import.meta.env.VITE_API_BASE;
+  }
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    // On native mobile (Capacitor), or file-based builds, origin lacks standard web hosting domains
+    if (origin.startsWith('capacitor://') || (origin.startsWith('http://localhost') && !window.location.port)) {
+      return "https://ais-dev-sziuwgy6vpibvj2wdcjxmo-252816219526.europe-west1.run.app/api";
+    }
+    return `${origin}/api`;
+  }
+  return "http://localhost:3000/api";
+};
+
+const API_BASE = getApiBase();
 console.log('API_BASE being used:', API_BASE);
 
 async function request(endpoint: string, method = 'GET', body?: any, retryCount = 0): Promise<any> {

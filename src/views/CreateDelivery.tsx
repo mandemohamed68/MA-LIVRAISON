@@ -415,7 +415,7 @@ export default function CreateDelivery() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 font-sans relative overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px] font-sans relative overflow-hidden">
       {/* Header - Transparent over Map in Step 1 */}
       <header className="absolute top-0 left-0 right-0 z-50 p-4 flex items-center justify-between">
         <button
@@ -771,7 +771,7 @@ export default function CreateDelivery() {
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
-            className="absolute inset-0 z-40 bg-slate-50 pt-24 px-6 overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))] xl:pb-12"
+            className="absolute inset-0 z-40 bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px] pt-24 px-6 overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))] xl:pb-12"
           >
             <h2 className="text-2xl font-black text-slate-900 mb-6">
               Détails de la course
@@ -921,7 +921,7 @@ export default function CreateDelivery() {
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
-            className="absolute inset-0 z-40 bg-slate-50 pt-24 px-6 overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))] xl:pb-12"
+            className="absolute inset-0 z-40 bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px] pt-24 px-6 overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))] xl:pb-12"
           >
             <h2 className="text-2xl font-black text-slate-900 mb-6">
               Récapitulatif & Prix

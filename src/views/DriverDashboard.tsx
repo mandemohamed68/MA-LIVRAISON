@@ -179,6 +179,16 @@ export default function DriverDashboard() {
   const [bidPrice, setBidPrice] = useState<number | ''>('');
   const [bidTime, setBidTime] = useState<number | ''>('');
   const [bidReason, setBidReason] = useState<string>('');
+  const [showBidForm, setShowBidForm] = useState(false);
+
+  useEffect(() => {
+    if (!selectedPendingJob) {
+      setShowBidForm(false);
+      setBidPrice('');
+      setBidTime('');
+      setBidReason('');
+    }
+  }, [selectedPendingJob]);
   
   // Focus State
   const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
@@ -973,9 +983,10 @@ export default function DriverDashboard() {
                                  {isBidding ? "..." : "Accepter"}
                               </button>
                                <button onClick={() => {
-                                 setBidPrice(selectedPendingJob.clientProposedPrice || selectedPendingJob.cost || '');
+                                 setBidPrice(selectedPendingJob.clientProposedPrice || selectedPendingJob.cost || 2000);
                                  const dist = calculateDistance(selectedPendingJob.from.lat, selectedPendingJob.from.lng, selectedPendingJob.to.lat, selectedPendingJob.to.lng);
                                  setBidTime(Math.max(15, Math.ceil(dist * 4) + 10)); // realistic default time based on distance
+                                 setShowBidForm(true);
                                  setRadarMode('search'); // keep search mode
                               }} disabled={isBidding} className={cn("flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-orange-100")}>
                                  Négocier
@@ -985,7 +996,7 @@ export default function DriverDashboard() {
                               </button>
                            </div>
                            {/* Quick Bid Inline Expansion */}
-                           {bidPrice !== '' && (
+                           {showBidForm && (
                               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
                                 <div className="flex gap-2">
                                   <input type="number" placeholder="FCFA" value={bidPrice} onChange={e => setBidPrice(Number(e.target.value) || '')} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold" />
