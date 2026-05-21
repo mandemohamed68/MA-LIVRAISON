@@ -89,8 +89,7 @@ function AppRoutes() {
 
   return (
     <div className={cn(
-      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20",
-      isDev ? "bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px]" : "bg-slate-50",
+      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20 bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px]",
       isAdminView && "lg:h-screen lg:overflow-hidden"
     )}>
       <AnnouncementBanner />
