@@ -71,7 +71,7 @@ export default function LandingView() {
   } = useAuth();
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [logoUrl, setLogoUrl] = useState("/logo-web.png");
+  const [logoUrl, setLogoUrl] = useState("./logo-web.png");
   const [logoError, setLogoError] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [role, setRole] = useState<UserRole>('client');
@@ -230,7 +230,11 @@ export default function LandingView() {
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-12">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1">
-              <Logo className="w-full h-full text-orange-600" />
+              {!logoError ? (
+                 <img src={logoUrl} alt="LIVRA Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+              ) : (
+                 <Logo className="w-full h-full text-orange-600" />
+              )}
             </div>
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">
@@ -269,7 +273,14 @@ export default function LandingView() {
       {/* Right Pane: Auth Forms */}
       <div className="flex flex-col items-center justify-center p-6 sm:p-10 bg-white lg:rounded-l-[40px] border-l border-slate-100 shadow-2xl relative z-10 w-full min-h-[100dvh] overflow-y-auto">
         <div className="w-full max-w-md my-auto pb-10 mt-12 lg:mt-auto">
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 flex flex-col items-center">
+            <div className="w-16 h-16 sm:hidden rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1 mb-4">
+              {!logoError ? (
+                 <img src={logoUrl} alt="LIVRA Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+              ) : (
+                 <Logo className="w-full h-full text-orange-600" />
+              )}
+            </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2 italic">
               {isRegistering ? "Création de compte" : "Bienvenue"}
             </h2>

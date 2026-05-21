@@ -147,7 +147,7 @@ export default function PaymentModal({
   };
 
   const getApiUrl = (path: string) => {
-    const apiBase = import.meta.env.VITE_API_BASE || "http://41.78.54.60:3006/api";
+    const apiBase = "http://41.78.54.60:3006/api";
     if (path.startsWith('/api')) {
       if (apiBase.startsWith('http')) {
         return path.replace('/api', apiBase);

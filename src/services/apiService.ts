@@ -3,24 +3,7 @@
 import { Capacitor } from '@capacitor/core';
 
 const getApiBase = () => {
-  if (import.meta.env.VITE_API_BASE) {
-    return import.meta.env.VITE_API_BASE;
-  }
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin;
-    // On native mobile (Capacitor) or localhost with Capacitor active schemes
-    const isMobileCapacitor = 
-      Capacitor.isNativePlatform() ||
-      origin.startsWith('capacitor://') ||
-      origin.startsWith('https://localhost') ||
-      (origin.startsWith('http://localhost') && !window.location.port);
-
-    if (isMobileCapacitor) {
-      return "https://ais-dev-sziuwgy6vpibvj2wdcjxmo-252816219526.europe-west1.run.app/api";
-    }
-    return `${origin}/api`;
-  }
-  return "http://localhost:3000/api";
+  return "http://41.78.54.60:3006/api";
 };
 
 const API_BASE = getApiBase();

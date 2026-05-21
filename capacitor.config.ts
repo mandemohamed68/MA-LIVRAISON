@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'LIVRA',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'http',
+    cleartext: true
   }
 };
 
