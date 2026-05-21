@@ -623,6 +623,7 @@ export default function DriverDashboard() {
                         const isUrgent = job.isUrgent;
                         const pulseBg = isUrgent ? 'bg-rose-500/30' : (isHighValue ? 'bg-orange-500/30' : 'bg-indigo-500/30');
                         const bgColor = isUrgent ? 'bg-rose-500' : (isHighValue ? 'bg-orange-500' : 'bg-indigo-500');
+                        if (!job.from || typeof job.from.lat !== 'number' || typeof job.from.lng !== 'number') return null;
                         return (
                           <Marker key={job.id} position={[job.from.lat, job.from.lng]} 
                             eventHandlers={{ click: () => setSelectedPendingJob(job) }}

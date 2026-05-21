@@ -30,9 +30,15 @@ function MapUpdater({ driver, delivery, isFollowing }: { driver: UserProfile | n
     if (!delivery) return;
 
     const points: [number, number][] = [];
-    if (delivery.from) points.push([delivery.from.lat, delivery.from.lng]);
-    if (delivery.to) points.push([delivery.to.lat, delivery.to.lng]);
-    if (driver?.currentLocation) points.push([driver.currentLocation.lat, driver.currentLocation.lng]);
+    if (delivery.from && typeof delivery.from.lat === 'number' && typeof delivery.from.lng === 'number') {
+       points.push([delivery.from.lat, delivery.from.lng]);
+    }
+    if (delivery.to && typeof delivery.to.lat === 'number' && typeof delivery.to.lng === 'number') {
+       points.push([delivery.to.lat, delivery.to.lng]);
+    }
+    if (driver?.currentLocation && typeof driver.currentLocation.lat === 'number') {
+       points.push([driver.currentLocation.lat, driver.currentLocation.lng]);
+    }
 
     if (points.length > 0) {
       if (isFollowing && driver?.currentLocation) {
@@ -232,8 +238,11 @@ export default function DeliveryTracking() {
     </div>
   );
 
+  const hasValidFromCoords = delivery?.from && typeof delivery.from.lat === 'number' && typeof delivery.from.lng === 'number';
+  const hasValidToCoords = delivery?.to && typeof delivery.to.lat === 'number' && typeof delivery.to.lng === 'number';
+  
   const centerOUAGA: [number, number] = [12.3714, -1.5197];
-  const centerMap = delivery?.from ? [delivery.from.lat, delivery.from.lng] as [number, number] : centerOUAGA;
+  const centerMap = hasValidFromCoords ? [delivery.from.lat, delivery.from.lng] as [number, number] : centerOUAGA;
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 font-sans relative overflow-hidden">
@@ -255,8 +264,8 @@ export default function DeliveryTracking() {
                <TileLayer url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains={['mt0', 'mt1', 'mt2', 'mt3']} />
                <MapUpdater driver={driver} delivery={delivery} isFollowing={isFollowing} />
                {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#4f46e5" weight={4} dashArray="10,10" />}
-               {delivery.from && <Marker position={[delivery.from.lat, delivery.from.lng]} icon={customMarkerIcon} />}
-               {delivery.to && <Marker position={[delivery.to.lat, delivery.to.lng]} icon={customMarkerIcon} />}
+               {hasValidFromCoords && <Marker position={[delivery.from.lat, delivery.from.lng]} icon={customMarkerIcon} />}
+               {hasValidToCoords && <Marker position={[delivery.to.lat, delivery.to.lng]} icon={customMarkerIcon} />}
                {driver?.currentLocation && (
                   <Marker 
                     position={[driver.currentLocation.lat, driver.currentLocation.lng]} 

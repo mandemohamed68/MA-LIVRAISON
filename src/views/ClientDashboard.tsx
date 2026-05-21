@@ -138,7 +138,7 @@ export default function ClientDashboard() {
          <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-slate-50/80 to-slate-50 z-10" />
          {(activeDeliveries.length > 0 && (activeDeliveries[0].from || activeDeliveries[0].to)) ? (
             <MapContainer 
-               center={activeDeliveries[0].from ? [activeDeliveries[0].from.lat, activeDeliveries[0].from.lng] : [12.3714, -1.5197]} 
+               center={(activeDeliveries[0].from && activeDeliveries[0].from.lat) ? [activeDeliveries[0].from.lat, activeDeliveries[0].from.lng] : [12.3714, -1.5197]} 
                zoom={14} 
                style={{ height: '100%', width: '100%' }}
                zoomControl={false}

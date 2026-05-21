@@ -1,7 +1,7 @@
 // Service central pour les appels API vers le serveur local (Debian)
 // Remplace les appels directs à Firebase SDK
 
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://41.78.54.60:3006/api";
 console.log('API_BASE being used:', API_BASE);
 
 async function request(endpoint: string, method = 'GET', body?: any, retryCount = 0): Promise<any> {
