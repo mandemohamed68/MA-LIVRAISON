@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, Phone, MapPin, Truck, Save, ArrowLeft, ShieldCheck, CheckCircle } from 'lucide-react';
+import { User, Phone, MapPin, Truck, Save, ArrowLeft, ShieldCheck, CheckCircle, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -17,6 +17,7 @@ export default function Settings() {
   const [vehicleType, setVehicleType] = useState('moto');
   const [licensePlate, setLicensePlate] = useState('');
   const [driverType, setDriverType] = useState<'freelance' | 'company'>(profile?.driverType || 'freelance');
+  const [photoURL, setPhotoURL] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -29,6 +30,7 @@ export default function Settings() {
       setAddress((profile as any).address || '');
       setVehicleType(profile.vehicleType || 'moto');
       setLicensePlate(profile.licensePlate || '');
+      setPhotoURL(profile.photoURL || '');
       if (profile.driverType) setDriverType(profile.driverType);
     }
   }, [profile]);
@@ -38,6 +40,21 @@ export default function Settings() {
       <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("La photo ne doit pas dépasser 2 Mo.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoURL(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +70,7 @@ export default function Settings() {
         vehicleType,
         licensePlate,
         driverType,
+        photoURL,
         updatedAt: new Date().toISOString()
       } as any);
       setSuccessMsg('Profil mis à jour avec succès !');
@@ -127,6 +145,28 @@ export default function Settings() {
               <h3 className="text-xl font-black text-slate-900 italic uppercase tracking-tight flex items-center gap-4">
                 <User className="w-6 h-6 text-orange-500" /> Informations générales
               </h3>
+
+              <div className="flex flex-col sm:flex-row items-center gap-6 pb-6 border-b border-slate-100">
+                <div className="relative group w-24 h-24 rounded-full overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-inner flex items-center justify-center">
+                  {photoURL ? (
+                    <img src={photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-10 h-10 text-slate-400" />
+                  )}
+                  <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                    <Camera className="w-6 h-6 text-white" />
+                    <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                  </label>
+                </div>
+                <div className="text-center sm:text-left">
+                  <p className="text-sm font-black text-slate-900">Photo de profil</p>
+                  <p className="text-xs text-slate-400 mt-1">Formats acceptés : PNG, JPG. Max 2 Mo.</p>
+                  <label className="mt-2 inline-block bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors border border-slate-200">
+                    Choisir un fichier
+                    <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                  </label>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">

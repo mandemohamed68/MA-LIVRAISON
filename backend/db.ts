@@ -326,5 +326,6 @@ addColumnIfNotExists('users', 'performanceScore', "REAL DEFAULT 100");
 addColumnIfNotExists('users', 'cancellationRate', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'totalEarnings', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'dailyGoal', "REAL DEFAULT 0");
+addColumnIfNotExists('users', 'photoURL', "TEXT");
 
 export default db;

@@ -185,6 +185,29 @@ export default function DriverDashboard() {
     setIsProcessingAction(false);
   };
   const [selectedPendingJob, setSelectedPendingJob] = useState<DeliveryRequest | null>(null);
+  const [myBidOnJob, setMyBidOnJob] = useState<any | null>(null);
+  const [fetchingBids, setFetchingBids] = useState(false);
+
+  useEffect(() => {
+    if (!selectedPendingJob || !profile) {
+      setMyBidOnJob(null);
+      return;
+    }
+    const fetchBidsForJob = async () => {
+      setFetchingBids(true);
+      try {
+        const bidsList = await api.deliveries.bids.list(selectedPendingJob.id);
+        const myBid = (bidsList || []).find((b: any) => b.driverId === profile.userId);
+        setMyBidOnJob(myBid || null);
+      } catch (err) {
+        console.warn("Could not fetch bids for selected job", err);
+        setMyBidOnJob(null);
+      } finally {
+        setFetchingBids(false);
+      }
+    };
+    fetchBidsForJob();
+  }, [selectedPendingJob, profile]);
   
   // Bid State
   const [bidPrice, setBidPrice] = useState<number | ''>('');
@@ -413,7 +436,7 @@ export default function DriverDashboard() {
   const earnings = useMemo(() => {
     // Tous les gains (les courses complétées online, c'est ce que la plateforme doit au livreur)
     const onlineJobs = deliveredJobs.filter(d => d.paymentMethod !== 'cash');
-    const totalEarnings = onlineJobs.reduce((sum, d) => sum + (d.cost || 0), 0) * (commissionSettings?.driverSharePercent || 85) / 100;
+    const totalEarnings = onlineJobs.reduce((sum, d) => sum + (d.clientProposedPrice || d.cost || 0), 0) * (commissionSettings?.driverSharePercent || 85) / 100;
     // On soustrait l'historique des retraits
     return totalEarnings - (profile?.totalWithdrawn || 0);
   }, [deliveredJobs, commissionSettings, profile?.totalWithdrawn]);
@@ -996,10 +1019,33 @@ export default function DriverDashboard() {
                               </div>
                            </div>
 
+                           {/* Affichage de l'état des négociations en cours ou refusées */}
+                           {myBidOnJob && (
+                             <div className={cn(
+                               "p-4 rounded-2xl text-xs font-bold mb-4 border leading-relaxed w-full",
+                               myBidOnJob.status === 'pending' ? "bg-amber-50 text-amber-800 border-amber-200" :
+                               myBidOnJob.status === 'rejected' && myBidOnJob.attempts < 2 ? "bg-orange-50 text-orange-800 border-orange-200" :
+                               "bg-slate-100 text-slate-600 border-slate-200"
+                             )}>
+                               {myBidOnJob.status === 'pending' && (
+                                 <p>⏳ Vous avez proposé {myBidOnJob.price} FCFA. Proposition en cours d'examen par le client (Tentative {myBidOnJob.attempts}/2)...</p>
+                               )}
+                               {myBidOnJob.status === 'rejected' && myBidOnJob.attempts == 1 && (
+                                 <p>❌ Votre offre de {myBidOnJob.price} FCFA a été refusée. Le client vous autorise une seconde et dernière proposition de tarif !</p>
+                               )}
+                               {myBidOnJob.status === 'rejected' && myBidOnJob.attempts >= 2 && (
+                                 <p>🔒 Limite de négociations de prix atteinte (2/2). L'offre initiale reste disponible en acceptation directe.</p>
+                               )}
+                             </div>
+                           )}
+
                            <div className="flex gap-2">
+                             {(!myBidOnJob || myBidOnJob.status !== 'pending') && (
                               <button onClick={() => submitBid(selectedPendingJob.id, true)} disabled={isBidding} className={cn("flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-900/20 active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-slate-800")}>
                                  {isBidding ? "..." : "Accepter"}
                               </button>
+                             )}
+                              {(!myBidOnJob || (myBidOnJob.status === 'rejected' && myBidOnJob.attempts < 2)) && (
                                <button onClick={() => {
                                  setBidPrice(selectedPendingJob.clientProposedPrice || selectedPendingJob.cost || 2000);
                                  const dist = calculateDistance(selectedPendingJob.from.lat, selectedPendingJob.from.lng, selectedPendingJob.to.lat, selectedPendingJob.to.lng);
@@ -1009,6 +1055,7 @@ export default function DriverDashboard() {
                               }} disabled={isBidding} className={cn("flex-1 py-4 bg-orange-50 text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] active:scale-95 transition-all text-center", isBidding ? "opacity-50" : "hover:bg-orange-100")}>
                                  Négocier
                               </button>
+                              )}
                               <button onClick={() => handleRejectJob(selectedPendingJob.id)} className="w-12 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-100 active:scale-95 transition-all" title="Refuser">
                                  <X className="w-5 h-5" />
                               </button>

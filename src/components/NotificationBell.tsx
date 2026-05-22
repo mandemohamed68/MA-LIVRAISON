@@ -76,11 +76,13 @@ export default function NotificationBell() {
     <div className="relative">
       <button 
         onClick={() => { setIsOpen(!isOpen); if (!isOpen) markAllAsRead(); }}
-        className="relative w-10 md:w-12 h-10 md:h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all"
+        className="relative w-10 md:w-12 h-10 md:h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all cursor-pointer"
       >
         <Bell className="w-5 md:w-6 h-5 md:h-6 text-white" />
-        {hasUnread && (
-          <span className="absolute top-2 md:top-3 right-2 md:right-3 w-3 h-3 bg-red-500 border-2 border-[#1E293B] rounded-full animate-pulse" />
+        {notifications.filter(n => !n.isRead).length > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 bg-red-500 border-2 border-[#ea580c] rounded-full flex items-center justify-center text-[9px] font-black text-white shadow-lg shadow-red-500/20">
+            {notifications.filter(n => !n.isRead).length}
+          </span>
         )}
       </button>
 
