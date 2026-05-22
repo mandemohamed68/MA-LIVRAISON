@@ -3,7 +3,10 @@
 import { Capacitor } from '@capacitor/core';
 
 const getApiBase = () => {
-  return "http://41.78.54.60:3006/api";
+  if (Capacitor.isNativePlatform()) {
+    return "http://41.78.54.60:3006/api";
+  }
+  return "/api";
 };
 
 const API_BASE = getApiBase();
@@ -75,6 +78,7 @@ export const api = {
     bids: {
       list: (id: string) => request(`/deliveries/${id}/bids`),
       place: (id: string, data: any) => request(`/deliveries/${id}/bids`, 'POST', data),
+      decline: (id: string, driverId: string) => request(`/deliveries/${id}/bids/${driverId}/decline`, 'POST'),
     },
     tracking: {
       update: (id: string, data: any) => request(`/deliveries/${id}/tracking`, 'POST', data),
@@ -102,8 +106,16 @@ export const api = {
       delete: (userId: string) => request(`/backoffice/users/${userId}`, 'DELETE'),
       updateRole: (userId: string, role: string) => request(`/backoffice/users/${userId}/role`, 'PATCH', { role }),
     },
+    withdrawals: {
+      list: () => request('/backoffice/withdrawals'),
+      validate: (id: string) => request(`/backoffice/withdrawals/${id}/valider`, 'POST'),
+    },
     reset: () => request('/backoffice/reset', 'POST'),
     seed: () => request('/backoffice/seed', 'POST'),
+  },
+  withdrawals: {
+    create: (data: any) => request('/withdrawals', 'POST', data),
+    list: () => request('/withdrawals'),
   },
   announcements: {
     list: () => request('/announcements'),

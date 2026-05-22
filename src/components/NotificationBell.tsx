@@ -87,12 +87,12 @@ export default function NotificationBell() {
       <AnimatePresence>
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <div className="fixed inset-0 z-[9998]" onClick={() => setIsOpen(false)} />
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.9 }}
-              className="absolute right-0 mt-4 w-72 md:w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 z-50 overflow-hidden"
+              className="fixed sm:absolute top-20 right-4 sm:right-0 sm:top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 z-[9999] overflow-hidden"
             >
               <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Notifications</h3>

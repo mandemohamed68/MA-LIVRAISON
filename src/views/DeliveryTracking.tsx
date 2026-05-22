@@ -146,6 +146,10 @@ export default function DeliveryTracking() {
       setShowPaymentModal(false);
       setPaymentBid(null);
       alert('Paiement enregistré sur le serveur local !');
+
+      // Refresh delivery data
+      const updatedDelivery = await api.deliveries.get(delivery.id);
+      setDelivery(updatedDelivery);
     } catch (e) {
       console.error(e);
       alert('Erreur de paiement sur le serveur local.');
@@ -482,7 +486,7 @@ export default function DeliveryTracking() {
                     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-600 mb-6">Offres reçues ({bids.length})</h3>
                        <div className="space-y-4">
-                          {bids.map(bid => (
+                          {bids.filter(b => b.status !== 'rejected').map(bid => (
                              <div key={bid.id} className="p-5 rounded-[28px] border border-slate-100 bg-slate-50/50 flex flex-col gap-4">
                                 <div className="flex justify-between items-start px-1">
                                    <div>
@@ -494,12 +498,30 @@ export default function DeliveryTracking() {
                                       <p className="text-[10px] text-indigo-400 font-bold mt-1.5 uppercase italic">{bid.timeEstimateMins} mins</p>
                                    </div>
                                 </div>
-                                <button 
-                                   onClick={() => { setPaymentBid(bid); setShowPaymentModal(true); }}
-                                   className="w-full bg-slate-900 text-white font-black py-4 rounded-[20px] text-[10px] uppercase tracking-widest hover:bg-slate-800 shadow-lg shadow-slate-900/10 active:scale-95 transition-all"
-                                >
-                                   Accepter l'offre
-                                </button>
+                                <div className="flex gap-2">
+                                   <button 
+                                      onClick={() => { setPaymentBid(bid); setShowPaymentModal(true); }}
+                                      className="flex-1 bg-slate-900 text-white font-black py-4 rounded-[20px] text-[10px] uppercase tracking-widest hover:bg-slate-800 shadow-lg shadow-slate-900/10 active:scale-95 transition-all"
+                                   >
+                                      Accepter l'offre
+                                   </button>
+                                   <button 
+                                      onClick={async () => {
+                                         if (confirm("Voulez-vous refuser cette offre ? Le livreur pourra soumettre une dernière proposition.")) {
+                                            try {
+                                               await api.deliveries.bids.decline(deliveryId, bid.driverId);
+                                               const bidsList = await api.deliveries.bids.list(deliveryId);
+                                               setBids(Array.isArray(bidsList) ? bidsList : []);
+                                            } catch (err) {
+                                               alert("Impossible de refuser l'offre : " + (err.message || err));
+                                            }
+                                         }
+                                      }}
+                                      className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold py-4 rounded-[20px] text-[10px] uppercase tracking-wider active:scale-95 transition-all"
+                                   >
+                                      Refuser
+                                   </button>
+                                </div>
                              </div>
                           ))}
                        </div>

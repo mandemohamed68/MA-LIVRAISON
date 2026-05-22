@@ -9,6 +9,7 @@ import { AppLanguage } from '../lib/translations';
 import { api } from '../services/apiService';
 import { AppConfig } from '../types';
 import Logo from './Logo';
+import logoImg from '../assets/logo.png';
 
 export default function Navbar() {
   const { user, profile, logout, language, setLanguage, t, isMasterAdmin, updateRole } = useAuth();
@@ -16,7 +17,7 @@ export default function Navbar() {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-  const [logoUrl, setLogoUrl] = useState("./logo.png");
+  const [logoUrl, setLogoUrl] = useState(logoImg);
   const [logoError, setLogoError] = useState(false);
 
   const handleRoleChangeInNavbar = async (role: any) => {

@@ -41,9 +41,12 @@ async function startServer() {
     const token = authHeader.split(" ")[1];
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
-      const user = db.prepare("SELECT role, name, email FROM users WHERE userId = ?").get(decoded.userId) as any;
+      const user = db.prepare("SELECT role, name, email, accountStatus FROM users WHERE userId = ?").get(decoded.userId) as any;
       if (!user) {
         return res.status(401).json({ error: "User not found or role mismatch" });
+      }
+      if (user.accountStatus === 'suspended') {
+        return res.status(403).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
       }
       req.user = {
         ...decoded,
@@ -70,8 +73,33 @@ async function startServer() {
       const stmt = db.prepare("INSERT INTO users (id, userId, name, email, password, role) VALUES (?, ?, ?, ?, ?, ?)");
       stmt.run(userId, userId, name, email, hashedPassword, role || "client");
       
+      // Dynamically save extra registration body fields (city, neighborhood, phone, etc.)
+      const allowedFields = [
+        'city', 'neighborhood', 'address', 'driverType', 'phone', 'idCardFront', 'idCardBack',
+        'status', 'termsAcceptedAt', 'vehicleType', 'licensePlate', 'sectors'
+      ];
+      const updates = [];
+      const params = [];
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updates.push(`${field} = ?`);
+          params.push(req.body[field]);
+        }
+      }
+      if (updates.length > 0) {
+        params.push(userId);
+        db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE userId = ?`).run(...params);
+      }
+
+      // Fetch the full registered user profile to return to the frontend
+      const fullUser = db.prepare("SELECT * FROM users WHERE userId = ?").get(userId) as any;
+      delete fullUser.password;
+      if (fullUser.currentLocation) {
+        try { fullUser.currentLocation = JSON.parse(fullUser.currentLocation); } catch(e){}
+      }
+
       const token = jwt.sign({ userId, email, role }, JWT_SECRET);
-      res.json({ token, user: { userId, name, email, role } });
+      res.json({ token, user: fullUser });
     } catch (error: any) {
       if (error.message.includes("UNIQUE")) {
         return res.status(400).json({ error: "Email already exists" });
@@ -86,6 +114,9 @@ async function startServer() {
       const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
       if (!user || !(await bcrypt.compare(password, user.password))) {
         return res.status(401).json({ error: "Invalid credentials" });
+      }
+      if (user.accountStatus === 'suspended') {
+        return res.status(403).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
       }
       const token = jwt.sign({ userId: user.userId, email: user.email, role: user.role }, JWT_SECRET);
       res.json({ token, user: { userId: user.userId, name: user.name, email: user.email, role: user.role } });
@@ -285,11 +316,14 @@ async function startServer() {
   app.delete("/api/deliveries/:id", authenticate, (req: any, res) => {
     const { id } = req.params;
     try {
-      db.prepare("DELETE FROM deliveries WHERE id = ?").run(id);
+      db.prepare("DELETE FROM tracking WHERE deliveryId = ?").run(id);
+      db.prepare("DELETE FROM bids WHERE deliveryId = ?").run(id);
       db.prepare("DELETE FROM messages WHERE deliveryId = ?").run(id);
+      db.prepare("DELETE FROM deliveries WHERE id = ?").run(id);
       res.json({ status: "ok" });
-    } catch (err) {
-      res.status(500).json({ error: "Delete failed" });
+    } catch (err: any) {
+      console.error("Delete failed:", err);
+      res.status(500).json({ error: "Delete failed", details: err?.message });
     }
   });
 
@@ -301,6 +335,10 @@ async function startServer() {
     try {
       const stmt = db.prepare("INSERT INTO messages (id, deliveryId, text, senderId, senderName, senderRole) VALUES (?, ?, ?, ?, ?, ?)");
       stmt.run(id, deliveryId, text, req.user.userId, senderName, senderRole);
+      
+      // Update lastMessageAt on delivery
+      db.prepare("UPDATE deliveries SET lastMessageAt = CURRENT_TIMESTAMP WHERE id = ?").run(deliveryId);
+      
       res.json({ id });
     } catch (err) {
       res.status(500).json({ error: "Message failed" });
@@ -545,7 +583,16 @@ async function startServer() {
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const users = db.prepare("SELECT * FROM users").all() as any[];
-    users.forEach(u => delete u.password);
+    users.forEach(u => {
+      delete u.password;
+      if (typeof u.currentLocation === 'string' && u.currentLocation) {
+        try {
+          u.currentLocation = JSON.parse(u.currentLocation);
+        } catch (e) {
+          u.currentLocation = null;
+        }
+      }
+    });
     res.json(users);
   });
 
@@ -631,13 +678,17 @@ async function startServer() {
       return res.status(403).json({ error: "Superadmin only" });
     }
     try {
-      db.prepare("DELETE FROM deliveries").run();
+      db.prepare("DELETE FROM tracking").run();
+      db.prepare("DELETE FROM bids").run();
       db.prepare("DELETE FROM messages").run();
+      db.prepare("DELETE FROM deliveries").run();
       db.prepare("DELETE FROM notifications").run();
+      db.prepare("DELETE FROM withdrawals").run();
       db.prepare("DELETE FROM users WHERE role NOT IN ('admin', 'superadmin')").run();
       res.json({ status: "ok" });
-    } catch (err) {
-      res.status(500).json({ error: "Reset failed" });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Reset failed", details: err?.message });
     }
   });
 
@@ -782,16 +833,50 @@ async function startServer() {
     const { id } = req.params;
     const { price, proposedTime, timeEstimateMins, reason } = req.body;
     const actualTime = proposedTime !== undefined ? proposedTime : timeEstimateMins;
+    const bidId = `${id}_${req.user.userId}`;
     try {
-      const bidId = `${id}_${req.user.userId}`;
+      const existingBid = db.prepare("SELECT * FROM bids WHERE id = ?").get(bidId) as any;
+      let attempts = 1;
+      if (existingBid) {
+        attempts = (existingBid.attempts || 1) + 1;
+        if (attempts > 2) {
+          return res.status(400).json({ error: "Nombre maximum de tentatives de négociation (2) atteint." });
+        }
+      }
+
       db.prepare(`
-        INSERT OR REPLACE INTO bids (id, deliveryId, driverId, driverName, price, proposedTime, reason, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(bidId, id, req.user.userId, req.user.name, price, actualTime, reason);
-      res.json({ status: "ok", id: bidId });
+        INSERT OR REPLACE INTO bids (id, deliveryId, driverId, driverName, price, proposedTime, reason, status, attempts, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)
+      `).run(bidId, id, req.user.userId, req.user.name, price, actualTime, reason, attempts);
+
+      // Notify client
+      const delivery = db.prepare("SELECT clientId FROM deliveries WHERE id = ?").get(id) as any;
+      if (delivery) {
+        const message = `Le livreur ${req.user.name} propose un tarif de ${price} FCFA (Tentative ${attempts}/2).`;
+        db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+          .run(uuidv4(), delivery.clientId, 'Nouvelle proposition', message, 'warning');
+      }
+
+      res.json({ status: "ok", id: bidId, attempts });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Place bid failed" });
+    }
+  });
+
+  app.post("/api/deliveries/:id/bids/:driverId/decline", authenticate, (req: any, res) => {
+    const { id, driverId } = req.params;
+    try {
+      db.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId = ?").run(id, driverId);
+      
+      // Notify driver
+      db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+        .run(uuidv4(), driverId, 'Proposition refusée', `Votre proposition de tarif pour la course #${id.slice(-6).toUpperCase()} a été refusée. Vous pouvez soumettre une dernière proposition si applicable.`, 'warning');
+
+      res.json({ status: "ok" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to decline bid" });
     }
   });
 
@@ -807,6 +892,111 @@ async function startServer() {
       res.json({ status: "ok", id: trackingId });
     } catch (err) {
       res.status(500).json({ error: "Tracking update failed" });
+    }
+  });
+
+  // --- WITHDRAWALS ---
+  app.post("/api/withdrawals", authenticate, (req: any, res) => {
+    if (req.user.role !== 'driver') return res.status(403).json({ error: "Drivers only" });
+    const { amount, method, phone } = req.body;
+    if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
+
+    try {
+      const driver = db.prepare("SELECT * FROM users WHERE userId = ?").get(req.user.userId) as any;
+      if (!driver) return res.status(404).json({ error: "Driver not found" });
+
+      // Calculate earnings from online deliveries
+      const configRows = db.prepare("SELECT * FROM config").all() as any[];
+      const commissionsRow = configRows.find(c => c.key === 'commissions');
+      const commissionSettings = commissionsRow ? JSON.parse(commissionsRow.value) : { driverSharePercent: 85 };
+      const driverShare = commissionSettings.driverSharePercent || 85;
+
+      const onlineDeliveries = db.prepare(`SELECT * FROM deliveries WHERE driverId = ? AND status = 'delivered' AND paymentMethod != 'cash'`).all(driver.userId) as any[];
+      const totalEarnings = onlineDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * driverShare / 100;
+      
+      const earnings = totalEarnings - (driver.totalWithdrawn || 0);
+
+      if (amount > earnings) return res.status(400).json({ error: "Amount exceeds available balance" });
+
+      const id = uuidv4();
+      db.prepare(`
+        INSERT INTO withdrawals (id, driverId, driverName, amount, status, method, phone)
+        VALUES (?, ?, ?, ?, 'en_attente', ?, ?)
+      `).run(id, req.user.userId, req.user.name, amount, method, phone);
+
+      // Create a notification for admin
+      db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+        .run(uuidv4(), 'admin', 'Nouvelle demande de retrait', `${req.user.name} demande un retrait de ${amount} FCFA`, 'info');
+
+      res.json({ status: "ok", id });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Withdrawal request failed" });
+    }
+  });
+
+  app.get("/api/withdrawals", authenticate, (req: any, res) => {
+    try {
+      const list = db.prepare("SELECT * FROM withdrawals WHERE driverId = ? ORDER BY createdAt DESC").all(req.user.userId);
+      res.json(list);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch driver withdrawals" });
+    }
+  });
+
+  app.get("/api/backoffice/withdrawals", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+       return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      const withdrawals = db.prepare("SELECT * FROM withdrawals ORDER BY createdAt DESC").all();
+      res.json(withdrawals);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch withdrawals" });
+    }
+  });
+
+  app.post("/api/backoffice/withdrawals/:id/valider", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+       return res.status(403).json({ error: "Access denied" });
+    }
+    const { id } = req.params;
+    try {
+      const withdrawal = db.prepare("SELECT * FROM withdrawals WHERE id = ?").get(id) as any;
+      if (!withdrawal) return res.status(404).json({ error: "Withdrawal not found" });
+      if (withdrawal.status === 'valide') return res.status(400).json({ error: "Already validated" });
+
+      const driver = db.prepare("SELECT * FROM users WHERE userId = ?").get(withdrawal.driverId) as any;
+      if (!driver) return res.status(404).json({ error: "Driver not found" });
+
+      // Calculate earnings from online deliveries
+      const configRows = db.prepare("SELECT * FROM config").all() as any[];
+      const commissionsRow = configRows.find(c => c.key === 'commissions');
+      const commissionSettings = commissionsRow ? JSON.parse(commissionsRow.value) : { driverSharePercent: 85 };
+      const driverShare = commissionSettings.driverSharePercent || 85;
+
+      const onlineDeliveries = db.prepare(`SELECT * FROM deliveries WHERE driverId = ? AND status = 'delivered' AND paymentMethod != 'cash'`).all(driver.userId) as any[];
+      const totalEarnings = onlineDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * driverShare / 100;
+      const earnings = totalEarnings - (driver.totalWithdrawn || 0);
+
+      const newBalance = earnings - withdrawal.amount;
+      if (newBalance < 0) return res.status(400).json({ error: "Insufficient balance" });
+
+      db.transaction(() => {
+        // Update user
+        db.prepare("UPDATE users SET earnings = ?, totalWithdrawn = COALESCE(totalWithdrawn, 0) + ? WHERE userId = ?").run(newBalance, withdrawal.amount, driver.userId);
+        // Update withdrawal
+        db.prepare("UPDATE withdrawals SET status = 'valide', processedAt = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+        // Add historic
+        const msg = `Retrait de ${withdrawal.amount} FCFA - validé`;
+        db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+          .run(uuidv4(), driver.userId, 'Retrait validé', msg, 'success');
+      })();
+
+      res.json({ status: "ok" });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to validate withdrawal" });
     }
   });
 

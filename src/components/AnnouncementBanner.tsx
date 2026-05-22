@@ -14,12 +14,12 @@ export default function AnnouncementBanner() {
   useEffect(() => {
     const fetchAnnouncements = async () => {
       try {
-        const docs = await api.config.get('announcements').catch(() => []);
+        const docs = await api.announcements.list().catch(() => []);
         if (!Array.isArray(docs)) return;
 
         const now = new Date().toISOString();
         const filtered = docs.filter((a: AppAnnouncement) => 
-          a.activeUntil >= now &&
+          (!a.activeUntil || a.activeUntil >= now) &&
           (a.targetRole === 'all' || (profile && a.targetRole === profile.role))
         );
         

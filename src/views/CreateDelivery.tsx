@@ -197,39 +197,36 @@ export default function CreateDelivery() {
     setSuggestions([]);
   };
 
-  const detectLocation = useCallback(() => {
-    if (!("geolocation" in navigator)) return;
-
+  const detectLocation = useCallback(async () => {
     setIsDetectingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
+    try {
+      const { GeolocationService } = await import('../services/GeolocationService');
+      const position = await GeolocationService.getCurrentPosition();
+      
+      const lat = position.lat;
+      const lng = position.lng;
 
-        setFrom((prev) => {
-          if (!prev) {
-            setDirectionStep("to");
-            return { lat, lng, address: "Ma position..." };
-          }
-          return prev;
-        });
-        setIsDetectingLocation(false);
-
-        try {
-          const address = await reverseGeocode(lat, lng);
-          setFrom((prev) =>
-            prev && prev.lat === lat ? { ...prev, address } : prev
-          );
-        } catch (e) {
-          console.error("Geocoding failed", e);
+      setFrom((prev) => {
+        if (!prev) {
+          setDirectionStep("to");
+          return { lat, lng, address: "Ma position..." };
         }
-      },
-      (error) => {
-        console.warn("Geolocation fallback:", error);
-        setIsDetectingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+        return prev;
+      });
+      setIsDetectingLocation(false);
+
+      try {
+        const address = await reverseGeocode(lat, lng);
+        setFrom((prev) =>
+          prev && prev.lat === lat ? { ...prev, address } : prev
+        );
+      } catch (e) {
+        console.error("Geocoding failed", e);
+      }
+    } catch (error) {
+      console.warn("Geolocation fallback:", error);
+      setIsDetectingLocation(false);
+    }
   }, []);
 
   // Promo Code

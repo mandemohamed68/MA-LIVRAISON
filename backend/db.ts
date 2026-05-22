@@ -177,6 +177,7 @@ try {
     proposedTime INTEGER,
     reason TEXT,
     status TEXT DEFAULT 'pending', -- pending, accepted, rejected
+    attempts INTEGER DEFAULT 1,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(deliveryId) REFERENCES deliveries(id),
@@ -186,6 +187,12 @@ try {
 } catch (err) {
   console.error("Critical error during database schema creation:", err);
 }
+
+// Migrate bids table for attempts column
+try {
+  db.exec("ALTER TABLE bids ADD COLUMN attempts INTEGER DEFAULT 1");
+  console.log("Migration: Added column attempts to bids table");
+} catch (err) {}
 
 // MIGRATION: Added columns to deliveries table
 const colsToAdd = [
@@ -197,7 +204,8 @@ const colsToAdd = [
   { name: 'clientProposedPrice', type: 'REAL' },
   { name: 'isUrgent', type: 'INTEGER DEFAULT 0' },
   { name: 'urgentFee', type: 'REAL DEFAULT 0' },
-  { name: 'boostAmount', type: 'REAL DEFAULT 0' }
+  { name: 'boostAmount', type: 'REAL DEFAULT 0' },
+  { name: 'lastMessageAt', type: 'TEXT' }
 ];
 
 colsToAdd.forEach(col => {

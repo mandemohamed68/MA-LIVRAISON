@@ -27,6 +27,7 @@ export default function AdminDashboard() {
 
   const [deliveries, setDeliveries] = useState<DeliveryRequest[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [commission, setCommission] = useState<CommissionSettings | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [configForm, setConfigForm] = useState<AppConfig | null>(null);
@@ -85,7 +86,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     // Check if there are new validations waiting (payments or withdrawals)
     const currentPendingPayments = deliveries.filter(d => d.paymentStatus === 'pending' || d.paymentStatus === 'pending_approval').length;
-    const currentPendingWithdrawals = users.filter(u => u.withdrawalRequested).length;
+    const currentPendingWithdrawals = withdrawals.filter(w => w.status === 'en_attente').length;
     
     const totalPendingCount = currentPendingPayments + currentPendingWithdrawals;
 
@@ -118,13 +119,14 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData] = await Promise.all([
+      const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData, withdrawalsList] = await Promise.all([
         api.admin.users.list().then(res => res || []).catch(() => []),
         api.deliveries.list().then(res => res || []).catch(() => []),
         api.config.get('app_config').then(res => res || { mode: 'prod' }).catch(() => ({ mode: 'prod' })),
         api.config.get('commissions').then(res => res || null).catch(() => null),
         api.sectors.list().then(res => res || []).catch(() => []),
-        api.announcements.list().then(res => res || []).catch(() => [])
+        api.announcements.list().then(res => res || []).catch(() => []),
+        api.admin.withdrawals.list().then(res => res || []).catch(() => [])
       ]);
 
       setUsers(usersList);
@@ -133,6 +135,7 @@ export default function AdminDashboard() {
       if (commissionsData) setCommission(commissionsData);
       setSectors(sectorsData);
       setAnnouncements(announcementsData);
+      setWithdrawals(withdrawalsList);
     } catch (err) {
       console.error("Error polling local API:", err);
     } finally {
@@ -269,24 +272,15 @@ export default function AdminDashboard() {
     { name: 'Dim', express: 160, standard: 70 },
   ];
 
-  const handlePayDriver = async (driverId: string, amount: number) => {
-    if (!amount || amount <= 0) return;
+  const handleValidateWithdrawal = async (withdrawalId: string) => {
+    setIsProcessingAction(true);
     try {
-      const driver = users.find(u => u.userId === driverId);
-      if (!driver) return;
-      
-      setIsProcessingAction(true);
-      await api.admin.users.update(driverId, {
-        withdrawalRequested: false,
-        withdrawalAmount: 0,
-        totalWithdrawn: (driver.totalWithdrawn || 0) + amount,
-        updatedAt: new Date().toISOString()
-      });
-
-      alert('Paiement enregistré avec succès sur le serveur local');
-    } catch (e) {
+      await api.admin.withdrawals.validate(withdrawalId);
+      alert('Paiement enregistré avec succès.');
+      fetchData();
+    } catch (e: any) {
       console.error(e);
-      alert('Erreur lors du paiement');
+      alert(`Erreur lors de la validation: ${e.message || 'Erreur inconnue'}`);
     } finally {
       setIsProcessingAction(false);
     }
@@ -1024,57 +1018,29 @@ export default function AdminDashboard() {
            </div>
         );
       case 'Paiements Livreurs': {
-        const drivers = users.filter(u => u.role === 'driver');
-        const driversWithPayments = drivers.map(driver => {
-          const driverDeliveries = deliveries.filter(d => d.driverId === driver.userId && d.status === 'delivered' && d.paymentMethod !== 'cash');
-          const totalEarnings = driverDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * (commission?.driverSharePercent || 85) / 100;
-          const currentOwed = totalEarnings - (driver.totalWithdrawn || 0);
-          return { driver, currentOwed };
-        }).filter(item => {
-          if (paymentFilter === 'all') return item.currentOwed > 0 || item.driver.withdrawalRequested;
-          return (item.currentOwed > 0 || item.driver.withdrawalRequested) && item.driver.driverType === paymentFilter;
-        });
+        const pendingWithdrawals = withdrawals.filter(w => w.status === 'en_attente');
 
         return (
           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Paiements des Livreurs</h3>
-                <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner">
-                   <button 
-                     onClick={() => setPaymentFilter('all')}
-                     className={cn("px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all", paymentFilter === 'all' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400")}
-                   >
-                     Tous
-                   </button>
-                   <button 
-                     onClick={() => setPaymentFilter('freelance')}
-                     className={cn("px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all", paymentFilter === 'freelance' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400")}
-                   >
-                     Indépendants
-                   </button>
-                   <button 
-                     onClick={() => setPaymentFilter('company')}
-                     className={cn("px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all", paymentFilter === 'company' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400")}
-                   >
-                     Sociétés
-                   </button>
-                </div>
              </div>
 
-             {driversWithPayments.length === 0 ? (
+             {pendingWithdrawals.length === 0 ? (
                <div className="text-center py-10 bg-slate-50 rounded-3xl border border-slate-100">
                  <Wallet className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                  <p className="text-slate-500 font-medium">Aucun paiement en attente pour le moment.</p>
                </div>
              ) : (
                <div className="grid grid-cols-1 gap-6">
-                  {driversWithPayments.map(({ driver, currentOwed }) => {
+                  {pendingWithdrawals.map((withdrawal) => {
+                    const driver = users.find(u => u.userId === withdrawal.driverId);
                     return (
-                      <div key={driver.userId} className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-5 group hover:bg-white hover:shadow-2xl transition-all">
+                      <div key={withdrawal.id} className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-5 group hover:bg-white hover:shadow-2xl transition-all">
                          <div className="flex items-center gap-6">
                            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-100 relative">
                              <Truck className="w-7 h-7" />
-                             {driver.driverType === 'company' && (
+                             {driver?.driverType === 'company' && (
                                <div className="absolute -top-2 -right-2 bg-blue-600 text-white p-1 rounded-lg">
                                  <Building2 className="w-3 h-3" />
                                </div>
@@ -1083,28 +1049,22 @@ export default function AdminDashboard() {
                            <div>
                              <div className="flex items-center gap-2 mb-1">
                                <h4 className="font-black text-slate-900 uppercase">
-                                 {driver.name}
+                                 {withdrawal.driverName}
                                </h4>
                                <span className={cn(
                                  "text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
-                                 driver.driverType === 'company' ? "bg-blue-50 text-blue-600" : "bg-slate-200 text-slate-600"
+                                 "bg-slate-200 text-slate-600"
                                )}>
-                                 {driver.driverType === 'company' ? 'Flotte / Société' : 'Indépendant'}
+                                 {driver?.phone || withdrawal.phone || 'Non renseigné'}
                                </span>
-                               {driver.withdrawalRequested && (
-                                 <span className="flex h-2 w-2 relative">
-                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                 </span>
-                               )}
                              </div>
                              <div className="flex flex-col gap-1">
-                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Solde Dispo: {Math.floor(currentOwed).toLocaleString()} F</p>
-                               {driver.withdrawalRequested && (
-                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[8px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded-full">Demande de {driver.withdrawalAmount} F</span>
-                                 </div>
-                               )}
+                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                  Du {new Date(withdrawal.createdAt).toLocaleDateString()}
+                               </p>
+                               <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[8px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded-full">Demande de {withdrawal.amount} F</span>
+                               </div>
                              </div>
                            </div>
                          </div>
@@ -1112,12 +1072,13 @@ export default function AdminDashboard() {
                            <div className="text-right">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">À PAYER</p>
                               <p className="text-2xl font-black text-slate-900 tracking-tighter">
-                                {driver.withdrawalRequested ? driver.withdrawalAmount?.toLocaleString() : Math.floor(currentOwed).toLocaleString()} FCFA
+                                {withdrawal.amount?.toLocaleString()} FCFA
                               </p>
                            </div>
                            <button 
-                             onClick={() => handlePayDriver(driver.userId, driver.withdrawalRequested ? (driver.withdrawalAmount || 0) : currentOwed)}
-                             className="bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl shadow-slate-200"
+                             onClick={() => handleValidateWithdrawal(withdrawal.id)}
+                             disabled={isProcessingAction}
+                             className="bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:opacity-50"
                            >
                              Valider
                            </button>
@@ -2137,7 +2098,7 @@ export default function AdminDashboard() {
                         <item.icon className={cn("w-4 h-4", activeMenu === item.name ? "text-white" : "text-slate-400")} />
                         {item.name}
                       </div>
-                      {item.name === 'Paiements Livreurs' && users.some(u => u.withdrawalRequested) && (
+                      {item.name === 'Paiements Livreurs' && withdrawals.some(w => w.status === 'en_attente') && (
                         <span className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
                       )}
                     </button>

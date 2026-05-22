@@ -147,7 +147,12 @@ export default function PaymentModal({
   };
 
   const getApiUrl = (path: string) => {
-    const apiBase = "http://41.78.54.60:3006/api";
+    let apiBase = "/api";
+    // @ts-ignore
+    if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform()) {
+      apiBase = "http://41.78.54.60:3006/api";
+    }
+    
     if (path.startsWith('/api')) {
       if (apiBase.startsWith('http')) {
         return path.replace('/api', apiBase);

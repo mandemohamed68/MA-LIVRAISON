@@ -168,9 +168,9 @@ export default function ClientDashboard() {
               <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-0.5">LIVRA</p>
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">Bonjour {profile?.name?.split(' ')[0] || 'Client'}</h1>
            </div>
-           <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-900">
+          <button onClick={() => navigate('/settings')} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-900 hover:bg-slate-50 transition-colors active:scale-95" title="Modifier mon profil">
               <User className="w-5 h-5" />
-           </div>
+          </button>
         </header>
 
         {/* Primary Action Button */}

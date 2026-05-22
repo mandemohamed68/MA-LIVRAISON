@@ -88,7 +88,7 @@ function ChangeView({ center }: { center: [number, number] }) {
 }
 
 export default function DriverDashboard() {
-  const { profile, signOut, updateProfile } = useAuth();
+  const { profile, signOut, updateProfile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -214,6 +214,8 @@ export default function DriverDashboard() {
 
   // Withdraw state
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [selectedHistoryJob, setSelectedHistoryJob] = useState<DeliveryRequest | null>(null);
   
   const [activeDriverCount, setActiveDriverCount] = useState(0);
   
@@ -241,18 +243,16 @@ export default function DriverDashboard() {
     fetchSettings();
   }, []);
 
-  const requestGeolocation = () => {
-    if (!("geolocation" in navigator)) {
-      setGpsError("GPS non supporté sur cet appareil.");
-      return undefined;
-    }
-
+  const requestGeolocation = async () => {
     setLoading(true);
     let lastUpdate = 0;
     let lastCoords: { lat: number, lng: number } | null = null;
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    
+    // Dynamically import the custom GeolocationService
+    const { GeolocationService } = await import('../services/GeolocationService');
+
+    const watchId = await GeolocationService.watchPosition(
+      (coords) => {
         setUserLocation(coords);
         setGpsError(null);
         setLoading(false);
@@ -276,20 +276,16 @@ export default function DriverDashboard() {
       },
       (err) => {
         setLoading(false);
-
-        if (err.code === 1) setGpsError("GPS refusé par le navigateur.");
-        else if (err.code === 2) setGpsError("GPS indisponible sur cet appareil.");
-        else if (err.code === 3) setGpsError("Timeout lors de la recherche GPS.");
-        else setGpsError("Erreur GPS inconnue.");
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        setGpsError("Erreur GPS ou permission refusée.");
+      }
     );
-    return id;
+    return watchId;
   };
 
   const fetchData = async () => {
     if (!profile) return;
     try {
+      await refreshProfile().catch(() => {});
       const jobs = await api.deliveries.list();
       
       const allMyJobs = jobs.filter((j: any) => j.driverId === profile.userId);
@@ -301,6 +297,9 @@ export default function DriverDashboard() {
       setActiveJobs(activeList);
       setDeliveredJobs(deliveredList);
       
+      const wdList = await api.withdrawals.list().catch(() => []);
+      setWithdrawals(Array.isArray(wdList) ? wdList : []);
+
       if (isOnline) {
         setPendingJobs(jobs.filter((j: any) => j.status === 'pending'));
       } else {
@@ -319,13 +318,23 @@ export default function DriverDashboard() {
       return;
     }
 
-    const watchId = requestGeolocation();
+    let currentWatchId: string | undefined | null;
+    let isActive = true;
+
+    requestGeolocation().then(id => {
+       if (isActive) currentWatchId = id;
+    });
 
     fetchData();
     const interval = setInterval(fetchData, 8000);
 
     return () => {
-      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+      isActive = false;
+      if (currentWatchId) {
+        import('../services/GeolocationService').then(({ GeolocationService }) => {
+           GeolocationService.clearWatch(currentWatchId as string);
+        });
+      }
       clearInterval(interval);
     };
   }, [profile, isOnline]);
@@ -489,17 +498,15 @@ export default function DriverDashboard() {
     if (!amount || amount < 500 || amount > earnings) { setToastMessage("Montant invalide"); return; }
     setIsWithdrawing(true);
     try {
-      await api.profile.update({
-        withdrawalRequested: true,
-        withdrawalAmount: amount,
-        withdrawalMethod: 'mobile_money',
-        withdrawalPhone: profile.phone || '',
-        withdrawalRequestedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      await api.withdrawals.create({
+        amount: amount,
+        method: 'mobile_money',
+        phone: profile.phone || ''
       });
-      setToastMessage("Demande envoyée !");
+      setToastMessage("Votre demande a bien été envoyée à l'administrateur.");
       setIsWithdrawalModalOpen(false);
       setWithdrawalAmountInput('');
+      fetchData();
     } catch (err) {
       console.error(err);
       setToastMessage("Erreur lors de la demande");
@@ -1154,7 +1161,7 @@ export default function DriverDashboard() {
                     deliveredJobs.map(job => {
                       const logo = getPaymentLogo(job.paymentMethod);
                       return (
-                        <div key={job.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 group hover:shadow-md transition-all">
+                        <div key={job.id} onClick={() => setSelectedHistoryJob(job)} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 group hover:shadow-md transition-all cursor-pointer hover:border-slate-300">
                            <div className="flex justify-between items-center mb-3">
                               <div className="flex items-center gap-2">
                                  <div className={cn(
@@ -1221,12 +1228,8 @@ export default function DriverDashboard() {
                       </div>
                    </div>
                    
-                   <button onClick={() => setIsWithdrawalModalOpen(true)} disabled={profile?.withdrawalRequested || earnings < 500} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95">
-                      {profile?.withdrawalRequested ? (
-                         <> <Zap className="w-3 h-3 animate-pulse" /> Traitement... </>
-                      ) : (
-                         <> <ArrowRight className="w-3 h-3" /> Demander un retrait </>
-                      )}
+                   <button onClick={() => setIsWithdrawalModalOpen(true)} disabled={earnings < 500} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95">
+                      <ArrowRight className="w-3 h-3" /> Demander un retrait
                    </button>
                 </div>
 
@@ -1262,6 +1265,37 @@ export default function DriverDashboard() {
                     <p className="text-xs font-medium text-orange-600">Vous conservez {commissionSettings?.driverSharePercent || 85}% des revenus générés sur vos courses.</p>
                   </div>
                 </div>
+
+                {/* Historique des Retraits */}
+                <div className="mt-8">
+                   <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 px-2">Historique des Retraits</h3>
+                   {withdrawals.length === 0 ? (
+                      <div className="bg-white rounded-3xl p-6 text-center border border-slate-100 text-xs text-slate-400 font-bold">
+                         Aucun retrait initié pour le moment.
+                      </div>
+                   ) : (
+                      <div className="space-y-3">
+                         {withdrawals.map((wd: any) => (
+                            <div key={wd.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center text-left">
+                               <div>
+                                  <p className="text-sm font-black text-slate-900">{wd.amount} FCFA</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Méthode: {wd.method === 'mobile_money' ? 'Mobile Money' : 'Cash'}</p>
+                                  <p className="text-[9px] text-slate-400 mt-1">Saisi le : {new Date(wd.createdAt || Date.now()).toLocaleDateString('fr-FR')}</p>
+                               </div>
+                               <div>
+                                  {wd.status === 'valide' ? (
+                                     <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">Validé</span>
+                                  ) : wd.status === 'rejete' ? (
+                                     <span className="bg-rose-100 text-rose-600 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">Rejeté</span>
+                                  ) : (
+                                     <span className="bg-orange-100 text-orange-600 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">En cours</span>
+                                  )}
+                               </div>
+                            </div>
+                         ))}
+                      </div>
+                   )}
+                </div>
              </motion.div>
           )}
 
@@ -1284,12 +1318,18 @@ export default function DriverDashboard() {
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1 flex items-center gap-2">
                         {profile?.vehicleType || 'Livreur'} • ⭐ {profile?.performanceScore ? (profile.performanceScore / 20).toFixed(1) : '5.0'}
                       </p>
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex gap-2 flex-wrap">
                         <button 
                           onClick={() => setIsWithdrawalModalOpen(true)}
                           className="px-2 py-1 bg-orange-100 text-orange-600 rounded-md text-[8px] font-black uppercase hover:bg-orange-200 transition-colors"
                         >
                           Demander un retrait
+                        </button>
+                        <button 
+                          onClick={() => navigate('/settings')}
+                          className="px-2 py-1 bg-slate-900 text-white rounded-md text-[8px] font-black uppercase hover:bg-slate-800 transition-colors"
+                        >
+                          Modifier le Profil
                         </button>
                         <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase">Vérifié</span>
                       </div>
@@ -1515,6 +1555,85 @@ export default function DriverDashboard() {
           )}
         </AnimatePresence>
       </div>
+
+        {/* DETAILS DE LA COURSE MODAL */}
+        <AnimatePresence>
+          {selectedHistoryJob && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+              <div className="absolute inset-0" onClick={() => setSelectedHistoryJob(null)} />
+              <motion.div initial={{ y: '100%', opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: '100%', opacity: 0, scale: 0.95 }} className="bg-white w-full max-w-md rounded-t-[40px] sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto shadow-2xl relative z-10 flex flex-col gap-6">
+                 <div className="flex justify-between items-center text-left">
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Détails de la course</h3>
+                    <button onClick={() => setSelectedHistoryJob(null)} className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"><X className="w-5 h-5" /></button>
+                 </div>
+
+                 <div className="space-y-6 text-left">
+                    <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                       <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID de course</p>
+                          <p className="text-sm font-bold text-slate-800">#{selectedHistoryJob.id.toUpperCase()}</p>
+                       </div>
+                       <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider">Livré</span>
+                    </div>
+
+                    <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Points d'itinéraire</p>
+                       <div className="space-y-4 border-l-2 border-slate-100 pl-4 relative ml-2">
+                          <div className="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-slate-300 border-2 border-white shadow-sm" />
+                          <div>
+                             <p className="text-[10px] font-black uppercase text-slate-400">Origine</p>
+                             <p className="text-sm font-bold text-slate-800">{selectedHistoryJob.from.address}</p>
+                          </div>
+                          <div className="absolute -left-[5px] bottom-1 w-2.5 h-2.5 rounded-full bg-indigo-600 border-2 border-white shadow-sm" />
+                          <div>
+                             <p className="text-[10px] font-black uppercase text-slate-400">Destination</p>
+                             <p className="text-sm font-bold text-slate-800">{selectedHistoryJob.to.address}</p>
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-left">
+                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Montant payé</p>
+                          <p className="text-lg font-black text-slate-900 mt-1">{selectedHistoryJob.cost} F</p>
+                       </div>
+                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Règlement</p>
+                          <p className="text-xs font-black text-indigo-600 uppercase tracking-wide mt-2">{selectedHistoryJob.paymentMethod || 'Non spécifié'}</p>
+                       </div>
+                    </div>
+
+                    <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Informations Commanditaire</p>
+                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                          <div className="flex justify-between">
+                             <span className="text-xs font-medium text-slate-400 font-bold">Nom complet:</span>
+                             <span className="text-xs font-black text-slate-800">{selectedHistoryJob.clientName || 'Anonyme'}</span>
+                          </div>
+                          {selectedHistoryJob.clientPhone && (
+                             <div className="flex justify-between">
+                                <span className="text-xs font-medium text-slate-400 font-bold">Téléphone:</span>
+                                <span className="text-xs font-black text-slate-800">{selectedHistoryJob.clientPhone}</span>
+                             </div>
+                          )}
+                          <div className="flex justify-between">
+                             <span className="text-xs font-bold text-slate-400">État du Paiement:</span>
+                             <span className="text-xs font-black text-[10px] uppercase text-emerald-600 font-black">{selectedHistoryJob.paymentStatus === 'paid' ? 'Payé (Compte)' : 'Régler cash / Terminée'}</span>
+                          </div>
+                       </div>
+                    </div>
+
+                    {selectedHistoryJob.notes && (
+                       <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Notes spécifiques</p>
+                          <p className="text-xs font-medium text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100">{selectedHistoryJob.notes}</p>
+                       </div>
+                    )}
+                 </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       {toastMessage && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 bg-slate-900/90 backdrop-blur-md border border-slate-700 text-white rounded-full text-[10px] font-black uppercase tracking-[0.15em] shadow-2xl flex items-center gap-3">

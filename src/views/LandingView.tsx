@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import { UserRole } from '../types';
 import { LoadingScreen } from '../components/LoadingScreen';
 import Logo from '../components/Logo';
+import logoImg from '../assets/logo.png';
 
 type AuthMode = 'login' | 'register' | 'phone';
 
@@ -71,7 +72,7 @@ export default function LandingView() {
   } = useAuth();
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [logoUrl, setLogoUrl] = useState("./logo-web.png");
+  const [logoUrl, setLogoUrl] = useState(logoImg);
   const [logoError, setLogoError] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [role, setRole] = useState<UserRole>('client');
