@@ -229,10 +229,23 @@ export default function ClientDashboard() {
 
                         {activeDelivery.status === 'pending' ? (
                           <div className="flex-1 flex flex-col justify-center items-center py-6 bg-slate-50/50 rounded-2xl border border-slate-100/80 mt-2 mb-2">
-                             <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-indigo-600 animate-spin mb-3 shadow-[0_0_15px_rgba(79,70,229,0.3)]" />
-                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-center px-4 leading-relaxed">
-                               Nous contactons les coursiers <br className="hidden sm:block" />à proximité
-                             </p>
+                             {(activeDelivery.bids && activeDelivery.bids.length > 0) ? (
+                               <>
+                                 <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-3 shadow-[0_0_15px_rgba(79,70,229,0.3)] animate-pulse">
+                                   <span className="font-black text-lg">{activeDelivery.bids.filter((b: any) => b.status === 'pending').length}</span>
+                                 </div>
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 text-center px-4 leading-relaxed">
+                                   Offre(s) reçue(s) ! <br className="hidden sm:block" />Consultez les détails pour accepter.
+                                 </p>
+                               </>
+                             ) : (
+                               <>
+                                 <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-indigo-600 animate-spin mb-3 shadow-[0_0_15px_rgba(79,70,229,0.3)]" />
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-center px-4 leading-relaxed">
+                                   Nous contactons les coursiers <br className="hidden sm:block" />à proximité
+                                 </p>
+                               </>
+                             )}
                           </div>
                         ) : (
                           <>

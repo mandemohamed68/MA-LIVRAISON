@@ -328,4 +328,6 @@ addColumnIfNotExists('users', 'totalEarnings', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'dailyGoal', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'photoURL', "TEXT");
 
+addColumnIfNotExists('bids', 'attempts', "INTEGER DEFAULT 1");
+
 export default db;

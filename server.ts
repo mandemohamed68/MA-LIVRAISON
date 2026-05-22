@@ -266,6 +266,12 @@ async function startServer() {
       d.to = d.destination || {};
       try { if (typeof d.rejectedBy === 'string') d.rejectedBy = JSON.parse(d.rejectedBy); } catch(e){}
       try { if (typeof d.packageDetails === 'string') d.packageDetails = JSON.parse(d.packageDetails); } catch(e){}
+      try {
+        const bids = db.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(d.id);
+        d.bids = bids || [];
+      } catch(e) {
+        d.bids = [];
+      }
     });
     res.json(deliveries);
   });
@@ -282,6 +288,12 @@ async function startServer() {
       d.to = d.destination || {};
       try { if (typeof d.rejectedBy === 'string') d.rejectedBy = JSON.parse(d.rejectedBy); } catch(e){}
       try { if (typeof d.packageDetails === 'string') d.packageDetails = JSON.parse(d.packageDetails); } catch(e){}
+      try {
+        const bids = db.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(d.id);
+        d.bids = bids || [];
+      } catch(e) {
+        d.bids = [];
+      }
       res.json(d);
     } catch (err) {
       console.error(err);
