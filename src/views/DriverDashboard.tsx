@@ -10,6 +10,7 @@ import L from 'leaflet';
 import { cn, calculateDistance } from '../lib/utils';
 import { LoadingScreen } from '../components/LoadingScreen';
 import AnnouncementBanner from '../components/AnnouncementBanner';
+import NotificationBell from '../components/NotificationBell';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { Chat } from '../components/Chat';
 import { sendNotification } from '../lib/notificationService';
@@ -285,10 +286,10 @@ export default function DriverDashboard() {
         let significantMove = true;
         if (lastCoords) {
           const distance = calculateDistance(lastCoords.lat, lastCoords.lng, coords.lat, coords.lng);
-          significantMove = distance > 0.02; // More than 20 meters
+          significantMove = distance > 0.01; // More than 10 meters
         }
 
-        if (profile?.role === 'driver' && (now - lastUpdate > 60000 || (significantMove && now - lastUpdate > 30000))) { 
+        if (profile?.role === 'driver' && (now - lastUpdate > 30000 || (significantMove && now - lastUpdate > 10000))) { 
           lastUpdate = now;
           lastCoords = coords;
           api.profile.update({ 
@@ -437,9 +438,12 @@ export default function DriverDashboard() {
     // Tous les gains (les courses complétées online, c'est ce que la plateforme doit au livreur)
     const onlineJobs = deliveredJobs.filter(d => d.paymentMethod !== 'cash');
     const totalEarnings = onlineJobs.reduce((sum, d) => sum + (d.clientProposedPrice || d.cost || 0), 0) * (commissionSettings?.driverSharePercent || 85) / 100;
-    // On soustrait l'historique des retraits
-    return totalEarnings - (profile?.totalWithdrawn || 0);
-  }, [deliveredJobs, commissionSettings, profile?.totalWithdrawn]);
+    
+    // Soustraire l'historique des retraits (validés par la base de données) ET les retraits en cours (pending) non encore validés
+    const pendingWithdrawalsSum = withdrawals.filter(w => w.status === 'pending' || w.status === 'en cours' || !w.status || w.status === 'en_attente').reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+    
+    return Math.floor(totalEarnings - (profile?.totalWithdrawn || 0) - pendingWithdrawalsSum);
+  }, [deliveredJobs, commissionSettings, profile?.totalWithdrawn, withdrawals]);
 
   const dailyEarnings = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];

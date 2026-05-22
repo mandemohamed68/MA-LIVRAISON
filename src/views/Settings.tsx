@@ -18,6 +18,7 @@ export default function Settings() {
   const [licensePlate, setLicensePlate] = useState('');
   const [driverType, setDriverType] = useState<'freelance' | 'company'>(profile?.driverType || 'freelance');
   const [photoURL, setPhotoURL] = useState('');
+  const [password, setPassword] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -61,7 +62,7 @@ export default function Settings() {
     setIsSaving(true);
     setSuccessMsg('');
     try {
-      await updateProfile({
+      const payload: any = {
         name,
         phone,
         city,
@@ -72,7 +73,9 @@ export default function Settings() {
         driverType,
         photoURL,
         updatedAt: new Date().toISOString()
-      } as any);
+      };
+      if (password) payload.password = password;
+      await updateProfile(payload);
       setSuccessMsg('Profil mis à jour avec succès !');
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
@@ -220,6 +223,16 @@ export default function Settings() {
                     type="text" 
                     value={address}
                     onChange={e => setAddress(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
+                  />
+                </div>
+                <div className="space-y-2 lg:col-span-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-2">Mot de passe (laisser vide pour ne pas modifier)</label>
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Nouveau mot de passe..."
                     className="w-full bg-slate-50 border border-slate-100 text-slate-900 p-5 rounded-2xl focus:outline-none focus:border-orange-500 transition-all font-bold text-sm"
                   />
                 </div>

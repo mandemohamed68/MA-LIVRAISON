@@ -118,8 +118,9 @@ async function startServer() {
       if (user.accountStatus === 'suspended') {
         return res.status(403).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
       }
+      delete user.password;
       const token = jwt.sign({ userId: user.userId, email: user.email, role: user.role }, JWT_SECRET);
-      res.json({ token, user: { userId: user.userId, name: user.name, email: user.email, role: user.role } });
+      res.json({ token, user });
     } catch (error) {
       res.status(500).json({ error: "Login failed" });
     }
@@ -150,9 +151,9 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/profile", authenticate, (req: any, res) => {
+  app.patch("/api/profile", authenticate, async (req: any, res) => {
     const updates = req.body;
-    let fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');
+    let fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id');
     
     // Dynamic schema validation to filter out any fields that are not actual database columns
     try {
@@ -166,12 +167,15 @@ async function startServer() {
     if (fields.length === 0) return res.json({ status: "no changes" });
 
     const setClause = fields.map(f => `${f} = ?`).join(", ");
-    const values = fields.map(f => {
+    const values = await Promise.all(fields.map(async f => {
       let val = updates[f];
+      if (f === 'password' && typeof val === 'string' && val.trim() !== '') {
+        return await bcrypt.hash(val, 10);
+      }
       if (typeof val === 'boolean') return val ? 1 : 0;
       if (typeof val === 'object' && val !== null) return JSON.stringify(val);
       return val;
-    });
+    }));
     
     try {
       const stmt = db.prepare(`UPDATE users SET ${setClause} WHERE userId = ?`);
@@ -926,7 +930,9 @@ async function startServer() {
       const onlineDeliveries = db.prepare(`SELECT * FROM deliveries WHERE driverId = ? AND status = 'delivered' AND paymentMethod != 'cash'`).all(driver.userId) as any[];
       const totalEarnings = onlineDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * driverShare / 100;
       
-      const earnings = totalEarnings - (driver.totalWithdrawn || 0);
+      const pendingWithdrawalsSum = (db.prepare(`SELECT SUM(amount) as sum FROM withdrawals WHERE driverId = ? AND status = 'en_attente'`).get(driver.userId) as any)?.sum || 0;
+      
+      const earnings = totalEarnings - (driver.totalWithdrawn || 0) - pendingWithdrawalsSum;
 
       if (amount > earnings) return res.status(400).json({ error: "Amount exceeds available balance" });
 

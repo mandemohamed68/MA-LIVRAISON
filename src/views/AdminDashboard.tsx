@@ -773,7 +773,7 @@ export default function AdminDashboard() {
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">{activeMenu} ({filteredDeliveries.length})</h3>
             <div className="grid grid-cols-1 gap-4">
               {filteredDeliveries.map(d => (
-                <div key={d.id} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-between">
+                <div key={d.id} onClick={() => navigate('/delivery/' + d.id)} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-100 hover:shadow-md transition-all active:scale-[0.99]">
                   <div className="flex items-center gap-6">
                     <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-orange-600 shadow-sm border border-slate-100">
                       <Package className="w-6 h-6" />
@@ -1086,6 +1086,31 @@ export default function AdminDashboard() {
                       </div>
                     );
                   })}
+               </div>
+             )}
+
+             {withdrawals.filter(w => w.status !== 'en_attente').length > 0 && (
+               <div className="mt-12 pt-8 border-t border-slate-100">
+                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-6">Historique des paiements traités</h3>
+                 <div className="grid grid-cols-1 gap-4">
+                   {withdrawals.filter(w => w.status !== 'en_attente').map((wd) => (
+                     <div key={wd.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                       <div className="flex items-center gap-4">
+                         <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center">
+                           <DollarSign className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <p className="font-black text-slate-900">{wd.driverName}</p>
+                           <p className="text-[10px] uppercase font-bold text-slate-400 mt-0.5">{new Date(wd.processedAt || wd.createdAt).toLocaleString('fr-FR')}</p>
+                         </div>
+                       </div>
+                       <div className="text-right">
+                         <p className="text-lg font-black text-slate-900">{wd.amount} F</p>
+                         <span className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mt-1 inline-block", wd.status === 'valide' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600')}>{wd.status}</span>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
                </div>
              )}
           </div>
@@ -2471,6 +2496,30 @@ export default function AdminDashboard() {
                     <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">Inscrit le</p>
                     <p className="text-xs font-bold text-slate-900 text-left">{selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : 'Inconnu'}</p>
                   </div>
+                </div>
+
+                <div className="pt-2 flex gap-3">
+                   <button
+                     onClick={async () => {
+                       try {
+                         const newStatus = selectedUser.accountStatus === 'suspended' ? 'active' : 'suspended';
+                         await api.admin.users.update(selectedUser.userId, {
+                           accountStatus: newStatus,
+                           updatedAt: new Date().toISOString()
+                         });
+                         setSelectedUser({ ...selectedUser, accountStatus: newStatus });
+                         fetchData();
+                       } catch (e) {
+                         alert("Erreur lors du changement de statut");
+                       }
+                     }}
+                     className={cn(
+                       "flex-1 py-4 rounded-2xl text-[10px] uppercase font-black tracking-widest active:scale-95 transition-all outline-none",
+                       selectedUser.accountStatus === 'suspended' ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200" : "bg-red-100 text-red-600 hover:bg-red-200"
+                     )}
+                   >
+                     {selectedUser.accountStatus === 'suspended' ? 'Réactiver le compte' : 'Suspendre le compte'}
+                   </button>
                 </div>
 
                 {selectedUser.role === 'driver' && (
