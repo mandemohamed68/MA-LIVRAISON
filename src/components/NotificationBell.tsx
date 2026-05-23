@@ -6,7 +6,11 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/apiService';
 import { AppNotification } from '../types';
 
-export default function NotificationBell() {
+interface NotificationBellProps {
+  lightMode?: boolean;
+}
+
+export default function NotificationBell({ lightMode = false }: NotificationBellProps) {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -76,11 +80,16 @@ export default function NotificationBell() {
     <div className="relative">
       <button 
         onClick={() => { setIsOpen(!isOpen); if (!isOpen) markAllAsRead(); }}
-        className="relative w-10 md:w-12 h-10 md:h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all cursor-pointer"
+        className={cn(
+          "relative w-10 md:w-12 h-10 md:h-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer pointer-events-auto border",
+          lightMode 
+            ? "bg-white border-slate-200 text-slate-800 hover:bg-slate-50 shadow-sm"
+            : "bg-white/10 border-white/10 text-white hover:bg-white/20"
+        )}
       >
-        <Bell className="w-5 md:w-6 h-5 md:h-6 text-white" />
+        <Bell className={cn("w-5 md:w-6 h-5 md:h-6", lightMode ? "text-slate-800" : "text-white")} />
         {notifications.filter(n => !n.isRead).length > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 bg-red-500 border-2 border-[#ea580c] rounded-full flex items-center justify-center text-[9px] font-black text-white shadow-lg shadow-red-500/20">
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 bg-red-500 border-2 border-white rounded-full flex items-center justify-center text-[9px] font-black text-white shadow-lg shadow-red-500/20">
             {notifications.filter(n => !n.isRead).length}
           </span>
         )}

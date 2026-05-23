@@ -80,6 +80,28 @@ export default function ClientDashboard() {
     }
   };
 
+  const handleAcceptBid = async (deliveryId: string, driverId: string, price: number) => {
+    try {
+      await api.deliveries.coursesNegotiations.accepter(deliveryId, driverId, price);
+      const jobs = await api.deliveries.list();
+      setDeliveries(jobs);
+    } catch (err: any) {
+      alert("Erreur lors de l'acceptation : " + (err.message || err));
+    }
+  };
+
+  const handleRejectBid = async (deliveryId: string, driverId: string, price: number) => {
+    if (confirm(`Voulez-vous rejeter l'offre de ${price} FCFA ?`)) {
+      try {
+        await api.deliveries.coursesNegotiations.rejeter(deliveryId, driverId);
+        const jobs = await api.deliveries.list();
+        setDeliveries(jobs);
+      } catch (err: any) {
+        alert("Impossible de rejeter l'offre : " + (err.message || err));
+      }
+    }
+  };
+
   const handlePay = async (method: string, reference?: string, isVerified?: boolean) => {
     if (!paymentDelivery) return;
     try {
@@ -166,12 +188,12 @@ export default function ClientDashboard() {
         {/* Header */}
         <header className="flex justify-between items-center pt-8 mb-8">
            <div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-0.5">LIVRA</p>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-0.5">PANCHO</p>
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">Bonjour {profile?.name?.split(' ')[0] || 'Client'}</h1>
            </div>
            <div className="flex items-center gap-3">
              <div className="*:!bg-white *:text-slate-900 *:!border-slate-200 *:shadow-sm">
-               <NotificationBell />
+               <NotificationBell lightMode={true} />
              </div>
              <button onClick={() => navigate('/settings')} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-900 hover:bg-slate-50 transition-colors active:scale-95" title="Modifier mon profil">
                  <User className="w-5 h-5" />
@@ -234,16 +256,31 @@ export default function ClientDashboard() {
                         </div>
 
                         {activeDelivery.status === 'pending' ? (
-                          <div className="flex-1 flex flex-col justify-center items-center py-6 bg-slate-50/50 rounded-2xl border border-slate-100/80 mt-2 mb-2">
+                          <div className="flex-1 flex flex-col justify-center items-center py-4 bg-slate-50/50 rounded-2xl border border-slate-100/80 mt-2 mb-2 w-full">
                              {(activeDelivery.bids && activeDelivery.bids.length > 0) ? (
-                               <>
-                                 <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-3 shadow-[0_0_15px_rgba(79,70,229,0.3)] animate-pulse">
-                                   <span className="font-black text-lg">{activeDelivery.bids.filter((b: any) => b.status === 'pending').length}</span>
-                                 </div>
-                                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 text-center px-4 leading-relaxed">
-                                   Offre(s) reçue(s) ! <br className="hidden sm:block" />Consultez les détails pour accepter.
-                                 </p>
-                               </>
+                               <div className="w-full px-4 flex flex-col gap-3">
+                                 <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 text-center mb-1">
+                                   Offre(s) reçue(s) ({activeDelivery.bids.filter((b: any) => b.status === 'pending').length})
+                                 </h4>
+                                 {activeDelivery.bids.filter((b: any) => b.status === 'pending').map((bid: any) => (
+                                    <div key={bid.id} className="w-full bg-white rounded-xl shadow-sm border border-indigo-100 p-3 flex flex-col gap-3">
+                                      <div className="flex justify-between items-center">
+                                         <div>
+                                            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-500">{bid.driverName}</p>
+                                            <p className="text-xl font-black text-indigo-600">{bid.price} FCFA</p>
+                                         </div>
+                                         <p className="text-[10px] text-indigo-400 font-bold uppercase italic">~{bid.timeEstimateMins} mins</p>
+                                      </div>
+                                      <div className="flex gap-2 w-full">
+                                         <button onClick={() => handleAcceptBid(activeDelivery.id, bid.driverId, bid.price)} className="flex-1 py-3 bg-indigo-600 text-white rounded-[12px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-sm active:scale-95 transition-all">ACCEPTER</button>
+                                         <button onClick={() => handleRejectBid(activeDelivery.id, bid.driverId, bid.price)} className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-[12px] text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-sm active:scale-95 transition-all">REJETER</button>
+                                      </div>
+                                    </div>
+                                 ))}
+                                 {activeDelivery.bids.filter((b: any) => b.status === 'pending').length === 0 && (
+                                    <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest">Aucune offre en attente</p>
+                                 )}
+                               </div>
                              ) : (
                                <>
                                  <div className="w-8 h-8 rounded-full border-[3px] border-indigo-100 border-t-indigo-600 animate-spin mb-3 shadow-[0_0_15px_rgba(79,70,229,0.3)]" />

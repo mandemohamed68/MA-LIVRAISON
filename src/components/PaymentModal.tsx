@@ -176,8 +176,8 @@ export default function PaymentModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
-          note: `COURSE LIVRA #${Math.random().toString(36).substr(2, 5)}`,
-          email: 'client@livra.app'
+          note: `COURSE PANCHO #${Math.random().toString(36).substr(2, 5)}`,
+          email: 'client@pancho.app'
         })
       });
       
@@ -353,7 +353,7 @@ export default function PaymentModal({
     }
   };
 
-  const methods = [
+  const rawMethods = [
     // OTP Group
     { id: 'orange', name: 'Orange Money', type: 'otp', icon: OrangeMoneyIcon, color: 'text-orange-600', bg: 'bg-white', border: 'border-orange-100', isCustomImg: true },
     { id: 'moov', name: 'Moov Money', type: 'otp', icon: MoovMoneyIcon, color: 'text-blue-600', bg: 'bg-white', border: 'border-blue-100', isCustomImg: true },
@@ -365,6 +365,12 @@ export default function PaymentModal({
     { id: 'moov_ussd', name: 'Moov (USSD)', type: 'ussd', icon: Smartphone, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
     { id: 'telecel_ussd', name: 'Telecel (USSD)', type: 'ussd', icon: Smartphone, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
   ];
+
+  const methods = rawMethods.filter(m => {
+    if (m.type === 'otp' && appConfig?.isOtpActive === false) return false;
+    if (m.type === 'ussd' && appConfig?.isUssdActive === false) return false;
+    return true;
+  });
 
   const getHeaderName = () => {
     const method = methods.find(m => m.id === selectedMethod);
@@ -539,7 +545,7 @@ export default function PaymentModal({
                         />
                       </div>
                       <h3 className="text-xl font-black text-slate-900 tracking-tight italic uppercase">
-                        {selectedMethod === 'ussd' ? "Syntaxe Marchand" : selectedMethod === 'aggregator' ? "Portail LIVRA Pay" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
+                        {selectedMethod === 'ussd' ? "Syntaxe Marchand" : selectedMethod === 'aggregator' ? "Portail PANCHO Pay" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
                       </h3>
                       
                       {methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'moov' ? (
@@ -715,7 +721,7 @@ export default function PaymentModal({
                       <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-start gap-4">
                         <ShieldCheck className="w-6 h-6 text-emerald-500 shrink-0" />
                             <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest leading-relaxed">
-                          Transaction Sécurisée. Vos fonds sont protégés par le protocole de séquestre LIVRA.
+                          Transaction Sécurisée. Vos fonds sont protégés par le protocole de séquestre PANCHO.
                         </p>
                       </div>
 

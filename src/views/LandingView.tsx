@@ -232,14 +232,14 @@ export default function LandingView() {
           <div className="flex items-center gap-4 mb-12">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1">
               {!logoError ? (
-                 <img src={logoUrl} alt="LIVRA Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+                 <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
                  <Logo className="w-full h-full text-orange-600" />
               )}
             </div>
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">
-                <span className="text-3xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">Livra</span>
+                <span className="text-3xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">PANCHO</span>
                 <span className="text-3xl font-black text-orange-600 tracking-tighter italic uppercase leading-none">EXPRESS</span>
               </div>
               <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase mt-1">Plateforme Logistique</span>
@@ -277,7 +277,7 @@ export default function LandingView() {
           <div className="text-center mb-8 flex flex-col items-center">
             <div className="w-16 h-16 sm:hidden rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1 mb-4">
               {!logoError ? (
-                 <img src={logoUrl} alt="LIVRA Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+                 <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
                  <Logo className="w-full h-full text-orange-600" />
               )}
@@ -285,7 +285,7 @@ export default function LandingView() {
             <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2 italic">
               {isRegistering ? "Création de compte" : "Bienvenue"}
             </h2>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle Livra EXPRESS</p>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle PANCHO EXPRESS</p>
           </div>
 
           <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100 mb-8">
@@ -564,7 +564,7 @@ export default function LandingView() {
                      <div>
                        <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Conditions d'utilisation</p>
                        <p className="text-[9px] font-medium text-slate-400 mt-1 leading-relaxed">
-                         En cochant cette case, vous vous engagez à respecter les conditions de service de LIVRA.
+                         En cochant cette case, vous vous engagez à respecter les conditions de service de PANCHO.
                        </p>
                      </div>
                   </div>

@@ -6,10 +6,12 @@ import { useAuth } from '../context/AuthContext';
 import { AppAnnouncement } from '../types';
 import { cn } from '../lib/utils';
 
-export default function AnnouncementBanner() {
+export default function AnnouncementBanner({ userRole }: { userRole?: string }) {
   const { profile } = useAuth();
   const [announcements, setAnnouncements] = useState<AppAnnouncement[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const activeRole = userRole || profile?.role;
 
   useEffect(() => {
     const fetchAnnouncements = async () => {
@@ -17,11 +19,19 @@ export default function AnnouncementBanner() {
         const docs = await api.announcements.list().catch(() => []);
         if (!Array.isArray(docs)) return;
 
-        const now = new Date().toISOString();
-        const filtered = docs.filter((a: AppAnnouncement) => 
-          (!a.activeUntil || a.activeUntil >= now) &&
-          (a.targetRole === 'all' || (profile && a.targetRole === profile.role))
-        );
+        const nowMs = Date.now();
+        const filtered = docs.filter((a: AppAnnouncement) => {
+          let isValidDate = true;
+          if (a.activeUntil) {
+            try {
+              isValidDate = new Date(a.activeUntil).getTime() >= nowMs;
+            } catch (e) {
+              isValidDate = true; // Fallback to include if parse fails
+            }
+          }
+          const isTargetRole = a.targetRole === 'all' || (activeRole && a.targetRole === activeRole);
+          return isValidDate && isTargetRole;
+        });
         
         filtered.sort((a: AppAnnouncement, b: AppAnnouncement) => b.createdAt.localeCompare(a.createdAt));
         setAnnouncements(filtered);
@@ -31,10 +41,10 @@ export default function AnnouncementBanner() {
     };
 
     fetchAnnouncements();
-    const interval = setInterval(fetchAnnouncements, 15000); // Poll every 15s
+    const interval = setInterval(fetchAnnouncements, 8000); // Poll every 8s
 
     return () => clearInterval(interval);
-  }, [profile]);
+  }, [activeRole]);
 
   const current = announcements[currentIndex];
 

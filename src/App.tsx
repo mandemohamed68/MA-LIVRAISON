@@ -2,7 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { cn } from './lib/utils';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, ShieldAlert } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import Navbar from './components/Navbar';
@@ -65,11 +65,43 @@ function AppRoutes() {
         >
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Maintenance <span className="text-orange-500">en cours</span></h1>
           <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
-            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de Livra EXPRESS pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
+            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de PANCHO EXPRESS pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
           </p>
           <div className="px-6 py-2 bg-white/5 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-white/5 italic">
-            Équipe Technique Livra EXPRESS
+            Équipe Technique PANCHO EXPRESS
           </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Suspended Account Check
+  const isSuspended = profile?.accountStatus === 'suspended' && !isAdmin;
+  if (isSuspended && location.pathname !== '/') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-24 h-24 bg-red-500/10 text-red-500 rounded-[40px] flex items-center justify-center mb-8 border border-red-500/20 shadow-[0_0_50px_rgba(239,68,68,0.1)]"
+        >
+          <ShieldAlert className="w-12 h-12" />
+        </motion.div>
+        <motion.div
+           initial={{ y: 20, opacity: 0 }}
+           animate={{ y: 0, opacity: 1 }}
+           transition={{ delay: 0.1 }}
+        >
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Compte <span className="text-red-500">suspendu</span></h1>
+          <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
+            Votre compte a été temporairement suspendu par l'administration de PANCHO EXPRESS pour non-respect des règles ou suite à des signalements répétés. Veuillez contacter notre service clientèle pour plus d'informations.
+          </p>
+          <button 
+            onClick={() => { localStorage.removeItem('auth_token'); window.location.href = '/' }} 
+            className="px-6 py-3 bg-white text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors active:scale-95 duration-150 inline-block"
+          >
+            Se déconnecter
+          </button>
         </motion.div>
       </div>
     );

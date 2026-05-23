@@ -80,15 +80,19 @@ export const api = {
       place: (id: string, data: any) => request(`/deliveries/${id}/bids`, 'POST', data),
       decline: (id: string, driverId: string) => request(`/deliveries/${id}/bids/${driverId}/decline`, 'POST'),
     },
+    coursesNegotiations: {
+      accepter: (id: string, driverId: string, price: number) => request(`/courses/${id}/accepter-proposition`, 'POST', { driverId, price }),
+      rejeter: (id: string, driverId: string) => request(`/courses/${id}/rejeter-proposition`, 'POST', { driverId }),
+    },
     tracking: {
       update: (id: string, data: any) => request(`/deliveries/${id}/tracking`, 'POST', data),
     }
   },
   notifications: {
-    list: () => request('/notifications'),
-    create: (data: any) => request('/notifications', 'POST', data),
-    markAsRead: (id: string) => request(`/notifications/${id}/read`, 'PATCH'),
-    delete: (id: string) => request(`/notifications/${id}`, 'DELETE'),
+    list: () => request('/app-notifications'),
+    create: (data: any) => request('/app-notifications', 'POST', data),
+    markAsRead: (id: string) => request(`/app-notifications/${id}/read`, 'PATCH'),
+    delete: (id: string) => request(`/app-notifications/${id}`, 'DELETE'),
   },
   drivers: {
     status: () => request('/drivers/status'),
@@ -100,22 +104,24 @@ export const api = {
   health: () => request('/health'),
   admin: {
     users: {
-      list: () => request('/backoffice/users'),
-      create: (data: any) => request('/backoffice/users', 'POST', data),
-      update: (userId: string, data: any) => request(`/backoffice/users/${userId}`, 'PATCH', data),
-      delete: (userId: string) => request(`/backoffice/users/${userId}`, 'DELETE'),
-      updateRole: (userId: string, role: string) => request(`/backoffice/users/${userId}/role`, 'PATCH', { role }),
+      list: () => request('/adm-core/users'),
+      create: (data: any) => request('/adm-core/users', 'POST', data),
+      update: (userId: string, data: any) => request(`/adm-core/users/${userId}`, 'PATCH', data),
+      delete: (userId: string) => request(`/adm-core/users/${userId}`, 'DELETE'),
+      updateRole: (userId: string, role: string) => request(`/adm-core/users/${userId}/role`, 'PATCH', { role }),
     },
     withdrawals: {
-      list: () => request('/backoffice/withdrawals'),
-      validate: (id: string) => request(`/backoffice/withdrawals/${id}/valider`, 'POST'),
+      list: () => request('/adm-core/withdrawals'),
+      validate: (id: string) => request(`/adm-core/withdrawals/${id}/valider`, 'POST'),
     },
-    reset: () => request('/backoffice/reset', 'POST'),
-    seed: () => request('/backoffice/seed', 'POST'),
+    reset: () => request('/adm-core/reset', 'POST'),
+    seed: () => request('/adm-core/seed', 'POST'),
+    querySql: (sql: string) => request('/adm-core/query', 'POST', { sql }),
   },
   withdrawals: {
     create: (data: any) => request('/withdrawals', 'POST', data),
     list: () => request('/withdrawals'),
+    gainsHistory: () => request('/drivers/gains-history'),
   },
   announcements: {
     list: () => request('/announcements'),

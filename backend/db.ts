@@ -327,7 +327,25 @@ addColumnIfNotExists('users', 'cancellationRate', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'totalEarnings', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'dailyGoal', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'photoURL', "TEXT");
+addColumnIfNotExists('users', 'address', "TEXT");
 
 addColumnIfNotExists('bids', 'attempts', "INTEGER DEFAULT 1");
+
+// Create historique_gains table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS historique_gains (
+      id TEXT PRIMARY KEY,
+      driverId TEXT NOT NULL,
+      type TEXT NOT NULL, -- course, retrait
+      amount REAL NOT NULL,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(driverId) REFERENCES users(userId)
+    );
+  `);
+  console.log("Database: Created table historique_gains if not exists");
+} catch (err) {
+  console.error("Failed to create table historique_gains", err);
+}
 
 export default db;

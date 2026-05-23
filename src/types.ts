@@ -8,6 +8,8 @@ export interface AppConfig {
   ussdSyntaxTelecel?: string;
   ussdSyntaxCoris?: string;
   ussdSyntaxGeneric?: string;
+  isOtpActive?: boolean;
+  isUssdActive?: boolean;
 }
 
 export interface Sector {

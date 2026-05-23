@@ -5,7 +5,7 @@ import {
   ShieldCheck, Package, Users, Truck, DollarSign, 
   ArrowUpRight, Clock, LayoutDashboard, MessageSquare, 
   ClipboardCheck, History, Store, Map as MapIcon, Globe, 
-  BadgePercent, CreditCard, Wallet, LogOut, Bell, Settings, 
+  BadgePercent, CreditCard, Wallet, LogOut, Bell, Settings, Play,
   Plus, Navigation, UserCircle, Percent, Database, Download, Building2, X, Trash2, Zap, Smartphone, Menu,
   CheckCircle, AlertCircle, Landmark
 } from 'lucide-react';
@@ -33,6 +33,10 @@ export default function AdminDashboard() {
   const [configForm, setConfigForm] = useState<AppConfig | null>(null);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [announcements, setAnnouncements] = useState<AppAnnouncement[]>([]);
+  const [sqlQuery, setSqlQuery] = useState('SELECT * FROM users LIMIT 10;');
+  const [queryResult, setQueryResult] = useState<any[] | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [isExecutingSql, setIsExecutingSql] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState(queryTab || 'Vue d\'ensemble');
   const [isSaving, setIsSaving] = useState(false);
@@ -60,11 +64,35 @@ export default function AdminDashboard() {
         updatedAt: new Date().toISOString()
       });
       alert('Modifications enregistrées avec succès sur le serveur local !');
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('Erreur lors de l\'enregistrement: ' + (err instanceof Error ? err.message : 'Une erreur inconnue est survenue'));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleExecuteSql = async (queryText?: string) => {
+    const queryToRun = queryText || sqlQuery;
+    if (!queryToRun.trim()) {
+      setQueryError("Veuillez saisir une requête SQL.");
+      return;
+    }
+    setIsExecutingSql(true);
+    setQueryError(null);
+    setQueryResult(null);
+    try {
+      const res = await api.admin.querySql(queryToRun);
+      if (res.success) {
+        setQueryResult(res.rows || res.result || []);
+      } else {
+        setQueryError(res.error || "Erreur de syntaxe SQLite.");
+      }
+    } catch (err: any) {
+      setQueryError(err.message || "Erreur de communication.");
+    } finally {
+      setIsExecutingSql(false);
     }
   };
 
@@ -152,7 +180,7 @@ export default function AdminDashboard() {
     }
 
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Poll every 10s
+    const interval = setInterval(fetchData, 4000); // Poll every 4s
 
     return () => clearInterval(interval);
   }, [profile, isMasterAdmin]);
@@ -198,6 +226,7 @@ export default function AdminDashboard() {
         updatedBy: profile?.userId || 'admin'
       });
       alert('Paramètres de commission locaux mis à jour !');
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('Erreur lors de la mise à jour des commissions.');
@@ -521,13 +550,13 @@ export default function AdminDashboard() {
                                await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
                              }
                              await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé. Les codes sont disponibles.`, 'success', '/client');
-                             alert('Paiement confirmé localement !');
+                             alert('Paiement validé avec succès.');
                              fetchData();
                           } catch(e) { console.error('Error confirming payment:', e); alert('Erreur lors de la confirmation.'); }
                         }}
                         className="px-6 py-3 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
                       >
-                        Confirmer Réception
+                        Valider (Payé)
                       </button>
                       <button 
                         onClick={async () => {
@@ -535,16 +564,20 @@ export default function AdminDashboard() {
                              await api.deliveries.update(d.id, {
                                paymentStatus: 'rejected',
                                isPaid: false,
+                               status: 'paiement rejeté',
                                updatedAt: new Date().toISOString()
                              });
-                             await sendNotification(d.clientId, "Paiement Rejeté", `Votre preuve de paiement pour la course #${d.id.slice(-6)} a été rejetée. Veuillez contacter le support.`, 'error', '/client');
-                             alert('Paiement rejeté localement !');
+                             if (d.driverId) {
+                               await sendNotification(d.driverId, "Paiement Rejeté", `La preuve de paiement pour la course #${d.id.slice(-6)} a été rejetée.`, 'error', '/driver');
+                             }
+                             await sendNotification(d.clientId, "Paiement Rejeté", `Votre preuve de paiement pour la course #${d.id.slice(-6)} a été rejetée. Veuillez réessayer ou contacter le service clientèle.`, 'error', '/client');
+                             alert('Paiement rejeté avec succès. Statut de la course mis à jour.');
                              fetchData();
                           } catch(e) { console.error('Error rejecting payment:', e); alert('Erreur lors du rejet.'); }
                         }}
-                        className="px-4 py-3 bg-white text-rose-500 border border-red-100 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-50 transition-all"
+                        className="px-4 py-3 bg-white text-rose-500 border border-red-100 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-50 transition-all shadow-lg shadow-rose-100"
                       >
-                        Rejeter
+                        Rejeter (Rejeté)
                       </button>
                     </div>
                   </div>
@@ -733,9 +766,10 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-              <div className="h-[250px] sm:h-[400px] w-full min-h-[250px]">
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                  <AreaChart data={chartData}>
+              <div className="w-full min-h-[300px]" style={{ minWidth: 0 }}>
+                <div style={{ width: '100%', height: '300px', minWidth: 0, minHeight: 0 }}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="colorExpress" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#f97316" stopOpacity={0.1}/>
@@ -756,6 +790,7 @@ export default function AdminDashboard() {
                 </ResponsiveContainer>
               </div>
             </div>
+          </div>
           </div>
         );
       case 'En cours':
@@ -794,31 +829,59 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     {(d.paymentStatus === 'pending' || d.paymentStatus === 'pending_approval') && (
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const pickupCode = generateCode();
-                            const deliveryCode = generateCode();
-                            await api.deliveries.update(d.id, { 
-                              paymentStatus: 'confirmed', 
-                              isPaid: true,
-                              pickupCode,
-                              deliveryCode,
-                              updatedAt: new Date().toISOString() 
-                            });
-                            fetchData();
-                            if (d.driverId) {
-                              await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
+                      <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const pickupCode = generateCode();
+                              const deliveryCode = generateCode();
+                              await api.deliveries.update(d.id, { 
+                                paymentStatus: 'confirmed', 
+                                isPaid: true,
+                                pickupCode,
+                                deliveryCode,
+                                updatedAt: new Date().toISOString() 
+                              });
+                              fetchData();
+                              if (d.driverId) {
+                                await sendNotification(d.driverId, "Paiement validé", `Le client a payé pour la course #${d.id.slice(-6)}.`, 'success', '/driver');
+                              }
+                              await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé.`, 'success', '/client');
+                              alert('Paiement validé avec succès.');
+                            } catch(e) {
+                              console.error('Erreur lors de la validation:', e);
                             }
-                            await sendNotification(d.clientId, "Paiement Confirmé", `Votre paiement pour la course #${d.id.slice(-6)} a été validé.`, 'success', '/client');
-                          } catch(e) {
-                            console.error('Erreur lors de la validation:', e);
-                          }
-                        }}
-                        className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
-                      >
-                        Valider Paiement
-                      </button>
+                          }}
+                          className="px-3 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-xl hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
+                        >
+                          Valider
+                        </button>
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await api.deliveries.update(d.id, { 
+                                paymentStatus: 'rejected', 
+                                isPaid: false,
+                                status: 'paiement rejeté',
+                                updatedAt: new Date().toISOString() 
+                              });
+                              fetchData();
+                              if (d.driverId) {
+                                await sendNotification(d.driverId, "Paiement Rejeté", `La preuve de paiement de la course #${d.id.slice(-6)} a été rejetée.`, 'error', '/driver');
+                              }
+                              await sendNotification(d.clientId, "Paiement Rejeté", `La preuve de paiement de la course #${d.id.slice(-6)} a été rejetée. Veuillez réessayer ou contacter le service clientèle.`, 'error', '/client');
+                              alert('Paiement rejeté et course mise à jour.');
+                            } catch(e) {
+                              console.error('Erreur lors du rejet:', e);
+                            }
+                          }}
+                          className="px-3 py-2 bg-rose-500 text-white text-[9px] font-black uppercase rounded-xl hover:bg-rose-600 shadow-lg shadow-rose-500/20"
+                        >
+                          Rejeter
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -921,7 +984,7 @@ export default function AdminDashboard() {
                             await sendNotification(
                               u.userId, 
                               "Dossier Approuvé 🎉", 
-                              "Bienvenue chez LIVRA EXPRESS ! Votre compte est activé et vos documents sont validés.", 
+                              "Bienvenue chez PANCHO EXPRESS ! Votre compte est activé et vos documents sont validés.", 
                               'success'
                             );
                           } catch(err) {
@@ -1656,6 +1719,52 @@ export default function AdminDashboard() {
                      />
                      <p className="text-[10px] text-slate-400 font-bold mt-4 leading-relaxed uppercase tracking-tight">Une fois actif, bloquera tout accès aux clients et drivers avec le message ci-dessus.</p>
                   </div>
+
+                  {/* Moyens de Paiement Actifs */}
+                  <div className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100 col-span-1 md:col-span-2 mt-4">
+                     <div className="flex items-center gap-4 mb-6">
+                        <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                           <CreditCard className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">Moyens de Paiement Activés</h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-1">Configurez les canaux de facturation de l'application</p>
+                        </div>
+                     </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
+                           <div>
+                              <p className="text-xs font-black text-slate-900 uppercase">Paiement direct (OTP)</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 leading-relaxed">Déclenchement automatique par push SMS et saisie de code direct.</p>
+                           </div>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                             <input 
+                               type="checkbox" 
+                               checked={configForm?.isOtpActive !== false}
+                               onChange={(e) => setConfigForm({ ...configForm!, isOtpActive: e.target.checked })}
+                               className="sr-only peer"
+                             />
+                             <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
+                           <div>
+                              <p className="text-xs font-black text-slate-900 uppercase">Paiement manuel (USSD)</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 leading-relaxed">Génération de syntaxes et saisie manuelle de référence de reçu.</p>
+                           </div>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                             <input 
+                               type="checkbox" 
+                               checked={configForm?.isUssdActive !== false}
+                               onChange={(e) => setConfigForm({ ...configForm!, isUssdActive: e.target.checked })}
+                               className="sr-only peer"
+                             />
+                             <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
+                        </div>
+                     </div>
+                  </div>
                </div>
 
                <div className="mt-8 p-6 lg:p-8 bg-slate-50 rounded-[32px] border border-slate-100">
@@ -1932,7 +2041,7 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 h-full overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Journaux du Système LIVRA</h3>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Journaux du Système PANCHO</h3>
                 <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Surveillance en temps réel des activités plateforme</p>
               </div>
               <div className="flex gap-2">
@@ -2027,30 +2136,87 @@ export default function AdminDashboard() {
                <div className="flex items-center gap-4 mb-4 border-b border-slate-700/50 pb-4">
                  <div className="flex items-center gap-2 text-emerald-400">
                     <Database className="w-4 h-4" />
-                    <span className="font-bold">Firestore Enterprise Terminal</span>
+                    <span className="font-bold">SQL Studio Terminal</span>
                  </div>
                </div>
                
-               <div className="flex-1 overflow-auto rounded-xl bg-slate-950 p-4 border border-slate-800 text-slate-300">
-                 <div className="mb-6 space-y-2">
-                   <p className="text-slate-500">// Collection: Users ({users.length} documents)</p>
-                   {users.slice(0, 3).map(u => (
-                     <pre key={u.userId} className="text-[10px] text-blue-300 whitespace-pre-wrap break-all bg-blue-900/10 p-2 rounded-lg border border-blue-900/30">
-                       {JSON.stringify(u, null, 2)}
-                     </pre>
-                   ))}
-                   {users.length > 3 && <p className="text-slate-500">... {users.length - 3} plus de documents. Appuyez sur Export CSV pour tous les voir.</p>}
+               <div className="mb-4">
+                 <label htmlFor="sql_query" className="block text-slate-400 font-bold mb-2 uppercase tracking-widest text-[10px]">Exécuter une requête SQL</label>
+                 <div className="relative">
+                   <textarea
+                     id="sql_query"
+                     value={sqlQuery}
+                     onChange={(e) => setSqlQuery(e.target.value)}
+                     className="w-full bg-slate-950 text-emerald-400 font-mono text-sm p-4 rounded-xl border border-slate-800 focus:outline-none focus:border-emerald-500/50 resize-y min-h-[100px]"
+                     placeholder="SELECT * FROM users LIMIT 10;"
+                     spellCheck={false}
+                   />
+                   <div className="absolute bottom-4 right-4 flex gap-2">
+                     <button
+                       onClick={() => handleExecuteSql()}
+                       disabled={isExecutingSql}
+                       className="px-4 py-2 bg-emerald-600/20 text-emerald-400 font-black uppercase text-[10px] tracking-widest rounded-lg hover:bg-emerald-600/40 transition-colors disabled:opacity-50 border border-emerald-500/30 flex items-center gap-2"
+                     >
+                       {isExecutingSql ? '...' : (
+                         <>
+                           <Play className="w-3 h-3" /> Run
+                         </>
+                       )}
+                     </button>
+                   </div>
                  </div>
-                 
-                 <div className="space-y-2">
-                   <p className="text-slate-500">// Collection: Deliveries ({deliveries.length} documents)</p>
-                   {deliveries.slice(0, 3).map(d => (
-                     <pre key={d.id} className="text-[10px] text-orange-300 whitespace-pre-wrap break-all bg-orange-900/10 p-2 rounded-lg border border-orange-900/30">
-                       {JSON.stringify(d, null, 2)}
-                     </pre>
-                   ))}
-                   {deliveries.length > 3 && <p className="text-slate-500">... {deliveries.length - 3} plus de documents. Appuyez sur Export CSV pour tous les voir.</p>}
-                 </div>
+                 {queryError && (
+                   <div className="mt-3 p-3 bg-red-950/50 border border-red-900/50 rounded-lg text-red-400 font-mono text-xs flex gap-3">
+                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                     <span>{queryError}</span>
+                   </div>
+                 )}
+               </div>
+
+               <div className="flex-1 overflow-auto rounded-xl bg-slate-950 border border-slate-800 text-slate-300 relative">
+                 {queryResult ? (
+                   queryResult.length === 0 ? (
+                     <div className="p-8 text-center text-slate-500 top-1/2 left-1/2 absolute -translate-x-1/2 -translate-y-1/2">
+                       <p className="font-bold uppercase tracking-widest">— Retour vide —</p>
+                     </div>
+                   ) : (
+                     <table className="w-full text-left border-collapse">
+                       <thead className="sticky top-0 bg-slate-900 border-b border-slate-800">
+                         <tr>
+                           {Object.keys(queryResult[0]).map(key => (
+                             <th key={key} className="p-3 text-[10px] uppercase font-bold text-slate-400 tracking-widest whitespace-nowrap bg-slate-900">
+                               {key}
+                             </th>
+                           ))}
+                         </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-800">
+                         {queryResult.map((row, i) => (
+                           <tr key={i} className="hover:bg-slate-800/50 transition-colors">
+                             {Object.values(row).map((val: any, j) => (
+                               <td key={j} className="p-3 text-xs text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-xs">
+                                 {val === null ? <span className="text-slate-600 italic">null</span> : 
+                                  typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                               </td>
+                             ))}
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   )
+                 ) : (
+                   <div className="p-4 space-y-2 text-[10px]">
+                     <p className="text-slate-500">// Terminal local SQL. Tables disponibles :</p>
+                     <p className="text-slate-400">- users (id, name, email, role, phone, accountStatus...)</p>
+                     <p className="text-slate-400">- deliveries (id, clientId, driverId, status, cost, from, to...)</p>
+                     <p className="text-slate-400">- config (key, value)</p>
+                     <p className="text-slate-400">- messages (id, deliveryId, text, senderId...)</p>
+                     <p className="text-slate-400">- notifications (id, userId, title, message...)</p>
+                     <p className="text-slate-400">- withdrawals (id, driverId, amount, status...)</p>
+                     <p className="text-slate-400">- historique_gains (id, driverId, type, amount...)</p>
+                     <p className="text-emerald-500 mt-4 animate-pulse">Ready &gt;_</p>
+                   </div>
+                 )}
                </div>
             </div>
           </div>
@@ -2060,7 +2226,7 @@ export default function AdminDashboard() {
           <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-slate-100 shadow-sm text-center px-10">
             <Store className="w-24 h-24 text-slate-100 mb-8" />
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4">Module {activeMenu}</h3>
-            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest max-w-md">Ce module de suivi en temps réel de LIVRA est en cours de déploiement sécurisé.</p>
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest max-w-md">Ce module de suivi en temps réel de PANCHO est en cours de déploiement sécurisé.</p>
           </div>
         );
     }
@@ -2098,7 +2264,7 @@ export default function AdminDashboard() {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-black text-slate-900 text-lg tracking-tight leading-none uppercase">LIVRA</h2>
+              <h2 className="font-black text-slate-900 text-lg tracking-tight leading-none uppercase">PANCHO</h2>
               <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em] mt-1.5">Administration</p>
             </div>
           </div>
@@ -2246,7 +2412,7 @@ export default function AdminDashboard() {
                     <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
-                    <span className="font-black text-slate-900 uppercase">LIVRA ADMIN</span>
+                    <span className="font-black text-slate-900 uppercase">PANCHO ADMIN</span>
                   </div>
                   <button onClick={() => setIsSidebarOpen(false)} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center">
                     <X className="w-5 h-5" />

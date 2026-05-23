@@ -12,6 +12,13 @@ export default function NotificationToast() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const timeouts = notifications.map(notif => 
+      setTimeout(() => markAsRead(notif.id), 3000)
+    );
+    return () => timeouts.forEach(clearTimeout);
+  }, [notifications]);
+
+  useEffect(() => {
     if (!user) return;
 
     const fetchNotifs = async () => {

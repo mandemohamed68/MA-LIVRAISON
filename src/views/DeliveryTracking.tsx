@@ -4,7 +4,7 @@ import { api } from '../services/apiService';
 import { DeliveryRequest, UserProfile } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
-import { ArrowLeft, Package, MessageSquare, CheckCircle, Navigation, Copy, Truck, Phone, Clock, ChevronRight, Loader2, X, Target, Eye } from 'lucide-react';
+import { ArrowLeft, Package, MessageSquare, CheckCircle, Navigation, Copy, Truck, Phone, Clock, ChevronRight, Loader2, X, Target, Eye, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Chat } from '../components/Chat';
 import PaymentModal from '../components/PaymentModal';
@@ -72,6 +72,53 @@ export default function DeliveryTracking() {
   const [isBoosting, setIsBoosting] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
+  const [showKeypadFor, setShowKeypadFor] = useState<'pickup' | 'delivery' | null>(null);
+  const [enteredCode, setEnteredCode] = useState('');
+  const [isValidatingCode, setIsValidatingCode] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  const handleVerifyCode = async () => {
+    if (!delivery || !showKeypadFor) return;
+    setIsValidatingCode(true);
+    setToastMessage('');
+
+    try {
+      if (showKeypadFor === 'pickup') {
+        if (enteredCode !== delivery.pickupCode) {
+          setToastMessage("Code de collecte invalide !");
+          setIsValidatingCode(false);
+          return;
+        }
+        await api.deliveries.update(delivery.id, {
+          status: 'picked_up',
+          updatedAt: new Date().toISOString()
+        });
+        setToastMessage("Colis récupéré !");
+      } else {
+        if (enteredCode !== delivery.deliveryCode) {
+          setToastMessage("Code de livraison invalide !");
+          setIsValidatingCode(false);
+          return;
+        }
+        await api.deliveries.update(delivery.id, {
+          status: 'delivered',
+          updatedAt: new Date().toISOString()
+        });
+        setToastMessage("Livraison validée avec succès !");
+      }
+
+      const refreshed = await api.deliveries.get(delivery.id);
+      if (refreshed) setDelivery(refreshed);
+      setEnteredCode('');
+      setShowKeypadFor(null);
+    } catch (err: any) {
+      setToastMessage(err.message || "Une erreur s'est produite lors de la validation.");
+    } finally {
+      setIsValidatingCode(false);
+      setTimeout(() => setToastMessage(''), 4000);
+    }
+  };
+
   useEffect(() => {
     if (!deliveryId) return;
 
@@ -118,7 +165,15 @@ export default function DeliveryTracking() {
   };
 
   const handlePayBid = async (method: string, transactionId?: string, isVerified?: boolean) => {
-    if (!delivery || !paymentBid) return;
+    if (!delivery) return;
+    
+    // Si c'est un nouveau bid, paymentBid est défini. Sinon (retry), on utilise les infos du delivery actuel.
+    const price = paymentBid?.price || delivery.cost;
+    const driverIdToUse = paymentBid?.driverId || delivery.driverId;
+    const driverNameToUse = paymentBid?.driverName || delivery.driverName;
+
+    if (!driverIdToUse || !price) return;
+
     try {
       const isCash = method === 'cash';
       const isDemo = false;
@@ -127,14 +182,14 @@ export default function DeliveryTracking() {
       // For demo, we auto confirm if it's not USSD or standard mobile money that needs approval
       const shouldAutoConfirm = isVerified || isCash || (isDemo && !isUssd && method !== 'aggregator');
       
-      const pickupCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const deliveryCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const pickupCode = delivery.pickupCode || Math.random().toString(36).substring(2, 6).toUpperCase();
+      const deliveryCode = delivery.deliveryCode || Math.random().toString(36).substring(2, 6).toUpperCase();
 
       await api.deliveries.update(delivery.id, {
         status: 'accepted',
-        driverId: paymentBid.driverId,
-        driverName: paymentBid.driverName,
-        cost: paymentBid.price,
+        driverId: driverIdToUse,
+        driverName: driverNameToUse,
+        cost: price,
         paymentMethod: method,
         paymentReference: transactionId || '',
         paymentStatus: shouldAutoConfirm ? 'confirmed' : 'pending_approval',
@@ -340,6 +395,40 @@ export default function DeliveryTracking() {
                    </div>
                 )}
 
+                {/* REJECTED PAYMENT WARNING */}
+                {delivery.paymentStatus === 'rejected' && (
+                   <div className="bg-rose-50 border-2 border-rose-200 p-4 rounded-3xl shadow-sm animate-pulse">
+                     <div className="flex justify-between items-center mb-2">
+                       <div className="flex items-center gap-3">
+                         <div className="bg-white shadow-sm p-2 rounded-full text-rose-600 border border-rose-100">
+                           <AlertCircle className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <p className="text-xs sm:text-sm font-black text-rose-900 uppercase tracking-tight">Paiement Rejeté</p>
+                           <p className="text-[10px] font-bold text-rose-700 uppercase tracking-widest italic mt-0.5">La vérification du reçu a échoué</p>
+                         </div>
+                       </div>
+                     </div>
+                     <p className="text-[11px] sm:text-xs font-bold text-rose-800 leading-relaxed mt-3 px-2">
+                       Votre preuve de paiement a été rejetée par l'administration de PANCHO EXPRESS. Vous pouvez soumettre à nouveau une preuve de paiement valide en cliquant ci-dessous, ou entrer en relation avec notre support client.
+                     </p>
+                     <div className="flex gap-2 mt-4 px-2">
+                       <button
+                         onClick={() => setShowPaymentModal(true)}
+                         className="px-4 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 shadow-sm active:scale-95 transition-transform"
+                       >
+                         Réessayer
+                       </button>
+                       <button
+                         onClick={() => setChatOpen(true)}
+                         className="px-4 py-2.5 bg-white text-rose-700 border border-rose-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 shadow-sm active:scale-95 transition-transform"
+                       >
+                         Support client
+                       </button>
+                     </div>
+                   </div>
+                )}
+
                 {/* Visual Progress Stepper */}
                 <div className="bg-white rounded-3xl p-5 lg:p-6 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.05)] border border-slate-100 mb-6 relative overflow-hidden">
                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/40 rounded-bl-[100px] -mr-12 -mt-12 z-0" />
@@ -483,57 +572,119 @@ export default function DeliveryTracking() {
                    </div>
                 ) : (
                   delivery.status === 'pending' && Array.isArray(bids) && bids.length > 0 && (
-                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                       <h3 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-600 mb-6">Offres reçues ({bids.length})</h3>
+                    <div className="bg-white rounded-3xl p-6 shadow-xl shadow-indigo-100/50 border-2 border-indigo-50 relative overflow-hidden">
+                       <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full blur-2xl opacity-50 mix-blend-multiply"></div>
+                       <h3 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-600 mb-6 flex items-center gap-2">
+                         <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                         Négociation en cours ({bids.filter(b => b.status === 'pending').length})
+                       </h3>
                        <div className="space-y-4">
-                          {bids.filter(b => b.status !== 'rejected').map(bid => (
-                             <div key={bid.id} className="p-5 rounded-[28px] border border-slate-100 bg-slate-50/50 flex flex-col gap-4">
+                          {bids.filter(b => b.status === 'pending').map(bid => (
+                             <div key={bid.id} className="p-5 rounded-[24px] border border-indigo-100 bg-indigo-50/30 flex flex-col gap-5 relative z-10">
                                 <div className="flex justify-between items-start px-1">
                                    <div>
                                      <p className="font-black text-sm text-slate-900">{bid.driverName}</p>
                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Livreur certifié</p>
                                    </div>
                                    <div className="text-right">
-                                      <p className="font-black text-xl text-indigo-600 leading-none">{bid.price} F</p>
-                                      <p className="text-[10px] text-indigo-400 font-bold mt-1.5 uppercase italic">{bid.timeEstimateMins} mins</p>
+                                      <p className="font-black text-2xl text-indigo-600 leading-none">{bid.price} <span className="text-sm">FCFA</span></p>
+                                      <p className="text-[10px] text-indigo-400 font-bold mt-1.5 uppercase italic">Dans ~{bid.timeEstimateMins} mins</p>
                                    </div>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex gap-3">
                                    <button 
-                                      onClick={() => { setPaymentBid(bid); setShowPaymentModal(true); }}
-                                      className="flex-1 bg-slate-900 text-white font-black py-4 rounded-[20px] text-[10px] uppercase tracking-widest hover:bg-slate-800 shadow-lg shadow-slate-900/10 active:scale-95 transition-all"
+                                      onClick={async () => {
+                                        try {
+                                          await api.deliveries.coursesNegotiations.accepter(deliveryId, bid.driverId, bid.price);
+                                          // Refresh data aggressively to update delivery state
+                                          const found = await api.deliveries.get(deliveryId);
+                                          if (found) setDelivery(found);
+                                        } catch (err: any) {
+                                          alert("Erreur lors de l'acceptation : " + (err.message || err));
+                                        }
+                                      }}
+                                      className="flex-1 bg-indigo-600 text-white font-black py-4 rounded-[20px] text-[11px] uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 active:scale-95 transition-all"
                                    >
-                                      Accepter l'offre
+                                      ACCEPTER
                                    </button>
                                    <button 
                                       onClick={async () => {
-                                         if (confirm("Voulez-vous refuser cette offre ? Le livreur pourra soumettre une dernière proposition.")) {
+                                         if (confirm(`Voulez-vous rejeter l'offre de ${bid.price} FCFA ? Le livreur pourra soumettre une dernière proposition si limite non atteinte.`)) {
                                             try {
-                                               await api.deliveries.bids.decline(deliveryId, bid.driverId);
+                                               await api.deliveries.coursesNegotiations.rejeter(deliveryId, bid.driverId);
                                                const bidsList = await api.deliveries.bids.list(deliveryId);
                                                setBids(Array.isArray(bidsList) ? bidsList : []);
-                                            } catch (err) {
-                                               alert("Impossible de refuser l'offre : " + (err.message || err));
+                                               alert("Proposition refusée");
+                                            } catch (err: any) {
+                                               alert("Impossible de rejeter l'offre : " + (err.message || err));
                                             }
                                          }
                                       }}
-                                      className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold py-4 rounded-[20px] text-[10px] uppercase tracking-wider active:scale-95 transition-all"
+                                      className="px-6 bg-white hover:bg-slate-50 text-slate-600 font-black py-4 rounded-[20px] text-[11px] uppercase tracking-widest border-2 border-slate-200 active:scale-95 transition-all"
                                    >
-                                      Refuser
+                                      REJETER
                                    </button>
                                 </div>
                              </div>
                           ))}
+                          {bids.filter(b => b.status === 'pending').length === 0 && bids.filter(b => b.status === 'rejected').length > 0 && (
+                            <div className="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
+                               <p className="text-xs font-bold text-slate-500">Toutes les propositions ont été refusées.</p>
+                            </div>
+                          )}
                        </div>
                     </div>
                   )
                 )}
 
+                {/* Driver Action Control Panel on Tracking Page */}
+                {profile?.role === 'driver' && delivery.driverId === profile.userId && delivery.status !== 'delivered' && delivery.status !== 'cancelled' && (
+                   <div className="bg-white rounded-3xl p-6 shadow-xl border border-indigo-100 flex flex-col gap-4 mb-4">
+                      <h3 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-650 flex items-center gap-2">
+                         <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                         Contrôles de livraison (Livreur)
+                      </h3>
+                      {delivery.status === 'accepted' || delivery.status === 'ready_for_pickup' ? (
+                         <>
+                            {(delivery.isPaid || delivery.paymentMethod === 'cash') ? (
+                               <div className="space-y-4">
+                                  <div className="p-4 bg-indigo-50/50 border border-indigo-100/50 rounded-2xl">
+                                     <p className="text-[11px] font-semibold text-indigo-800">Votre colis est prêt à être récupéré chez le client.</p>
+                                  </div>
+                                  <button 
+                                     onClick={() => { setEnteredCode(''); setShowKeypadFor('pickup'); }} 
+                                     className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer font-bold"
+                                  >
+                                     Saisir le Code Collecte <Package className="w-4 h-4" />
+                                  </button>
+                               </div>
+                            ) : (
+                               <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100 italic text-center text-xs font-semibold text-amber-600">
+                                  En attente du paiement en ligne du client pour débloquer la collecte...
+                               </div>
+                            )}
+                         </>
+                      ) : delivery.status === 'picked_up' ? (
+                         <div className="space-y-4">
+                            <div className="p-4 bg-indigo-50/50 border border-indigo-100/50 rounded-2xl">
+                               <p className="text-[11px] font-semibold text-indigo-800">Vous avez récupéré le colis. Livrez-le au destinataire et récupérez son code.</p>
+                            </div>
+                            <button 
+                               onClick={() => { setEnteredCode(''); setShowKeypadFor('delivery'); }} 
+                               className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer font-bold"
+                            >
+                               Saisir le Code Livraison pour Terminer <CheckCircle className="w-4 h-4" />
+                            </button>
+                         </div>
+                      ) : null}
+                   </div>
+                )}
+
                 {/* Security Codes for Active Deliveries */}
-                {delivery.status !== 'delivered' && delivery.status !== 'cancelled' && delivery.isPaid && (
+                {delivery.status !== 'delivered' && delivery.status !== 'cancelled' && (delivery.isPaid || delivery.paymentMethod === 'cash') && (
                    <div className="bg-slate-900 rounded-3xl p-5 lg:p-6 text-white shadow-2xl relative overflow-hidden ring-1 ring-white/10">
                       <div className="absolute top-0 left-0 w-24 h-24 bg-white/5 rounded-br-[60px] -ml-8 -mt-8" />
-                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mb-6 text-center ring-1 ring-white/5 py-2 rounded-full inline-block w-full">SÉCURITÉ • CODES LIVRA</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mb-6 text-center ring-1 ring-white/5 py-2 rounded-full inline-block w-full">SÉCURITÉ • CODES PANCHO</p>
                       
                       <div className="grid grid-cols-2 gap-6 relative z-10">
                           <div className="bg-white/5 rounded-3xl p-5 text-center border border-white/10 shadow-inner group">
@@ -547,7 +698,7 @@ export default function DeliveryTracking() {
                       </div>
 
                       <button 
-                        onClick={() => handleCopy(`LIVRA - Codes: ${delivery.pickupCode} | ${delivery.deliveryCode}`)} 
+                        onClick={() => handleCopy(`PANCHO - Codes: ${delivery.pickupCode} | ${delivery.deliveryCode}`)} 
                         className="w-full mt-6 bg-white/5 hover:bg-white/10 rounded-2xl py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all border border-white/5 active:scale-95"
                       >
                          <Copy className="w-4 h-4" /> Copier les codes
@@ -638,6 +789,58 @@ export default function DeliveryTracking() {
            amount={paymentBid?.price || delivery?.cost || 0}
            onConfirm={handlePayBid}
         />
+
+        {/* COMPACT CENTERED KEYPAD MODAL FOR DRIVER */}
+        {showKeypadFor && (
+           <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fade-in">
+              <motion.div 
+                 initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                 animate={{ scale: 1, opacity: 1, y: 0 }} 
+                 className="bg-white rounded-3xl w-full max-w-[340px] p-6 shadow-2xl relative my-auto animate-zoom-in"
+              >
+                 <button onClick={() => { setShowKeypadFor(null); setEnteredCode(''); setToastMessage(''); }} className="absolute top-4 right-4 w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all active:scale-95 cursor-pointer border-none outline-none"><X className="w-4 h-4" /></button>
+                 
+                 <div className="text-center mb-6">
+                    <div className={cn("w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-inner", showKeypadFor === 'delivery' ? 'bg-indigo-50 text-indigo-600' : 'bg-orange-50 text-orange-600')}>
+                       {showKeypadFor === 'delivery' ? <CheckCircle className="w-6 h-6" /> : <Package className="w-6 h-6" />}
+                    </div>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">Code {showKeypadFor === 'pickup' ? 'Collecte' : 'Livraison'}</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Saisissez le code de sécurité</p>
+                 </div>
+
+                 {toastMessage && (
+                    <div className="mb-4 p-3 bg-rose-50 border border-rose-100 rounded-2xl text-[11px] font-bold text-rose-600 text-center animate-pulse">
+                       {toastMessage}
+                    </div>
+                 )}
+
+                 <div className="relative mb-6">
+                    <input 
+                       type="text"
+                       value={enteredCode}
+                       onChange={(e) => setEnteredCode(e.target.value.toUpperCase())}
+                       placeholder="EX: 7GZ4"
+                       className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-center text-2xl font-black tracking-[0.2em] text-slate-900 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none uppercase"
+                       maxLength={8}
+                    />
+                 </div>
+                 
+                 <div className="space-y-4">
+                    <button 
+                       onClick={handleVerifyCode} 
+                       disabled={enteredCode.length < 4 || isValidatingCode} 
+                       className={cn(
+                          "w-full py-5 rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 shadow-xl cursor-pointer font-bold", 
+                          showKeypadFor === 'delivery' ? 'bg-indigo-600 text-white shadow-indigo-600/30 hover:bg-indigo-700' : 'bg-slate-900 text-white hover:bg-black',
+                          (enteredCode.length < 4 || isValidatingCode) && 'opacity-30 pointer-events-none'
+                       )}
+                    >
+                       {isValidatingCode ? 'Traitement...' : 'Confirmer Validation'}
+                    </button>
+                 </div>
+              </motion.div>
+           </div>
+        )}
         </>
       )}
     </div>

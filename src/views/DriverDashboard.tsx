@@ -82,9 +82,13 @@ const compressImage = async (file: File): Promise<string> => {
 
 function ChangeView({ center }: { center: [number, number] }) {
   const map = useMap();
+  const lat = center?.[0];
+  const lng = center?.[1];
   useEffect(() => {
-    if (center && !isNaN(center[0]) && !isNaN(center[1])) map.flyTo(center, 15, { duration: 1.5 });
-  }, [center, map]);
+    if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+      map.flyTo([lat, lng], 15, { duration: 1.5 });
+    }
+  }, [lat, lng, map]);
   return null;
 }
 
@@ -250,7 +254,7 @@ export default function DriverDashboard() {
 
   useEffect(() => {
     if (toastMessage) {
-      const t = setTimeout(() => setToastMessage(''), 4000);
+      const t = setTimeout(() => setToastMessage(''), 3000);
       return () => clearTimeout(t);
     }
   }, [toastMessage]);
@@ -267,8 +271,21 @@ export default function DriverDashboard() {
     fetchSettings();
   }, []);
 
+  const profileRef = useRef(profile);
+  const isOnlineRef = useRef(isOnline);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   const requestGeolocation = async () => {
-    setLoading(true);
+    if (!userLocation) {
+      setLoading(true);
+    }
     let lastUpdate = 0;
     let lastCoords: { lat: number, lng: number } | null = null;
     
@@ -289,7 +306,8 @@ export default function DriverDashboard() {
           significantMove = distance > 0.01; // More than 10 meters
         }
 
-        if (profile?.role === 'driver' && (now - lastUpdate > 30000 || (significantMove && now - lastUpdate > 10000))) { 
+        const currentProfile = profileRef.current;
+        if (currentProfile?.role === 'driver' && (now - lastUpdate > 30000 || (significantMove && now - lastUpdate > 10000))) { 
           lastUpdate = now;
           lastCoords = coords;
           api.profile.update({ 
@@ -307,12 +325,13 @@ export default function DriverDashboard() {
   };
 
   const fetchData = async () => {
-    if (!profile) return;
+    const currentProfile = profileRef.current;
+    if (!currentProfile) return;
     try {
       await refreshProfile().catch(() => {});
       const jobs = await api.deliveries.list();
       
-      const allMyJobs = jobs.filter((j: any) => j.driverId === profile.userId);
+      const allMyJobs = jobs.filter((j: any) => j.driverId === currentProfile.userId);
       allMyJobs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       
       const activeList = allMyJobs.filter((j: any) => ['accepted', 'picked_up', 'ready_for_pickup'].includes(j.status));
@@ -324,7 +343,7 @@ export default function DriverDashboard() {
       const wdList = await api.withdrawals.list().catch(() => []);
       setWithdrawals(Array.isArray(wdList) ? wdList : []);
 
-      if (isOnline) {
+      if (isOnlineRef.current) {
         setPendingJobs(jobs.filter((j: any) => j.status === 'pending'));
       } else {
         setPendingJobs([]);
@@ -337,7 +356,8 @@ export default function DriverDashboard() {
   };
 
   useEffect(() => {
-    if (!profile) {
+    const userId = profile?.userId;
+    if (!userId) {
       setLoading(false);
       return;
     }
@@ -361,7 +381,13 @@ export default function DriverDashboard() {
       }
       clearInterval(interval);
     };
-  }, [profile, isOnline]);
+  }, [profile?.userId]);
+
+  useEffect(() => {
+    if (profile) {
+      fetchData();
+    }
+  }, [isOnline]);
 
   // Keep track of previous active jobs length to only auto-switch when a new job is accepted
   const prevActiveJobsLength = useRef(0);
@@ -760,7 +786,7 @@ export default function DriverDashboard() {
                                              <span className={cn("w-1.5 h-1.5 rounded-full", profile?.status === 'online' ? "bg-emerald-500 animate-pulse" : (profile?.status === 'busy' ? "bg-orange-500" : "bg-slate-300"))} /> 
                                              {profile?.status === 'online' ? "En Ligne" : (profile?.status === 'busy' ? "Occupé" : "Hors Ligne")}
                                           </p>
-                                          <h2 className="text-xs font-black italic tracking-tight text-slate-900 mt-0.5">Livra EXPRESS</h2>
+                                          <h2 className="text-xs font-black italic tracking-tight text-slate-900 mt-0.5">PANCHO EXPRESS</h2>
                                        </div>
                                        <button onClick={toggleOnline} className={cn("p-2 rounded-xl transition-all shadow-sm", isOnline ? "bg-slate-900 text-white" : "bg-emerald-500 text-white")}>
                                            <Zap className="w-3.5 h-3.5" />
@@ -787,6 +813,9 @@ export default function DriverDashboard() {
                        </div>
 
                        {/* Right HUD: Earnings */}
+                       <div className="pointer-events-auto shrink-0 shadow-sm mb-2">
+                         <NotificationBell lightMode={true} />
+                       </div>
                        <div className="flex flex-col gap-3">
                             <motion.div 
                               initial={{ x: 20, opacity: 0 }} 
@@ -850,7 +879,7 @@ export default function DriverDashboard() {
                                     >
                                        <MessageSquare className="w-5 h-5" />
                                     </button>
-                                    {focusedJob.isPaid ? (
+                                    {(focusedJob.isPaid || focusedJob.paymentMethod === 'cash') ? (
                                       <button onClick={() => setShowKeypadFor('pickup')} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
                                          Récupéré <Package className="w-4 h-4" />
                                       </button>
@@ -896,7 +925,7 @@ export default function DriverDashboard() {
                                      </div>
                                   </div>
                                   <button onClick={() => setShowKeypadFor('delivery')} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
-                                     Livraison Complète <CheckCircle className="w-4 h-4" />
+                                     Insérer le code pour terminer la course <CheckCircle className="w-4 h-4" />
                                   </button>
                                </>
                             )}
@@ -1300,13 +1329,15 @@ export default function DriverDashboard() {
                 </div>
 
                 <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-4 px-2">Évolution Hebdomadaire</p>
-                <div className="bg-white rounded-2xl border border-slate-100 p-6 h-56 min-h-[224px] mb-8 shadow-sm">
-                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                      <LineChart data={mockChartData}>
-                        <Line type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={4} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-                        <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                      </LineChart>
-                   </ResponsiveContainer>
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 mb-8 shadow-sm" style={{ minWidth: 0 }}>
+                   <div style={{ width: '100%', height: '180px', minWidth: 0, minHeight: 0 }}>
+                      <ResponsiveContainer width="100%" height={180}>
+                         <LineChart data={mockChartData}>
+                           <Line type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={4} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                           <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                         </LineChart>
+                      </ResponsiveContainer>
+                   </div>
                 </div>
                 
                 <div className="bg-orange-50 rounded-3xl p-6 border border-orange-100 flex items-start gap-4">
@@ -1643,14 +1674,25 @@ export default function DriverDashboard() {
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-left">
-                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Montant payé</p>
-                          <p className="text-lg font-black text-slate-900 mt-1">{selectedHistoryJob.cost} F</p>
+                    <div className="grid grid-cols-3 gap-3 text-left">
+                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[#a1a1aa]">Montant</p>
+                          <p className="text-sm font-black text-slate-900 mt-1">{selectedHistoryJob.cost} F</p>
                        </div>
-                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Règlement</p>
-                          <p className="text-xs font-black text-indigo-600 uppercase tracking-wide mt-2">{selectedHistoryJob.paymentMethod || 'Non spécifié'}</p>
+                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[#a1a1aa]">Distance</p>
+                          <p className="text-sm font-black text-slate-900 mt-1">
+                            {calculateDistance(
+                              selectedHistoryJob.from?.lat || 0,
+                              selectedHistoryJob.from?.lng || 0,
+                              selectedHistoryJob.to?.lat || 0,
+                              selectedHistoryJob.to?.lng || 0
+                            ).toFixed(1)} km
+                          </p>
+                       </div>
+                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[#a1a1aa]">Règlement</p>
+                          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-2 truncate">{selectedHistoryJob.paymentMethod || 'Espèces'}</p>
                        </div>
                     </div>
 

@@ -50,10 +50,9 @@ export default function Navbar() {
 
   if (!user) return null;
 
-  const languages: { code: AppLanguage, label: string, flag: string }[] = [
+  const languages: { code: AppLanguage | 'en', label: string, flag: string }[] = [
     { code: 'fr', label: 'Français', flag: '🇫🇷' },
-    { code: 'moore', label: 'Mooré', flag: '🇧🇫' },
-    { code: 'dioula', label: 'Dioula', flag: '🇧🇫' },
+    { code: 'en', label: 'English', flag: '🇬🇧' }
   ];
 
   const NavLink = ({ to, icon: Icon, children, exact = false, onClick }: { to: string, icon: any, children: React.ReactNode, exact?: boolean, onClick?: () => void }) => {
@@ -117,7 +116,7 @@ export default function Navbar() {
             className="bg-amber-400 text-amber-950 text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center h-8"
           >
             <ShieldCheck className="w-3 h-3 mr-2" />
-            Environnement de Test Actif • Livra EXPRESS
+            Environnement de Test Actif • PANCHO EXPRESS
           </motion.div>
         )}
       </AnimatePresence>
@@ -158,14 +157,14 @@ export default function Navbar() {
           <Link to="/" className="flex items-center gap-3 group shrink-0">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
               {!logoError ? (
-                 <img src={logoUrl} alt="LIVRA Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+                 <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
                  <Logo className="w-full h-full text-orange-600" />
               )}
             </div>
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">
-                <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-white">Livra</span>
+                <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-white">PANCHO</span>
                 <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-orange-200">EXPRESS</span>
               </div>
               <span className="text-[8px] sm:text-[9px] font-black tracking-[0.45em] text-white/50 uppercase mt-1">Plateforme Logistique</span>
