@@ -10,6 +10,12 @@ export interface AppConfig {
   ussdSyntaxGeneric?: string;
   isOtpActive?: boolean;
   isUssdActive?: boolean;
+  isCashActive?: boolean;
+  isCardActive?: boolean;
+  isOrangeActive?: boolean;
+  isMoovActive?: boolean;
+  isTelecelActive?: boolean;
+  isCorisActive?: boolean;
 }
 
 export interface Sector {

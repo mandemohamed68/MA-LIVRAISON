@@ -364,11 +364,25 @@ export default function PaymentModal({
     { id: 'orange_ussd', name: 'Orange (USSD)', type: 'ussd', icon: Smartphone, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
     { id: 'moov_ussd', name: 'Moov (USSD)', type: 'ussd', icon: Smartphone, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
     { id: 'telecel_ussd', name: 'Telecel (USSD)', type: 'ussd', icon: Smartphone, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
+    
+    // Other Group
+    { id: 'cash', name: 'Paiement Cash', type: 'cash', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
+    { id: 'card', name: 'Carte Bancaire', type: 'card', icon: CreditCard, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
   ];
 
   const methods = rawMethods.filter(m => {
+    // Group level deactivation
     if (m.type === 'otp' && appConfig?.isOtpActive === false) return false;
     if (m.type === 'ussd' && appConfig?.isUssdActive === false) return false;
+    if (m.type === 'cash' && appConfig?.isCashActive !== true) return false;
+    if (m.type === 'card' && appConfig?.isCardActive !== true) return false;
+    
+    // Provider level deactivation (Individual)
+    if (m.id.startsWith('orange') && appConfig?.isOrangeActive === false) return false;
+    if (m.id.startsWith('moov') && appConfig?.isMoovActive === false) return false;
+    if (m.id.startsWith('telecel') && appConfig?.isTelecelActive === false) return false;
+    if (m.id.startsWith('coris') && appConfig?.isCorisActive === false) return false;
+    
     return true;
   });
 
@@ -520,6 +534,48 @@ export default function PaymentModal({
                           ))}
                         </div>
                       </div>
+
+                      {/* Groupe Autre (Cash, Card) */}
+                      {methods.filter(m => m.type === 'cash' || m.type === 'card').length > 0 && (
+                        <div className="space-y-3 pb-6">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
+                             <ShieldCheck className="w-3 h-3" /> Autres Moyens :
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {methods.filter(m => m.type === 'cash' || m.type === 'card').map((method) => (
+                              <button
+                                key={method.id}
+                                onClick={() => setSelectedMethod(method.id as any)}
+                                className={cn(
+                                  "p-4 rounded-[28px] border-2 flex items-center gap-3 transition-all relative group h-20",
+                                  selectedMethod === method.id 
+                                    ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
+                                    : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
+                                )}
+                              >
+                                <PaymentIcon 
+                                  id={method.id}
+                                  icon={method.icon}
+                                  bg={method.bg}
+                                  color={method.color}
+                                  selected={selectedMethod === method.id}
+                                />
+                                <div className="text-left flex-1 min-w-0">
+                                  <p className={cn(
+                                    "text-[10px] font-black tracking-tight uppercase italic truncate",
+                                    selectedMethod === method.id ? "text-white" : "text-slate-900"
+                                  )}>{method.name}</p>
+                                </div>
+                                {selectedMethod === method.id && (
+                                  <div className="absolute bottom-3 right-3">
+                                    <CheckCircle className="w-4 h-4 text-orange-500" />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 ) : step === 2 ? (

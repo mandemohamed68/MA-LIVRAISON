@@ -12,6 +12,7 @@ interface AuthContextType {
   language: AppLanguage;
   setLanguage: (lang: AppLanguage) => void;
   appConfig: AppConfig | null;
+  refreshAppConfig: () => Promise<void>;
   t: (key: keyof typeof translations.fr, params?: Record<string, any>) => string;
   login: (email: string, pass: string) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
@@ -40,6 +41,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [language, setLanguage] = useState<AppLanguage>('fr');
 
   const isMasterAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
+
+  const refreshAppConfig = async () => {
+    try {
+      const config = await api.config.get('app_config');
+      if (config) {
+        setAppConfig(config);
+        localStorage.setItem('app_config', JSON.stringify(config));
+      }
+    } catch (e) {
+      console.warn("Could not refresh app config", e);
+    }
+  };
 
   const t = (key: keyof typeof translations.fr, params?: Record<string, any>) => {
     let text = translations[language][key] || translations.fr[key] || key;
@@ -158,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{ 
       user, profile, loading, isAuthReady, isMasterAdmin, language, setLanguage, t, 
-      appConfig,
+      appConfig, refreshAppConfig,
       login, loginWithEmail, registerWithEmail,
       logout, updateRole, updateProfile, refreshProfile
     }}>

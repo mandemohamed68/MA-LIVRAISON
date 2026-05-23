@@ -18,8 +18,18 @@ import { useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LiveMap from '../components/LiveMap';
 import { sendNotification } from '../lib/notificationService';
 
+const chartData = [
+  { name: 'Lun', express: 120, standard: 80 },
+  { name: 'Mar', express: 150, standard: 90 },
+  { name: 'Mer', express: 180, standard: 110 },
+  { name: 'Jeu', express: 190, standard: 95 },
+  { name: 'Ven', express: 210, standard: 130 },
+  { name: 'Sam', express: 250, standard: 160 },
+  { name: 'Dim', express: 160, standard: 70 },
+];
+
 export default function AdminDashboard() {
-  const { profile, logout, isMasterAdmin, updateRole } = useAuth();
+  const { profile, logout, isMasterAdmin, updateRole, refreshAppConfig } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -40,6 +50,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState(queryTab || 'Vue d\'ensemble');
   const [isSaving, setIsSaving] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetCode, setResetCode] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -49,10 +61,12 @@ export default function AdminDashboard() {
   }, [queryTab]);
 
   useEffect(() => {
-    if (appConfig && !configForm) {
-      setConfigForm(appConfig);
+    if (appConfig) {
+      if (!configForm || isSaving === false) {
+        setConfigForm(appConfig);
+      }
     }
-  }, [appConfig]);
+  }, [appConfig, isSaving]);
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +78,7 @@ export default function AdminDashboard() {
         updatedAt: new Date().toISOString()
       });
       alert('Modifications enregistrées avec succès sur le serveur local !');
+      await refreshAppConfig(); // Refresh global app config
       await fetchData();
     } catch (err) {
       console.error(err);
@@ -254,22 +269,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const isSuperAdmin = profile?.role === 'superadmin' || isMasterAdmin;
+
   const handleSeedData = async () => {
     if (!window.confirm('Voulez-vous injecter des données de test locales ?')) return;
-    setIsProcessingAction(true);
+    setIsSaving(true);
     try {
       await api.admin.seed();
       alert('Données de test injectées sur le serveur local !');
+      fetchData();
     } catch (err) {
       console.error(err);
       alert('Erreur lors de l\'injection locale.');
     } finally {
-      setIsProcessingAction(false);
+      setIsSaving(false);
     }
   };
-
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [resetCode, setResetCode] = useState('');
 
   const executeHardReset = async () => {
     if (resetCode.trim().toUpperCase() !== 'RESET') {
@@ -283,6 +298,7 @@ export default function AdminDashboard() {
       alert("Application réinitialisée localement (Données supprimées) !");
       setShowResetConfirm(false);
       setResetCode('');
+      fetchData();
     } catch (err) {
       console.error(err);
       alert("Erreur lors de la réinitialisation locale.");
@@ -290,16 +306,6 @@ export default function AdminDashboard() {
       setIsSaving(false);
     }
   };
-
-  const chartData = [
-    { name: 'Lun', express: 120, standard: 80 },
-    { name: 'Mar', express: 150, standard: 90 },
-    { name: 'Mer', express: 180, standard: 110 },
-    { name: 'Jeu', express: 190, standard: 95 },
-    { name: 'Ven', express: 210, standard: 130 },
-    { name: 'Sam', express: 250, standard: 160 },
-    { name: 'Dim', express: 160, standard: 70 },
-  ];
 
   const handleValidateWithdrawal = async (withdrawalId: string) => {
     setIsProcessingAction(true);
@@ -314,8 +320,6 @@ export default function AdminDashboard() {
       setIsProcessingAction(false);
     }
   };
-
-  const isSuperAdmin = profile?.role === 'superadmin' || isMasterAdmin;
 
   const allSidebarItems = [
     { group: 'GÉNÉRAL', items: [
@@ -354,13 +358,6 @@ export default function AdminDashboard() {
   ];
 
   const sidebarItems = allSidebarItems.filter(group => group.items.length > 0);
-
-  const rolesList: { id: UserRole, label: string }[] = [
-    { id: 'superadmin', label: 'SUPER ADMIN' },
-    { id: 'admin', label: 'ADMINISTRATEUR' },
-    { id: 'client', label: 'CLIENT' },
-    { id: 'driver', label: 'LIVREUR' },
-  ];
 
   const [selectedChatDeliveryId, setSelectedChatDeliveryId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
@@ -1639,7 +1636,7 @@ export default function AdminDashboard() {
              </div>
           </div>
         );
-      case 'Paramètres App':
+      case 'Paramètres App': {
         return (
           <form onSubmit={handleUpdateConfig} className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
              <div className="flex justify-between items-center mb-8">
@@ -1657,7 +1654,35 @@ export default function AdminDashboard() {
                </button>
              </div>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:p-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:p-6">
+                   {isMasterAdmin && (
+                      <div className="p-5 lg:p-6 bg-rose-50 rounded-2xl border border-rose-100 flex flex-col justify-between">
+                         <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-4">
+                               <div className="w-10 h-10 bg-white text-rose-600 rounded-xl flex items-center justify-center shadow-sm">
+                                  <ShieldCheck className="w-5 h-5" />
+                               </div>
+                               <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">Maintenance</h4>
+                            </div>
+                         </div>
+                         <div className="flex flex-col gap-2">
+                            <button 
+                              type="button"
+                              onClick={handleSeedData}
+                              className="w-full py-3 bg-white text-emerald-600 border border-emerald-100 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all font-black"
+                            >
+                               Générer Données
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => setShowResetConfirm(true)}
+                              className="w-full py-3 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
+                            >
+                               Hard Reset
+                            </button>
+                         </div>
+                      </div>
+                   )}
                   <div className="p-5 lg:p-6 bg-slate-50 rounded-2xl border border-slate-100">
                      <div className="flex justify-between items-center mb-6">
                         <div className="flex items-center gap-4">
@@ -1763,6 +1788,38 @@ export default function AdminDashboard() {
                              <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
                            </label>
                         </div>
+
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm opacity-60">
+                           <div>
+                              <p className="text-xs font-black text-slate-900 uppercase">Paiement Cash (BETA)</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 leading-relaxed">Directement au livreur (Risque de sécurité augmenté).</p>
+                           </div>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                             <input 
+                               type="checkbox" 
+                               checked={configForm?.isCashActive || false}
+                               onChange={(e) => setConfigForm({ ...configForm!, isCashActive: e.target.checked })}
+                               className="sr-only peer"
+                             />
+                             <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
+                        </div>
+
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm opacity-60">
+                           <div>
+                              <p className="text-xs font-black text-slate-900 uppercase">Carte Bancaire (BETA)</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 leading-relaxed">Via Stripe ou passerelle internationale (BETA).</p>
+                           </div>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                             <input 
+                               type="checkbox" 
+                               checked={configForm?.isCardActive || false}
+                               onChange={(e) => setConfigForm({ ...configForm!, isCardActive: e.target.checked })}
+                               className="sr-only peer"
+                             />
+                             <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
+                        </div>
                      </div>
                   </div>
                </div>
@@ -1793,12 +1850,24 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                      {/* Orange Money */}
                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
-                        <div className="flex items-center gap-4 mb-4">
-                           <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center overflow-hidden border border-orange-100">
-                              <img src="/payments/orange.png" alt="Orange" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=O' }}/>
+                        <div className="flex items-center justify-between mb-4">
+                           <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center overflow-hidden border border-orange-100">
+                                 <img src="/payments/orange.png" alt="Orange" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=O' }}/>
+                              </div>
+                              <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Orange Money</label>
                            </div>
-                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Orange Money</label>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                               <input 
+                                 type="checkbox" 
+                                 checked={configForm?.isOrangeActive !== false}
+                                 onChange={(e) => setConfigForm({ ...configForm!, isOrangeActive: e.target.checked })}
+                                 className="sr-only peer"
+                               />
+                               <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-orange-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
                         </div>
+                        <div className="mt-4">
                         <input 
                            type="text"
                            placeholder="Ex: *144*4*6*{amount}#"
@@ -1808,15 +1877,28 @@ export default function AdminDashboard() {
                         />
                         <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *144*4*6*{"{amount}"}#</p>
                      </div>
+                  </div>
 
                      {/* Moov Money */}
                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
-                        <div className="flex items-center gap-4 mb-4">
-                           <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
-                              <img src="/payments/moov.png" alt="Moov" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=M' }}/>
+                        <div className="flex items-center justify-between mb-4">
+                           <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
+                                 <img src="/payments/moov.png" alt="Moov" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=M' }}/>
+                              </div>
+                              <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Moov Money</label>
                            </div>
-                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Moov Money</label>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                               <input 
+                                 type="checkbox" 
+                                 checked={configForm?.isMoovActive !== false}
+                                 onChange={(e) => setConfigForm({ ...configForm!, isMoovActive: e.target.checked })}
+                                 className="sr-only peer"
+                               />
+                               <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
                         </div>
+                        <div className="mt-4">
                         <input 
                            type="text"
                            placeholder="Ex: *155*4*1*{amount}#"
@@ -1826,15 +1908,28 @@ export default function AdminDashboard() {
                         />
                         <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *155*4*1*{"{amount}"}#</p>
                      </div>
+                  </div>
 
                      {/* Telecel Money */}
                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
-                        <div className="flex items-center gap-4 mb-4">
-                           <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center overflow-hidden border border-indigo-100">
-                              <img src="/payments/telecel.png" alt="Telecel" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=T' }}/>
+                        <div className="flex items-center justify-between mb-4">
+                           <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center overflow-hidden border border-indigo-100">
+                                 <img src="/payments/telecel.png" alt="Telecel" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=T' }}/>
+                              </div>
+                              <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Telecel Money</label>
                            </div>
-                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Telecel Money</label>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                               <input 
+                                 type="checkbox" 
+                                 checked={configForm?.isTelecelActive !== false}
+                                 onChange={(e) => setConfigForm({ ...configForm!, isTelecelActive: e.target.checked })}
+                                 className="sr-only peer"
+                               />
+                               <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-slate-400 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
                         </div>
+                        <div className="mt-4">
                         <input 
                            type="text"
                            placeholder="Ex: *156*4*2*{amount}#"
@@ -1844,15 +1939,28 @@ export default function AdminDashboard() {
                         />
                         <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *156*4*2*{"{amount}"}#</p>
                      </div>
+                  </div>
 
                      {/* Coris Money */}
                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
-                        <div className="flex items-center gap-4 mb-4">
-                           <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
-                              <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-[8px]">C</div>
+                        <div className="flex items-center justify-between mb-4">
+                           <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
+                                 <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-[8px]">C</div>
+                              </div>
+                              <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Coris Money</label>
                            </div>
-                           <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Coris Money</label>
+                           <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                               <input 
+                                 type="checkbox" 
+                                 checked={configForm?.isCorisActive !== false}
+                                 onChange={(e) => setConfigForm({ ...configForm!, isCorisActive: e.target.checked })}
+                                 className="sr-only peer"
+                               />
+                               <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                           </label>
                         </div>
+                        <div className="mt-4">
                         <input 
                            type="text"
                            placeholder="Ex: *555*1*1*{amount}#"
@@ -1862,6 +1970,7 @@ export default function AdminDashboard() {
                         />
                         <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Exemple: *555*1*1*{"{amount}"}#</p>
                      </div>
+                  </div>
 
                      {/* Autre */}
                      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all group">
@@ -1881,16 +1990,17 @@ export default function AdminDashboard() {
                         <p className="text-[9px] text-slate-400 font-bold mt-3 leading-relaxed italic">Syntaxe générique par défaut.</p>
                      </div>
                   </div>
+                </div>
 
-                  <div className="mt-8 pt-8 border-t border-slate-200">
+                <div className="mt-8 pt-8 border-t border-slate-200">
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest leading-relaxed text-center">
                       Ces syntaxes sont cruciales pour le parcours utilisateur "Paiement Manuel". <br/>
                       <span className="text-orange-600">Assurez-vous de vérifier le code court de votre compte marchand avant de valider.</span>
                     </p>
                   </div>
-               </div>
-            </form>
+             </form>
         );
+      }
       case 'Transactions':
         return (
           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
@@ -1921,7 +2031,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
-      case 'Support Chat':
+      case 'Support Chat': {
         const selectedDelivery = deliveries.find(d => d.id === selectedChatDeliveryId);
         const currentChatMessages = chatMessages;
 
@@ -2029,7 +2139,8 @@ export default function AdminDashboard() {
              </div>
           </div>
         );
-      case 'Logs Système':
+      }
+      case 'Logs Système': {
         const systemLogs = [
           { id: 1, type: 'AUTH', text: 'Nouvelle connexion SuperAdmin', user: 'Admin', time: 'Il y a 2 min', color: 'text-indigo-500' },
           { id: 2, type: 'PAYMENT', text: `Validation attendue: course de ${deliveries[0]?.clientName || 'un client'}`, user: 'System', time: 'Il y a 5 min', color: 'text-orange-500' },
@@ -2084,6 +2195,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
+      }
       case 'Base de Données':
         return (
           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 flex flex-col h-full min-h-[600px]">
@@ -2232,13 +2344,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleRoleChange = async (newRole: UserRole) => {
-    await updateRole(newRole);
-    if (newRole === 'client') navigate('/client');
-    else if (newRole === 'driver') navigate('/driver');
-    else navigate('/admin');
-  };
-
   // Safety redirection: If for some reason the profile role changes to non-admin 
   // and we are still on the admin view, redirect immediately.
   if (profile && profile.role !== 'admin' && profile.role !== 'superadmin' && !isMasterAdmin) {
@@ -2311,24 +2416,6 @@ export default function AdminDashboard() {
                <Menu className="w-5 h-5" />
              </button>
              <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{activeMenu}</h3>
-             {isMasterAdmin && (
-               <div className="flex gap-2">
-                 <button 
-                  onClick={handleSeedData} 
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-emerald-100 hover:bg-emerald-500 hover:text-white text-emerald-600 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2"
-                 >
-                   <Package className="w-3 h-3" /> <span className="hidden sm:inline">Générer Données</span>
-                 </button>
-                 <button 
-                  onClick={() => setShowResetConfirm(true)} 
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-red-100 hover:bg-red-500 hover:text-white text-red-600 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2"
-                 >
-                   <ShieldCheck className="w-3 h-3" /> <span className="hidden sm:inline">Hard Reset</span>
-                 </button>
-               </div>
-             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-6 justify-between sm:justify-end">
@@ -2349,28 +2436,6 @@ export default function AdminDashboard() {
             )}
             
             {isSuperAdmin && <div className="hidden sm:block h-10 w-px bg-slate-100 mx-2" />}
-
-            {isMasterAdmin && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <span className="text-[7px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Tester Rôle:</span>
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200 overflow-x-auto scrollbar-hide max-w-[200px] sm:max-w-none">
-                  {rolesList.map((role) => (
-                    <button
-                      key={role.id}
-                      onClick={() => handleRoleChange(role.id)}
-                      className={cn(
-                        "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wide transition-all whitespace-nowrap",
-                        profile?.role === role.id 
-                          ? "bg-white text-orange-600 shadow-sm border border-slate-100" 
-                          : "text-slate-500 hover:text-slate-800"
-                      )}
-                    >
-                      {role.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </header>
 
@@ -2452,39 +2517,52 @@ export default function AdminDashboard() {
       {/* Custom Reset Modal */}
       <AnimatePresence>
         {showResetConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowResetConfirm(false)} />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" 
+              onClick={() => setShowResetConfirm(false)} 
+            />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-5 lg:p-6 max-w-sm w-full relative z-10 shadow-2xl"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[40px] p-8 lg:p-10 max-w-sm w-full relative z-10 shadow-2xl border border-white"
             >
-              <h3 className="text-xl font-black text-red-600 uppercase tracking-tighter mb-4">Hard Reset</h3>
-              <p className="text-sm font-bold text-slate-500 mb-6 leading-relaxed">
-                Cette action supprimera toutes les livraisons, enchères, tracking, messages et comptes utilisateurs (sauf les administrateurs). Tapez <span className="text-red-500 font-black">RESET</span> pour confirmer.
+              <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+                <Trash2 className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter text-center mb-4 italic">Hard Reset</h3>
+              <p className="text-xs font-bold text-slate-500 mb-8 leading-relaxed text-center uppercase tracking-tight">
+                Cette action supprimera toutes les livraisons, enchères, tracking, messages et comptes utilisateurs. Tapez <span className="text-rose-600 font-black px-2 py-1 bg-rose-50 rounded-lg mx-1">RESET</span> pour confirmer le nettoyage complet de la base de données locale.
               </p>
-              <input
-                type="text"
-                value={resetCode}
-                onChange={(e) => setResetCode(e.target.value)}
-                placeholder="Tapez RESET"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-black text-slate-900 uppercase tracking-widest text-center mb-6"
-              />
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowResetConfirm(false)}
-                  className="flex-1 px-4 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={executeHardReset}
-                  disabled={resetCode.trim().toUpperCase() !== 'RESET' || isSaving}
-                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
-                >
-                  {isSaving ? 'Suppression...' : 'Confirmer'}
-                </button>
+              
+              <div className="space-y-6">
+                <input
+                  type="text"
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value)}
+                  placeholder="Tapez RESET ici"
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-[24px] px-6 py-5 font-black text-slate-900 uppercase tracking-[0.2em] text-center focus:border-rose-600 focus:bg-white transition-all outline-none text-sm placeholder:text-slate-300"
+                />
+                
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setShowResetConfirm(false)}
+                    className="flex-1 px-4 py-5 bg-slate-100 text-slate-600 rounded-[24px] text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={executeHardReset}
+                    disabled={resetCode.trim().toUpperCase() !== 'RESET' || isSaving}
+                    className="flex-1 px-4 py-5 bg-rose-600 text-white rounded-[24px] text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-xl shadow-rose-200 disabled:opacity-40 active:scale-95 disabled:scale-100"
+                  >
+                    {isSaving ? 'Nettoyage...' : 'Confirmer'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

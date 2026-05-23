@@ -9,7 +9,7 @@ export default function BottomNav() {
   const location = useLocation();
 
   if (!profile) return null;
-  if (location.pathname.startsWith('/admin') && profile.role !== 'admin' && profile.role !== 'superadmin' && !isMasterAdmin) return null;
+  if (location.pathname.startsWith('/admin')) return null;
 
   const isDriver = profile.role === 'driver';
   const isAdmin = profile.role === 'admin' || profile.role === 'superadmin';
