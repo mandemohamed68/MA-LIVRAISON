@@ -1,5 +1,5 @@
 {
-  "name": "PANCHO",
+  "name": "PANCHO EXPRESS",
   "description": "Plateforme de livraison en temps réel avec calcul des gains quotidiens, système de retrait personnalisé pour les livreurs, et gestion administrative complète des paiements.",
   "requestFramePermissions": [
     "geolocation"

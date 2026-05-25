@@ -70,8 +70,8 @@ export default function ClientDashboard() {
     };
   }, [profile]);
 
-  const activeDeliveries = deliveries.filter(d => ['pending', 'accepted', 'picked_up', 'ready_for_pickup'].includes(d.status));
-  const recentDeliveries = deliveries.filter(d => !activeDeliveries.some(ad => ad.id === d.id)).slice(0, 3);
+  const activeDeliveries = (deliveries || []).filter(d => ['pending', 'accepted', 'picked_up', 'ready_for_pickup'].includes(d.status));
+  const recentDeliveries = (deliveries || []).filter(d => !activeDeliveries.some(ad => ad.id === d.id)).slice(0, 3);
 
   const copyCode = (code: string | undefined) => {
     if(code) {
@@ -160,9 +160,9 @@ export default function ClientDashboard() {
       {activeDeliveries.length > 0 && (
         <div className="absolute inset-0 h-[40vh] w-full z-0 overflow-hidden bg-slate-100 mask-image-b pointer-events-none">
            <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-slate-50/80 to-slate-50 z-10" />
-           {(activeDeliveries[0].from || activeDeliveries[0].to) ? (
+           {(activeDeliveries[0].from?.lat || activeDeliveries[0].to?.lat) ? (
               <MapContainer 
-                 center={(activeDeliveries[0].from && activeDeliveries[0].from.lat) ? [activeDeliveries[0].from.lat, activeDeliveries[0].from.lng] : [12.3714, -1.5197]} 
+                 center={activeDeliveries[0].from?.lat ? [activeDeliveries[0].from.lat, activeDeliveries[0].from.lng!] : [activeDeliveries[0].to?.lat || 12.3714, activeDeliveries[0].to?.lng || -1.5197]} 
                  zoom={14} 
                  style={{ height: '100%', width: '100%' }}
                  zoomControl={false}
@@ -173,8 +173,8 @@ export default function ClientDashboard() {
                    url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
                    subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
                  />
-                 {activeDeliveries[0].from && <Marker position={[activeDeliveries[0].from.lat, activeDeliveries[0].from.lng]} icon={customMarkerIcon} />}
-                 {activeDeliveries[0].to && <Marker position={[activeDeliveries[0].to.lat, activeDeliveries[0].to.lng]} icon={customMarkerIcon} />}
+                 {activeDeliveries[0].from?.lat && <Marker position={[activeDeliveries[0].from.lat, activeDeliveries[0].from.lng!]} icon={customMarkerIcon} />}
+                 {activeDeliveries[0].to?.lat && <Marker position={[activeDeliveries[0].to.lat, activeDeliveries[0].to.lng!]} icon={customMarkerIcon} />}
               </MapContainer>
            ) : (
               <div className="w-full h-full bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
@@ -257,12 +257,12 @@ export default function ClientDashboard() {
 
                         {activeDelivery.status === 'pending' ? (
                           <div className="flex-1 flex flex-col justify-center items-center py-4 bg-slate-50/50 rounded-2xl border border-slate-100/80 mt-2 mb-2 w-full">
-                             {(activeDelivery.bids && activeDelivery.bids.length > 0) ? (
+                             {(Array.isArray(activeDelivery.bids) && activeDelivery.bids.length > 0) ? (
                                <div className="w-full px-4 flex flex-col gap-3">
                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 text-center mb-1">
-                                   Offre(s) reçue(s) ({activeDelivery.bids.filter((b: any) => b.status === 'pending').length})
+                                   Offre(s) reçue(s) ({(activeDelivery.bids || []).filter((b: any) => b.status === 'pending').length})
                                  </h4>
-                                 {activeDelivery.bids.filter((b: any) => b.status === 'pending').map((bid: any) => (
+                                 {(activeDelivery.bids || []).filter((b: any) => b.status === 'pending').map((bid: any) => (
                                     <div key={bid.id} className="w-full bg-white rounded-xl shadow-sm border border-indigo-100 p-3 flex flex-col gap-3">
                                       <div className="flex justify-between items-center">
                                          <div>
@@ -277,7 +277,7 @@ export default function ClientDashboard() {
                                       </div>
                                     </div>
                                  ))}
-                                 {activeDelivery.bids.filter((b: any) => b.status === 'pending').length === 0 && (
+                                 {(activeDelivery.bids || []).filter((b: any) => b.status === 'pending').length === 0 && (
                                     <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest">Aucune offre en attente</p>
                                  )}
                                </div>

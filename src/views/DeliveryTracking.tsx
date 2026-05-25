@@ -580,10 +580,10 @@ export default function DeliveryTracking() {
                        <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full blur-2xl opacity-50 mix-blend-multiply"></div>
                        <h3 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-600 mb-6 flex items-center gap-2">
                          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                         Négociation en cours ({bids.filter(b => b.status === 'pending').length})
+                         Négociation en cours ({(bids || []).filter(b => b.status === 'pending').length})
                        </h3>
                        <div className="space-y-4">
-                          {bids.filter(b => b.status === 'pending').map(bid => (
+                          { (bids || []).filter(b => b.status === 'pending').map(bid => (
                              <div key={bid.id} className="p-5 rounded-[24px] border border-indigo-100 bg-indigo-50/30 flex flex-col gap-5 relative z-10">
                                 <div className="flex justify-between items-start px-1">
                                    <div>
@@ -631,7 +631,7 @@ export default function DeliveryTracking() {
                                 </div>
                              </div>
                           ))}
-                          {bids.filter(b => b.status === 'pending').length === 0 && bids.filter(b => b.status === 'rejected').length > 0 && (
+                          {(bids || []).filter(b => b.status === 'pending').length === 0 && (bids || []).filter(b => b.status === 'rejected').length > 0 && (
                             <div className="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
                                <p className="text-xs font-bold text-slate-500">Toutes les propositions ont été refusées.</p>
                             </div>

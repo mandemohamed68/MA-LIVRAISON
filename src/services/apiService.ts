@@ -2,15 +2,16 @@
 // Remplace les appels directs à Firebase SDK
 import { Capacitor } from '@capacitor/core';
 
-const getApiBase = () => {
+export const getApiBase = () => {
+  const cachedUrl = localStorage.getItem('custom_api_base');
+  if (cachedUrl) {
+    return cachedUrl;
+  }
   if (Capacitor.isNativePlatform()) {
     return "http://41.78.54.60:3006/api";
   }
   return "/api";
 };
-
-const API_BASE = getApiBase();
-console.log('API_BASE being used:', API_BASE);
 
 async function request(endpoint: string, method = 'GET', body?: any, retryCount = 0): Promise<any> {
   const token = localStorage.getItem('auth_token');
@@ -21,6 +22,7 @@ async function request(endpoint: string, method = 'GET', body?: any, retryCount 
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const API_BASE = getApiBase();
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method,
     headers,

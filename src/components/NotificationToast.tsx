@@ -23,7 +23,8 @@ export default function NotificationToast() {
 
     const fetchNotifs = async () => {
       try {
-        const list = await api.notifications.list();
+        let list = await api.notifications.list() || [];
+        if (!Array.isArray(list)) list = [];
         const unread = list
           .filter((n: any) => !n.isRead)
           .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

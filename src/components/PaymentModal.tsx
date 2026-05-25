@@ -148,9 +148,16 @@ export default function PaymentModal({
 
   const getApiUrl = (path: string) => {
     let apiBase = "/api";
-    // @ts-ignore
-    if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform()) {
-      apiBase = "http://41.78.54.60:3006/api";
+    if (typeof window !== 'undefined') {
+      const cachedUrl = localStorage.getItem('custom_api_base');
+      if (cachedUrl) {
+        apiBase = cachedUrl;
+      } else {
+        // @ts-ignore
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+          apiBase = "http://41.78.54.60:3006/api";
+        }
+      }
     }
     
     if (path.startsWith('/api')) {

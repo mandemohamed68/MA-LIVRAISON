@@ -9,7 +9,8 @@ import { AppLanguage } from '../lib/translations';
 import { api } from '../services/apiService';
 import { AppConfig } from '../types';
 import Logo from './Logo';
-import logoImg from '../assets/logo.png';
+
+const logoImg = '/logo-pancho.png';
 
 export default function Navbar() {
   const { user, profile, logout, language, setLanguage, t, isMasterAdmin, updateRole } = useAuth();
@@ -155,7 +156,7 @@ export default function Navbar() {
           isAdminView && "h-16 px-10 max-w-[1900px]"
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
               {!logoError ? (
                  <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
