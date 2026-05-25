@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, FileText, ChevronRight, Check } from 'lucide-react';
 import { CLIENT_TERMS, DRIVER_TERMS, PRIVACY_POLICY } from '../data/terms';
@@ -12,19 +11,15 @@ interface TermsAgreementModalProps {
 
 export default function TermsAgreementModal({ role, onAccept }: TermsAgreementModalProps) {
   const [step, setStep] = useState<'intro' | 'terms' | 'privacy'>('intro');
-  const [hasScrolledTerms, setHasScrolledTerms] = useState(false);
-  const [hasScrolledPrivacy, setHasScrolledPrivacy] = useState(false);
+  const [hasScrolledTerms, setHasScrolledTerms] = useState(true);
+  const [hasScrolledPrivacy, setHasScrolledPrivacy] = useState(true);
 
-  // Automatically mark as scrolled if content is short or after 2 seconds
-  React.useEffect(() => {
-    if (step === 'terms') {
-      const timer = setTimeout(() => setHasScrolledTerms(true), 2000);
-      return () => clearTimeout(timer);
-    }
-    if (step === 'privacy') {
-      const timer = setTimeout(() => setHasScrolledPrivacy(true), 2000);
-      return () => clearTimeout(timer);
-    }
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setHasScrolledTerms(true);
+      setHasScrolledPrivacy(true);
+    }, 3000); // Fail-safe: enable acceptance after 3 seconds
+    return () => clearTimeout(timer);
   }, [step]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>, setter: (val: boolean) => void) => {
@@ -34,17 +29,17 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
     }
   };
 
-  const termsText = role === 'client' ? CLIENT_TERMS : DRIVER_TERMS;
+  const termsText = (role === 'client' ? CLIENT_TERMS : DRIVER_TERMS) || "Conditions non disponibles.";
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header */}
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Acceptation requise</h2>
             <p className="text-sm text-slate-500 font-medium italic">Pancho Livraison - Plateforme Professionnelle</p>
@@ -64,20 +59,20 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8">
           <AnimatePresence mode="wait">
             {step === 'intro' && (
               <motion.div
                 key="intro"
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
+                exit={{ opacity: 0, x: -10 }}
                 className="text-center py-6"
               >
                 <div className="w-20 h-20 bg-orange-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
                   <ShieldCheck className="w-10 h-10 text-orange-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-4">Bienvenue sur PANCHO EXECUTIVE</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mb-4">Bienvenue sur PANCHO LIVRAISON</h3>
                 <p className="text-slate-600 leading-relaxed max-w-sm mx-auto mb-8">
                   Pour garantir une expérience sécurisée et professionnelle à tous nos utilisateurs, veuillez consulter et accepter nos conditions d'utilisation.
                 </p>
@@ -97,9 +92,9 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
             {step === 'terms' && (
               <motion.div
                 key="terms"
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
+                exit={{ opacity: 0, x: -10 }}
                 className="flex flex-col h-full"
               >
                 <div 
@@ -119,16 +114,16 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
             {step === 'privacy' && (
               <motion.div
                 key="privacy"
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
+                exit={{ opacity: 0, x: -10 }}
                 className="flex flex-col h-full"
               >
                 <div 
                   className="bg-slate-50 rounded-2xl p-6 border border-slate-100 prose prose-slate prose-sm max-w-none max-h-[400px] overflow-y-auto mb-4 text-slate-700"
                   onScroll={(e) => handleScroll(e, setHasScrolledPrivacy)}
                 >
-                  <Markdown>{PRIVACY_POLICY}</Markdown>
+                  <Markdown>{PRIVACY_POLICY || "Politique non disponible."}</Markdown>
                 </div>
                 {!hasScrolledPrivacy && (
                   <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest animate-pulse">
@@ -141,7 +136,7 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
         </div>
 
         {/* Footer */}
-        <div className="px-8 py-6 border-t border-slate-100 bg-slate-50 flex flex-col gap-3">
+        <div className="px-8 py-6 border-t border-slate-100 bg-slate-50 flex flex-col gap-3 shrink-0">
           {step === 'intro' ? (
             <button
               onClick={() => setStep('terms')}
@@ -154,24 +149,15 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
             <button
               disabled={!hasScrolledTerms}
               onClick={() => setStep('privacy')}
-              className={`w-full h-14 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                hasScrolledTerms 
-                  ? 'bg-slate-900 text-white hover:bg-black' 
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
+              className={`w-full h-14 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200/50 disabled:opacity-50 disabled:bg-slate-300`}
             >
               Accepter les Conditions
               <Check className="w-5 h-5" />
             </button>
           ) : (
             <button
-              disabled={!hasScrolledPrivacy}
               onClick={onAccept}
-              className={`w-full h-14 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                hasScrolledPrivacy 
-                  ? 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-200' 
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
+              className={`w-full h-14 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-200`}
             >
               Tout accepter et Commencer
               <Check className="w-5 h-5" />

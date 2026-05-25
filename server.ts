@@ -588,11 +588,11 @@ async function startServer() {
         body: JSON.stringify({
           type: "SIMPLE",
           customer: {
-            email: email || "client@livra.app",
+            email: email || "client@pancho.app",
             country: 1
           },
           amount: amount.toString(),
-          note: note || `Livraison LIVRA #${Math.random().toString(36).substr(2, 5)}`
+          note: note || `Livraison PANCHO #${Math.random().toString(36).substr(2, 5)}`
         }),
       });
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, CheckCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
 import { useNavigate } from 'react-router-dom';

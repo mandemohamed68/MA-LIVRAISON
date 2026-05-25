@@ -1,4 +1,4 @@
--- Schema MariaDB pour Livra Express avec Auth Firebase
+-- Schema MariaDB pour PANCHO LIVRAISON avec Auth Firebase
 
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(255) PRIMARY KEY,

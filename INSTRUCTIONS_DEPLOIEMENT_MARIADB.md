@@ -38,9 +38,9 @@ sudo mariadb -u root -p
 
 Créez la base de données et l'utilisateur pour l'application :
 ```sql
-CREATE DATABASE livra_express_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'livra_user'@'localhost' IDENTIFIED BY 'mot_de_passe_super_secret';
-GRANT ALL PRIVILEGES ON livra_express_db.* TO 'livra_user'@'localhost';
+CREATE DATABASE pancho_livraison_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'pancho_user'@'localhost' IDENTIFIED BY 'mot_de_passe_super_secret';
+GRANT ALL PRIVILEGES ON pancho_livraison_db.* TO 'pancho_user'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
 ```
@@ -51,9 +51,9 @@ EXIT;
 
 Dirigez-vous dans le répertoire d'hébergement classique :
 ```bash
-sudo mkdir -p /var/www/livra-express
-sudo chown -R $USER:$USER /var/www/livra-express
-cd /var/www/livra-express
+sudo mkdir -p /var/www/pancho-livraison
+sudo chown -R $USER:$USER /var/www/pancho-livraison
+cd /var/www/pancho-livraison
 
 git clone https://github.com/VOTRE_NOM/VOTRE_PROJET.git .
 ```
@@ -74,7 +74,7 @@ nano .env
 ### Déployer la base de données MariaDB
 Le schéma complet avec les tables `users`, `deliveries`, etc., vous attend.
 ```bash
-mariadb -u livra_user -p livra_express_db < schema-mariadb.sql.example
+mariadb -u pancho_user -p pancho_livraison_db < schema-mariadb.sql.example
 ```
 *(Saisissez le mot de passe créé à l'étape 2)*
 
@@ -119,7 +119,7 @@ pm2 startup
 On redirige les requêtes Web classiques (port 80) vers notre application (port 3005).
 
 ```bash
-sudo nano /etc/nginx/sites-available/livra-express
+sudo nano /etc/nginx/sites-available/pancho-livraison
 ```
 
 Collez :
@@ -141,7 +141,7 @@ server {
 
 On active et on relance :
 ```bash
-sudo ln -s /etc/nginx/sites-available/livra-express /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/pancho-livraison /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
 ```

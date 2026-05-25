@@ -4,7 +4,7 @@ import { DeliveryRequest } from '../types';
 import { api } from '../services/apiService';
 import { Link, useNavigate } from 'react-router-dom';
 import { Package, Clock, CheckCircle, Navigation, User, Home, Plus, ChevronRight, X, Copy, Share } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import NotificationBell from '../components/NotificationBell';
 import { cn } from '../lib/utils';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';

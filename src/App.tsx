@@ -8,11 +8,11 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import NotificationToast from './components/NotificationToast';
 import BottomNav from './components/BottomNav';
-import { LoadingScreen } from './components/LoadingScreen';
+import LoadingScreen from './components/LoadingScreen';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import TermsAgreementModal from './components/TermsAgreementModal';
 
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Lazy loaded views
 const LandingView = lazy(() => import('./views/LandingView'));

@@ -1,4 +1,4 @@
--- Schema de base de données pour Livra Express (SQLite / PostgreSQL compatible)
+-- Schema de base de données pour PANCHO LIVRAISON (SQLite / PostgreSQL compatible)
 
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(255) PRIMARY KEY,

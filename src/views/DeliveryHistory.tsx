@@ -3,7 +3,7 @@ import { api } from '../services/apiService';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest } from '../types';
 import { Package, Calendar, MapPin, CheckCircle, ChevronRight, Search, X, FileText, Trash2, ArrowUpRight, DollarSign } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 

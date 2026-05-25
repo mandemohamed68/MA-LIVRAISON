@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, LogOut, Package, ShieldCheck, MapPin, CheckCircle, Menu, X, Clock } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import NotificationBell from './NotificationBell';
 import { cn } from '../lib/utils';
 import { AppLanguage } from '../lib/translations';
@@ -166,7 +166,7 @@ export default function Navbar() {
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">
                 <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-white">PANCHO</span>
-                <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-orange-200">EXPRESS</span>
+                <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-orange-200">LIVRAISON</span>
               </div>
               <span className="text-[8px] sm:text-[9px] font-black tracking-[0.45em] text-white/50 uppercase mt-1">Plateforme Logistique</span>
             </div>

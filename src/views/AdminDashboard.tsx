@@ -9,7 +9,7 @@ import {
   Plus, Navigation, UserCircle, Percent, Database, Download, Building2, X, Trash2, Zap, Smartphone, Menu,
   CheckCircle, AlertCircle, Landmark, Info
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -19,13 +19,13 @@ import LiveMap from '../components/LiveMap';
 import { sendNotification } from '../lib/notificationService';
 
 const chartData = [
-  { name: 'Lun', express: 120, standard: 80 },
-  { name: 'Mar', express: 150, standard: 90 },
-  { name: 'Mer', express: 180, standard: 110 },
-  { name: 'Jeu', express: 190, standard: 95 },
-  { name: 'Ven', express: 210, standard: 130 },
-  { name: 'Sam', express: 250, standard: 160 },
-  { name: 'Dim', express: 160, standard: 70 },
+  { name: 'Lun', prioritaire: 120, standard: 80 },
+  { name: 'Mar', prioritaire: 150, standard: 90 },
+  { name: 'Mer', prioritaire: 180, standard: 110 },
+  { name: 'Jeu', prioritaire: 190, standard: 95 },
+  { name: 'Ven', prioritaire: 210, standard: 130 },
+  { name: 'Sam', prioritaire: 250, standard: 160 },
+  { name: 'Dim', prioritaire: 160, standard: 70 },
 ];
 
 export default function AdminDashboard() {
@@ -794,7 +794,7 @@ export default function AdminDashboard() {
                 <div className="flex gap-4 sm:gap-6">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 bg-orange-500 rounded-full" />
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">EXPRESS</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">LIVRAISON</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
@@ -820,7 +820,7 @@ export default function AdminDashboard() {
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#94a3b8' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#94a3b8' }} dx={-10} />
                     <Tooltip contentStyle={{ border: 'none', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgb(0 0 0/0.1)' }} />
-                    <Area type="monotone" dataKey="express" stroke="#f97316" strokeWidth={4} fill="url(#colorExpress)" />
+                    <Area type="monotone" dataKey="prioritaire" stroke="#f97316" strokeWidth={4} fill="url(#colorExpress)" />
                     <Area type="monotone" dataKey="standard" stroke="#3b82f6" strokeWidth={4} fill="url(#colorStandard)" />
                   </AreaChart>
                 </ResponsiveContainer>

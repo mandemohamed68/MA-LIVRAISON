@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Phone, MapPin, Truck, Save, ArrowLeft, ShieldCheck, CheckCircle, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Settings() {
   const { profile, loading, updateProfile } = useAuth();

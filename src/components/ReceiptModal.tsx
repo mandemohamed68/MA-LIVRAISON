@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Download, Printer, CheckCircle, Package, MapPin, Truck, ShieldCheck, CreditCard } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { DeliveryRequest } from '../types';
 import { cn } from '../lib/utils';
 

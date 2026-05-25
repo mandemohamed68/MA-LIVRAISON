@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.malivraison.app',
+  appId: 'com.pancho.livraison',
   appName: 'PANCHO LIVRAISON',
   webDir: 'dist',
   server: {

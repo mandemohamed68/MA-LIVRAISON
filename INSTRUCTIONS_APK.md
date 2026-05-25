@@ -1,4 +1,4 @@
-# Guide de Génération de l'APK pour LIVRA
+# Guide de Génération de l'APK pour PANCHO LIVRAISON
 
 Ce projet est configuré avec **Capacitor** pour permettre la génération d'une application Android native (APK).
 
@@ -35,6 +35,6 @@ Pour publier l'application ou l'envoyer à des clients :
 - Sélectionnez le mode **release**.
 
 ## Notes importantes
-- L'ID de l'application est `com.malivraison.app`.
+- L'ID de l'application est `com.pancho.livraison`.
 - Les permissions de géolocalisation et de caméra ont été ajoutées dans le fichier `AndroidManifest.xml`.
 - Assurez-vous d'avoir configuré les clés API Google Maps dans `AndroidManifest.xml` si vous utilisez des cartes natives (actuellement le projet utilise Leaflet qui fonctionne via le Webview).

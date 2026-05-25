@@ -1,6 +1,6 @@
-# Guide de Déploiement Complet (Débutant) - Livra Express sur Debian 12
+# Guide de Déploiement Complet (Débutant) - PANCHO LIVRAISON sur Debian 12
 
-Ce guide vous accompagne pas à pas pour installer l'application **Livra Express** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3005**.
+Ce guide vous accompagne pas à pas pour installer l'application **PANCHO LIVRAISON** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3005**.
 
 ## 1. Préparation du Serveur Debian 12
 
@@ -31,9 +31,9 @@ Vérifiez l'installation : `node -v` (doit afficher v18.x.x).
 Allez dans le dossier où vous voulez installer l'application (généralement `/var/www/`) :
 
 ```bash
-sudo mkdir -p /var/www/livra-express
-sudo chown $USER:$USER /var/www/livra-express
-cd /var/www/livra-express
+sudo mkdir -p /var/www/pancho-livraison
+sudo chown $USER:$USER /var/www/pancho-livraison
+cd /var/www/pancho-livraison
 ```
 
 Clonez votre dépôt GitHub (remplacez par votre URL) :
@@ -95,7 +95,7 @@ Pour que l'application ne s'arrête pas si vous fermez votre session SSH, utilis
 
 ```bash
 sudo npm install -g pm2
-pm2 start dist/server.cjs --name "livra-express"
+pm2 start dist/server.cjs --name "pancho-livraison"
 pm2 save
 pm2 startup
 ```
@@ -113,7 +113,7 @@ Pour accéder à votre application via `http://votre-domaine.com` (port 80) au l
 
 2. Créez la configuration :
    ```bash
-   sudo nano /etc/nginx/sites-available/livra
+   sudo nano /etc/nginx/sites-available/pancho-livraison
    ```
 
 3. Collez ce contenu :
@@ -135,7 +135,7 @@ Pour accéder à votre application via `http://votre-domaine.com` (port 80) au l
 
 4. Activez et redémarrez :
    ```bash
-   sudo ln -s /etc/nginx/sites-available/livra /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/pancho-livraison /etc/nginx/sites-enabled/
    sudo nginx -t
    sudo systemctl restart nginx
    ```

@@ -1,8 +1,8 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Truck } from 'lucide-react';
 
-export const LoadingScreen: React.FC = () => {
+export default function LoadingScreen() {
   const [message, setMessage] = React.useState("Initialisation...");
 
   React.useEffect(() => {
@@ -21,10 +21,12 @@ export const LoadingScreen: React.FC = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center p-8 overflow-hidden font-sans">
-      <div className="relative w-full max-w-xs flex flex-col items-center">
+    <div className="fixed inset-0 z-[9999] bg-slate-50 flex flex-col items-center justify-center p-8 overflow-hidden font-sans">
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+      
+      <div className="relative w-full max-w-xs flex flex-col items-center z-10">
         {/* Animated Truck Container */}
-        <div className="relative w-full h-40 flex items-center justify-center overflow-hidden border-b-2 border-slate-100 mb-8">
+        <div className="relative w-full h-40 flex items-center justify-center overflow-hidden border-b-2 border-slate-200 mb-8 bg-white/50 rounded-3xl shadow-inner">
           <motion.div
              animate={{ 
                x: [-120, 320],
@@ -47,7 +49,7 @@ export const LoadingScreen: React.FC = () => {
                     key={i}
                     animate={{ x: [400, -400] }}
                     transition={{ repeat: Infinity, duration: 3 / i, ease: "linear" }}
-                    className="w-16 h-1 bg-slate-200 rounded-full"
+                    className="w-16 h-1 bg-slate-300 rounded-full"
                   />
                 ))}
              </div>
@@ -60,7 +62,7 @@ export const LoadingScreen: React.FC = () => {
           className="text-center w-full"
         >
           <h2 className="text-slate-900 font-black italic text-4xl tracking-tighter mb-1 select-none">
-            PANCHO <span className="text-orange-600">EXPRESS</span>
+            PANCHO <span className="text-orange-600">LIVRAISON</span>
           </h2>
           <motion.p 
             key={message}
@@ -85,4 +87,4 @@ export const LoadingScreen: React.FC = () => {
       </div>
     </div>
   );
-};
+}

@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Truck, Package, MapPin, ArrowRight, UserCheck, User, ShieldCheck, Mail, Lock, Phone, ChevronRight, Globe, Zap, Camera, CheckSquare, Settings } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { UserRole } from '../types';
-import { LoadingScreen } from '../components/LoadingScreen';
+import LoadingScreen from '../components/LoadingScreen';
 import Logo from '../components/Logo';
 
 const logoImg = '/logo-pancho.png';
@@ -197,8 +197,7 @@ export default function LandingView() {
           phone,
           idCardFront,
           idCardBack,
-          status: role === 'driver' ? 'online' : 'offline',
-          termsAcceptedAt: new Date().toISOString()
+          status: role === 'driver' ? 'online' : 'offline'
         });
       } else {
         await loginWithEmail(email, password);
@@ -224,7 +223,7 @@ export default function LandingView() {
     }
   };
 
-  if (authLoading || localLoading) {
+  if (localLoading) {
     return <LoadingScreen />;
   }
 
@@ -308,7 +307,7 @@ export default function LandingView() {
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">
                 <span className="text-3xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">PANCHO</span>
-                <span className="text-3xl font-black text-orange-600 tracking-tighter italic uppercase leading-none">EXPRESS</span>
+                <span className="text-3xl font-black text-orange-600 tracking-tighter italic uppercase leading-none">LIVRAISON</span>
               </div>
               <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase mt-1">Plateforme Logistique</span>
             </div>
@@ -317,7 +316,7 @@ export default function LandingView() {
           <h1 className="text-[100px] xl:text-[120px] font-black text-slate-900 leading-[0.85] tracking-tighter uppercase italic select-none">
             VITESSE.<br />
             <span className="text-primary">SÉCURITÉ.</span><br />
-            EXPRESS.
+            PANCHO.
           </h1>
 
           <div className="mt-8">
@@ -505,7 +504,7 @@ export default function LandingView() {
                     type="text"
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    placeholder={role === 'driver' && driverType === 'company' ? 'Ex: Express Log' : 'Ex: Jean Dupont'}
+                    placeholder={role === 'driver' && driverType === 'company' ? 'Ex: Pancho Log' : 'Ex: Jean Dupont'}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>

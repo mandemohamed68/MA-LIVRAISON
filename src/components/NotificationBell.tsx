@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Info, Package, CheckCircle, Truck, Trash2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/apiService';
