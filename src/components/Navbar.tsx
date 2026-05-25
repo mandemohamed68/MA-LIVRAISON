@@ -117,7 +117,7 @@ export default function Navbar() {
             className="bg-amber-400 text-amber-950 text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center h-8"
           >
             <ShieldCheck className="w-3 h-3 mr-2" />
-            Environnement de Test Actif • PANCHO EXPRESS
+            Environnement de Test Actif • PANCHO LIVRAISON
           </motion.div>
         )}
       </AnimatePresence>
@@ -156,7 +156,7 @@ export default function Navbar() {
           isAdminView && "h-16 px-10 max-w-[1900px]"
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
               {!logoError ? (
                  <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (

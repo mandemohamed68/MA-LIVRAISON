@@ -278,7 +278,7 @@ export default function AdminDashboard() {
 
   const handleToggleMode = async () => {
     if (!appConfig) return;
-    const newMode = appConfig.mode === 'test' ? 'prod' : 'test';
+    const newMode: 'test' | 'prod' = appConfig.mode === 'test' ? 'prod' : 'test';
     setIsProcessingAction(true);
     try {
       const updated = {
@@ -1020,7 +1020,7 @@ export default function AdminDashboard() {
                             await sendNotification(
                               u.userId, 
                               "Dossier Approuvé 🎉", 
-                              "Bienvenue chez PANCHO EXPRESS ! Votre compte est activé et vos documents sont validés.", 
+                              "Bienvenue chez PANCHO LIVRAISON ! Votre compte est activé et vos documents sont validés.", 
                               'success'
                             );
                           } catch(err) {

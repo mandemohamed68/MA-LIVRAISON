@@ -410,7 +410,7 @@ export default function DeliveryTracking() {
                        </div>
                      </div>
                      <p className="text-[11px] sm:text-xs font-bold text-rose-800 leading-relaxed mt-3 px-2">
-                       Votre preuve de paiement a été rejetée par l'administration de PANCHO EXPRESS. Vous pouvez soumettre à nouveau une preuve de paiement valide en cliquant ci-dessous, ou entrer en relation avec notre support client.
+                       Votre preuve de paiement a été rejetée par l'administration de PANCHO LIVRAISON. Vous pouvez soumettre à nouveau une preuve de paiement valide en cliquant ci-dessous, ou entrer en relation avec notre support client.
                      </p>
                      <div className="flex gap-2 mt-4 px-2">
                        <button

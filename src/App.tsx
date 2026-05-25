@@ -10,6 +10,7 @@ import NotificationToast from './components/NotificationToast';
 import BottomNav from './components/BottomNav';
 import { LoadingScreen } from './components/LoadingScreen';
 import AnnouncementBanner from './components/AnnouncementBanner';
+import TermsAgreementModal from './components/TermsAgreementModal';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -37,7 +38,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
 };
 
 function AppRoutes() {
-  const { user, profile, isMasterAdmin, appConfig, isAuthReady } = useAuth();
+  const { user, profile, isMasterAdmin, appConfig, isAuthReady, updateProfile } = useAuth();
   const location = useLocation();
 
   if (!isAuthReady) {
@@ -65,10 +66,10 @@ function AppRoutes() {
         >
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Maintenance <span className="text-orange-500">en cours</span></h1>
           <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
-            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de PANCHO EXPRESS pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
+            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de PANCHO LIVRAISON pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
           </p>
           <div className="px-6 py-2 bg-white/5 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-white/5 italic">
-            Équipe Technique PANCHO EXPRESS
+            Équipe Technique PANCHO LIVRAISON
           </div>
         </motion.div>
       </div>
@@ -94,7 +95,7 @@ function AppRoutes() {
         >
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Compte <span className="text-red-500">suspendu</span></h1>
           <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
-            Votre compte a été temporairement suspendu par l'administration de PANCHO EXPRESS pour non-respect des règles ou suite à des signalements répétés. Veuillez contacter notre service clientèle pour plus d'informations.
+            Votre compte a été temporairement suspendu par l'administration de PANCHO LIVRAISON pour non-respect des règles ou suite à des signalements répétés. Veuillez contacter notre service clientèle pour plus d'informations.
           </p>
           <button 
             onClick={() => { localStorage.removeItem('auth_token'); window.location.href = '/' }} 
@@ -127,34 +128,29 @@ function AppRoutes() {
       <AnnouncementBanner />
       <Navbar />
       <NotificationToast />
+      
+      {/* Terms and Conditions Enforcement */}
+      {user && profile && !profile.termsAcceptedAt && (profile.role === 'client' || profile.role === 'driver') && (
+        <TermsAgreementModal 
+          role={profile.role} 
+          onAccept={() => updateProfile({ termsAcceptedAt: new Date().toISOString() })} 
+        />
+      )}
+
       <main className={cn(
         "flex-1 flex flex-col relative w-full",
         isAdminView && "h-full min-h-0",
         !isFullBleedView && "container mx-auto px-4 py-8 md:py-12",
-        "pb-[calc(6rem+env(safe-area-inset-bottom))] xl:pb-0" // Extra padding for BottomNav
+        "pb-[calc(6rem+env(safe-area-inset-bottom))] xl:pb-0"
       )}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className={cn("flex-1 flex flex-col", isAdminView && "min-h-0")}
-          >
-            <Suspense fallback={
-              <div className="fixed top-0 left-0 right-0 z-[100] h-1 overflow-hidden bg-indigo-100">
-                <motion.div 
-                  initial={{ x: '-100%' }}
-                  animate={{ x: '100%' }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                  className="h-full w-1/3 bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
-                />
-              </div>
-            }>
-              <Routes location={location}>
-                <Route path="/login" element={<Navigate to="/" replace />} />
-                <Route path="/" element={<LandingView />} />
+        <Suspense fallback={
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        }>
+          <Routes location={location}>
+            <Route path="/login" element={<Navigate to="/" replace />} />
+            <Route path="/" element={<LandingView />} />
               
               {/* Client Routes */}
               <Route path="/client" element={
@@ -204,20 +200,10 @@ function AppRoutes() {
                 </ProtectedRoute>
               } />
                 <Route path="/tracking/:deliveryId" element={<Navigate replace to="/client" />} />
-              </Routes>
-            </Suspense>
-          </motion.div>
-        </AnimatePresence>
+          </Routes>
+        </Suspense>
       </main>
       <BottomNav />
-      {isDev && (
-        <div className="fixed bottom-4 right-4 z-[9999] pointer-events-none select-none opacity-85">
-          <div className="px-3 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/15 rounded-full font-mono text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm backdrop-blur-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            serveur local
-          </div>
-        </div>
-      )}
     </div>
   );
 }

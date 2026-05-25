@@ -69,7 +69,7 @@ const RecenterMap = ({ from, to }: { from: any; to: any }) => {
 const MapPicker = ({
   onSelect,
 }: {
-  onSelect: (coords: { lat: number; lng: number; address?: string }) => void;
+  onSelect: (coords: { lat: number; lng: number; address: string }) => void;
 }) => {
   useMapEvents({
     async click(e) {
@@ -247,7 +247,7 @@ export default function CreateDelivery() {
             driverMinBalance: 1000,
             withdrawalMinAmount: 5000,
             maxSimultaneousDeliveries: 3
-          });
+          } as any);
         }
       } catch (e) {
         console.error("Error fetching commissions locally:", e);

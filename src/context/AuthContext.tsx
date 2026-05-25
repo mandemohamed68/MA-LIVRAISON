@@ -17,6 +17,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string, role: UserRole, extra?: Partial<UserProfile>) => Promise<void>;
+  loginWithPhone: (phoneNumber: string) => Promise<any>;
   logout: () => Promise<void>;
   updateRole: (role: UserRole) => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
@@ -32,8 +33,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   // Use localStorage to cache appConfig to avoid Hammering API on boot
   const [appConfig, setAppConfig] = useState<AppConfig | null>(() => {
-    const cached = localStorage.getItem('app_config');
-    return cached ? JSON.parse(cached) : null;
+    try {
+      const cached = localStorage.getItem('app_config');
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      console.warn("Failed to parse cached app_config", e);
+      return null;
+    }
   });
 
   const [loading, setLoading] = useState(false);
@@ -79,34 +85,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initial Load
   useEffect(() => {
     const init = async () => {
+      // Fallback timer to prevent getting stuck in LoadingScreen
+      const fallbackTimer = setTimeout(() => {
+        setIsAuthReady(true);
+      }, 5000);
+
       const token = localStorage.getItem('auth_token');
       
-      // Load config from cache first, then refresh in background
-      const [configRes, profileRes] = await Promise.allSettled([
-        api.config.get('app_config').catch(() => null),
-        token ? api.profile.get().catch(() => null) : Promise.reject('No token')
-      ]);
+      try {
+        // Load config from cache first, then refresh in background
+        const [configRes, profileRes] = await Promise.allSettled([
+          api.config.get('app_config').catch(() => null),
+          token ? api.profile.get().catch(() => null) : Promise.reject('No token')
+        ]);
 
-      if (configRes.status === 'fulfilled' && configRes.value) {
-        setAppConfig(configRes.value);
-        localStorage.setItem('app_config', JSON.stringify(configRes.value));
-      }
-
-      if (profileRes.status === 'fulfilled' && profileRes.value) {
-        setProfile(profileRes.value);
-        setUser({ 
-          userId: profileRes.value.userId, 
-          email: profileRes.value.email, 
-          role: profileRes.value.role,
-          name: profileRes.value.name
-        });
-      } else {
-        if (token) {
-          localStorage.removeItem('auth_token');
+        if (configRes.status === 'fulfilled' && configRes.value) {
+          setAppConfig(configRes.value);
+          localStorage.setItem('app_config', JSON.stringify(configRes.value));
         }
-      }
 
-      setIsAuthReady(true);
+        if (profileRes.status === 'fulfilled' && profileRes.value) {
+          setProfile(profileRes.value);
+          setUser({ 
+            userId: profileRes.value.userId, 
+            email: profileRes.value.email, 
+            role: profileRes.value.role,
+            name: profileRes.value.name
+          });
+        } else {
+          if (token) {
+            localStorage.removeItem('auth_token');
+          }
+        }
+      } catch (e) {
+        console.error("Auth initialization failed", e);
+      } finally {
+        clearTimeout(fallbackTimer);
+        setIsAuthReady(true);
+      }
     };
     init();
   }, []);
@@ -148,6 +164,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.href = '/';
   };
 
+  const loginWithPhone = async (phone: string) => {
+    console.warn("Phone login is not fully implemented in current version", phone);
+    return Promise.reject("Authentification par téléphone non implémentée.");
+  };
+
   const updateRole = async (role: UserRole) => {
     try {
       await api.profile.update({ role });
@@ -172,7 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider value={{ 
       user, profile, loading, isAuthReady, isMasterAdmin, language, setLanguage, t, 
       appConfig, refreshAppConfig,
-      login, loginWithEmail, registerWithEmail,
+      login, loginWithEmail, registerWithEmail, loginWithPhone,
       logout, updateRole, updateProfile, refreshProfile
     }}>
       {children}

@@ -298,7 +298,7 @@ export default function LandingView() {
         
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-12">
-            <div className="w-24 h-24 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1">
+            <div className="w-28 h-28 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1">
               {!logoError ? (
                  <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
@@ -341,94 +341,9 @@ export default function LandingView() {
 
       {/* Right Pane: Auth Forms */}
       <div className="flex flex-col items-center justify-center p-6 sm:p-10 bg-white lg:rounded-l-[40px] border-l border-slate-100 shadow-2xl relative z-10 w-full min-h-[100dvh] overflow-y-auto">
-        {/* Connection Server Config Button */}
-        <div className="absolute top-6 right-6 z-50">
-          <button
-            onClick={() => setShowServerConfig(true)}
-            className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center hover:bg-orange-500 hover:text-white hover:border-orange-400 transition-all text-slate-400 group relative shadow-sm"
-            title="Configuration du serveur local"
-          >
-            <Settings className="w-5 h-5 group-hover:rotate-45 transition-transform duration-300" />
-          </button>
-        </div>
-
-        {showServerConfig && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-100 shadow-2xl"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
-                  <Settings className="w-5 h-5" />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">Connexion Serveur</h3>
-                  <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Configuration de l'URL API</p>
-                </div>
-              </div>
-
-              <div className="space-y-4 mb-6 text-left">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Adresse de base de l'API (Debian local)</label>
-                  <input
-                    type="text"
-                    value={customApiUrl}
-                    onChange={(e) => setCustomApiUrl(e.target.value)}
-                    placeholder="Ex: http://192.168.1.100:3000/api"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
-                  />
-                  <span className="text-[10px] text-slate-400 block px-1 leading-normal">
-                    Actuel : <code className="bg-slate-50 font-mono text-[9px] px-1.5 py-0.5 rounded border border-slate-100">{localStorage.getItem('custom_api_base') || "http://41.78.54.60:3006/api"}</code>
-                  </span>
-                </div>
-
-                {connectionStatus === 'success' && (
-                  <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    Connexion établie avec succès ! Configuration sauvegardée.
-                  </div>
-                )}
-
-                {connectionStatus === 'error' && (
-                  <div className="bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold p-3 rounded-xl">
-                    Impossible de contacter le serveur local. Veuillez vérifier l'adresse IP et vous assurer que votre serveur local fonctionne sur cette adresse.
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={handleResetServerConfig}
-                  className="py-3 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-slate-100"
-                >
-                  Restaurer Défaut
-                </button>
-                <button
-                  type="button"
-                  disabled={connectionStatus === 'checking'}
-                  onClick={handleSaveServerConfig}
-                  className="py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-orange-500/20"
-                >
-                  {connectionStatus === 'checking' ? 'Vérification...' : 'Tester & Sauver'}
-                </button>
-              </div>
-
-              <button
-                onClick={() => { setShowServerConfig(false); setConnectionStatus('idle'); }}
-                className="w-full mt-4 text-center text-slate-400 hover:text-slate-600 text-[10px] font-black uppercase tracking-widest transition-colors"
-              >
-                Annuler
-              </button>
-            </motion.div>
-          </div>
-        )}
-
         <div className="w-full max-w-md my-auto pb-10 mt-12 lg:mt-auto">
           <div className="text-center mb-8 flex flex-col items-center">
-            <div className="w-28 h-28 sm:hidden rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1 mb-4">
+            <div className="w-32 h-32 sm:hidden rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1 mb-4">
               {!logoError ? (
                  <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
@@ -438,7 +353,7 @@ export default function LandingView() {
             <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2 italic">
               {isRegistering ? "Création de compte" : "Bienvenue"}
             </h2>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle PANCHO EXPRESS</p>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle PANCHO LIVRAISON</p>
           </div>
 
           <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100 mb-8">

@@ -3,11 +3,11 @@ if (!fs.existsSync('assets')) {
   fs.mkdirSync('assets');
 }
 
-// Use the newly generated minimalist square courier icon for the app launcher icon
-if (fs.existsSync('public/favicon.png')) {
+// Use the newly generated minimalist square logo for the app launcher icon
+if (fs.existsSync('public/logo-pancho.png')) {
+  fs.copyFileSync('public/logo-pancho.png', 'assets/icon.png');
+} else if (fs.existsSync('public/favicon.png')) {
   fs.copyFileSync('public/favicon.png', 'assets/icon.png');
-} else if (fs.existsSync('public/logo-web.png')) {
-  fs.copyFileSync('public/logo-web.png', 'assets/icon.png');
 }
 
 // Use the proper splash screen image for the splash asset

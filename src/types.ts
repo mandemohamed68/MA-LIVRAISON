@@ -57,6 +57,8 @@ export interface CommissionSettings {
   maxRatioLivreur: number; // e.g. 2.0 for 200%
   maxSimultaneousDeliveries?: number; // admin defined limit
   distancePricingRules?: DistancePricingRule[];
+  driverMinBalance?: number;
+  withdrawalMinAmount?: number;
   promoEnabled?: boolean;
   promoRules?: { maxKm: number; price: number }[];
   updatedAt: string;
@@ -113,10 +115,14 @@ export interface UserProfile {
   withdrawalMethod?: 'mobile_money' | 'cash';
   withdrawalPhone?: string;
   totalWithdrawn?: number;
+  updatedAt?: string;
+  avatar?: string;
+  photoURL?: string;
+  displayName?: string;
   createdAt: string;
 }
 
-export type DeliveryStatus = 'pending' | 'accepted' | 'picked_up' | 'delivered' | 'cancelled';
+export type DeliveryStatus = 'pending' | 'accepted' | 'ready_for_pickup' | 'picked_up' | 'delivered' | 'cancelled';
 
 export interface PackageDetails {
   size: 'small' | 'medium' | 'large';
@@ -166,7 +172,7 @@ export interface DeliveryRequest {
   cost?: number; // Accepted final cost
   status: DeliveryStatus;
   paymentMethod: 'cash' | 'mobile_money' | 'card' | 'aggregator' | 'ussd' | 'orange' | 'moov' | 'telecel' | 'coris' | 'orange_ussd' | 'moov_ussd' | 'telecel_ussd';
-  paymentStatus?: 'pending' | 'confirmed' | 'rejected' | 'pending_approval';
+  paymentStatus?: 'pending' | 'confirmed' | 'rejected' | 'pending_approval' | 'paid';
   paymentReference?: string;
   isPaid?: boolean;
   paidToDriver?: boolean;
@@ -189,6 +195,10 @@ export interface DeliveryRequest {
   sosAlert?: boolean;
   sosReason?: string;
   rejectedBy?: string[]; // IDs of drivers who declined this mission
+  bids?: DeliveryBid[];
+  lastMessageAt?: string;
+  clientPhone?: string;
+  notes?: string;
 
   createdAt: string;
   updatedAt: string;
