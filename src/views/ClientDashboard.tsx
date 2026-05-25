@@ -327,7 +327,11 @@ export default function ClientDashboard() {
                                   { id: 'livraison', status: ['delivered'], label: 'LIVRÉ' }
                                 ].map((step, i) => {
                                     const isCompleted = step.status.includes(activeDelivery.status);
-                                    const isCurrent = (i === 0 && (activeDelivery.status === 'accepted' || activeDelivery.status === 'ready_for_pickup')) || 
+                                    const isCurrent = activeDelivery.status !== 'delivered' && (
+                                                      (i === 0 && (activeDelivery.status === 'accepted' || activeDelivery.status === 'ready_for_pickup')) || 
+                                                      (i === 1 && activeDelivery.status === 'picked_up')
+                                                    );
+                                    const isCurrentOld = (i === 0 && (activeDelivery.status === 'accepted' || activeDelivery.status === 'ready_for_pickup')) || 
                                                       (i === 1 && activeDelivery.status === 'picked_up') || 
                                                       (i === 2 && activeDelivery.status === 'delivered');
                                     

@@ -7,7 +7,7 @@ import {
   ClipboardCheck, History, Store, Map as MapIcon, Globe, 
   BadgePercent, CreditCard, Wallet, LogOut, Bell, Settings, Play,
   Plus, Navigation, UserCircle, Percent, Database, Download, Building2, X, Trash2, Zap, Smartphone, Menu,
-  CheckCircle, AlertCircle, Landmark
+  CheckCircle, AlertCircle, Landmark, Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
@@ -53,6 +53,14 @@ export default function AdminDashboard() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetCode, setResetCode] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (queryTab && queryTab !== activeMenu) {
@@ -61,28 +69,46 @@ export default function AdminDashboard() {
   }, [queryTab]);
 
   useEffect(() => {
-    if (appConfig) {
-      if (!configForm || isSaving === false) {
-        setConfigForm(appConfig);
-      }
+    if (appConfig && !configForm) {
+      setConfigForm(appConfig);
     }
-  }, [appConfig, isSaving]);
+  }, [appConfig, configForm]);
+
+  useEffect(() => {
+    // Reset configForm when activeMenu tab changes, to force loading fresh appConfig on next render
+    setConfigForm(null);
+  }, [activeMenu]);
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!configForm) return;
     setIsSaving(true);
     try {
-      await api.config.update('app_config', {
+      const updatedConfig = {
         ...configForm,
         updatedAt: new Date().toISOString()
+      };
+      await api.config.update('app_config', updatedConfig);
+      
+      const ussdStatus = updatedConfig.isUssdActive !== false ? 'ACTIF (Modifications appliquées)' : 'DESACTIVÉ (Option masquée de l’interface client)';
+      const otpStatus = updatedConfig.isOtpActive !== false ? 'ACTIF' : 'DESACTIVÉ';
+      const modeStr = updatedConfig.mode === 'prod' ? 'PRODUCTION' : 'TEST';
+
+      setToast({
+        type: 'success',
+        message: `Vérification réussie : Configuration enregistrée ! Paiements USSD: ${ussdStatus}, OTP: ${otpStatus}, Mode: ${modeStr}. Synchronisé sur toute la plateforme.`
       });
-      alert('Modifications enregistrées avec succès sur le serveur local !');
+
+      setAppConfig(updatedConfig);
+      setConfigForm(updatedConfig);
       await refreshAppConfig(); // Refresh global app config
       await fetchData();
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de l\'enregistrement: ' + (err instanceof Error ? err.message : 'Une erreur inconnue est survenue'));
+      setToast({
+        type: 'error',
+        message: 'Erreur lors de l\'enregistrement : ' + (err instanceof Error ? err.message : 'Une erreur inconnue est survenue')
+      });
     } finally {
       setIsSaving(false);
     }
@@ -255,15 +281,28 @@ export default function AdminDashboard() {
     const newMode = appConfig.mode === 'test' ? 'prod' : 'test';
     setIsProcessingAction(true);
     try {
-      await api.config.update('app_config', {
+      const updated = {
         ...appConfig,
         mode: newMode,
         updatedAt: new Date().toISOString()
+      };
+      await api.config.update('app_config', updated);
+      
+      setToast({
+        type: 'success',
+        message: `Mode système basculé sur : ${newMode === 'test' ? 'TEST (Simulateur)' : 'PRODUCTION'}. Les paramètres de paiement s'adaptent instantanément.`
       });
-      alert(`Mode ${newMode === 'test' ? 'Test' : 'Production'} activé sur le serveur local !`);
+      
+      setAppConfig(updated);
+      setConfigForm(updated);
+      await refreshAppConfig();
+      fetchData();
     } catch (err) {
       console.error(err);
-      alert('Erreur lors du changement de mode.');
+      setToast({
+        type: 'error',
+        message: 'Erreur lors du basculement de mode de la plateforme.'
+      });
     } finally {
       setIsProcessingAction(false);
     }
@@ -2978,6 +3017,34 @@ export default function AdminDashboard() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* FLOATING SYSTEM TOAST */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-[300] max-w-sm w-full bg-slate-950 text-white rounded-[24px] p-6 shadow-2xl flex items-start gap-4 border border-white/10"
+          >
+            <div className={cn(
+              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg",
+              toast.type === 'success' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30" :
+              toast.type === 'error' ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30" : "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
+            )}>
+              {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : 
+               toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Notification Système</p>
+              <p className="text-xs font-bold leading-relaxed mt-1 text-slate-100">{toast.message}</p>
+            </div>
+            <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white transition-colors cursor-pointer self-start p-1 bg-transparent border-none outline-none">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

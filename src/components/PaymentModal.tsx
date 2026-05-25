@@ -161,6 +161,77 @@ export default function PaymentModal({
     return path;
   };
 
+  const cleanPhoneNumber = (phone: string) => {
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('00226')) {
+      cleaned = cleaned.slice(5);
+    } else if (cleaned.startsWith('226')) {
+      cleaned = cleaned.slice(3);
+    }
+    if (cleaned.length > 8) {
+      cleaned = cleaned.slice(-8);
+    }
+    return cleaned;
+  };
+
+  const extractSpecificError = (errorData: any, defaultMsg: string): string => {
+    if (!errorData) return defaultMsg;
+
+    // Check if errorData or specific attributes contain HTML
+    const isHtml = (str: any) => typeof str === 'string' && (str.trim().startsWith('<') || str.includes('<html') || str.includes('<h1>Oops') || str.includes('Ooops!!! 500'));
+    
+    if (isHtml(errorData)) {
+      return "Le serveur de paiement Sappay rencontre des perturbations temporaires (Erreur interne 500). Veuillez réessayer dans quelques instants.";
+    }
+
+    if (errorData.details) {
+      if (isHtml(errorData.details)) {
+        return "Le serveur de paiement de l'opérateur (Sappay) rencontre actuellement des perturbations temporaires (Erreur interne 500). Veuillez réessayer dans quelques instants.";
+      }
+      if (typeof errorData.details === 'string') {
+        try {
+          const parsedDetails = JSON.parse(errorData.details);
+          return extractSpecificError(parsedDetails, errorData.details);
+        } catch (e) {
+          if (errorData.details.trim().startsWith('{') || errorData.details.trim().startsWith('[')) {
+            // Keep going
+          } else {
+            return errorData.details;
+          }
+        }
+      } else if (typeof errorData.details === 'object') {
+        return extractSpecificError(errorData.details, defaultMsg);
+      }
+    }
+
+    if (errorData.response?.gateway_message) {
+      if (isHtml(errorData.response.gateway_message)) return "Erreur serveur partenaire (500)";
+      return errorData.response.gateway_message;
+    }
+    if (errorData.gateway_message) {
+      if (isHtml(errorData.gateway_message)) return "Erreur serveur partenaire (500)";
+      return errorData.gateway_message;
+    }
+    if (errorData.message) {
+      if (isHtml(errorData.message)) return "Le serveur de l'opérateur rencontre des perturbations (500).";
+      return errorData.message;
+    }
+    if (errorData.error_description) {
+      if (isHtml(errorData.error_description)) return "Erreur de communication opérateur (500)";
+      return errorData.error_description;
+    }
+    if (errorData.error && typeof errorData.error === 'string') {
+      if (isHtml(errorData.error)) {
+        return "Le serveur Sappay rencontre des perturbations (Erreur interne 500). Veuillez réessayer dans quelques instants.";
+      }
+      if (errorData.error !== "Sappay OTP Error" && errorData.error !== "Sappay Perform Error") {
+        return errorData.error;
+      }
+    }
+    
+    return defaultMsg;
+  };
+
   const handleSappayInit = async () => {
     setError(null);
     if (!phoneNumber) {
@@ -184,26 +255,40 @@ export default function PaymentModal({
       if (!initRes.ok) {
         let errorMsg = "Erreur de connexion à Sappay.";
         try {
-          const errorData = await initRes.json();
-          // Prioriser le message de la passerelle s'il existe
-          errorMsg = errorData.response?.gateway_message || errorData.message || errorData.error || errorMsg;
+          const textBody = await initRes.text();
+          try {
+            const errorData = JSON.parse(textBody);
+            errorMsg = extractSpecificError(errorData, errorMsg);
+          } catch (e) {
+            // Pas du JSON, probablement du HTML ou texte brut
+            if (initRes.status === 404) errorMsg = "Service de paiement indisponible (404).";
+            else if (initRes.status === 500) errorMsg = `Erreur serveur (${initRes.status}).`;
+            else errorMsg = `Erreur ${initRes.status}: ${textBody.substring(0, 100)}`;
+          }
         } catch (e) {
-          errorMsg = "Impossible d'initialiser la facture. Vérifiez vos identifiants Sappay dans les Secrets.";
+          errorMsg = "Impossible d'initialiser la facture. Vérifiez vos identifiants Sappay.";
         }
         throw new Error(errorMsg);
       }
 
-      const initData = await initRes.json();
+      let initData;
+      try {
+        const textData = await initRes.text();
+        initData = JSON.parse(textData);
+      } catch (e) {
+        throw new Error("Réponse invalide du serveur (JSON attendu).");
+      }
       setSappayInvoiceId(initData.invoice_id);
       setSappayAccessToken(initData.access_token);
 
-      // 2. Déclenchement OTP pour Moov et Coris (PUSH SMS)
-      if (selectedMethod === 'moov' || selectedMethod === 'coris') {
+      // 2. Déclenchement OTP : obligatoire pour Moov Money et Coris Money, mais pas pour Orange ou Telecel
+      const isMoovOrCoris = selectedMethod === 'moov' || selectedMethod === 'coris';
+      if (isMoovOrCoris) {
         const otpRes = await fetch(getApiUrl('/api/payment/sappay/get-otp'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            customer_msisdn: phoneNumber,
+            customer_msisdn: cleanPhoneNumber(phoneNumber),
             invoice_id: initData.invoice_id,
             payment_processor_id: processors[selectedMethod as string],
             access_token: initData.access_token
@@ -211,18 +296,31 @@ export default function PaymentModal({
         });
         
         if (!otpRes.ok) {
-           let errorMsg = "Erreur lors de l'envoi du SMS OTP.";
-           try {
-             const otpError = await otpRes.json();
-             errorMsg = otpError.message || otpError.error_description || otpError.error || errorMsg;
-           } catch (e) {
-             errorMsg = "Le réseau n'a pas pu envoyer le SMS. Réessayez.";
-           }
-           throw new Error(errorMsg);
+            let errorMsg = "Erreur lors de l'envoi de la requête OTP.";
+            try {
+              const textBody = await otpRes.text();
+              try {
+                const otpError = JSON.parse(textBody);
+                errorMsg = extractSpecificError(otpError, errorMsg);
+              } catch (e) {
+                errorMsg = `Erreur OTP ${otpRes.status}`;
+              }
+            } catch (e) {
+              errorMsg = "Le réseau n'a pas pu envoyer la requête OTP. Réessayez.";
+            }
+            throw new Error(errorMsg);
         }
 
-        const otpData = await otpRes.json();
+        let otpData;
+        try {
+          const textOtp = await otpRes.text();
+          otpData = JSON.parse(textOtp);
+        } catch (e) {
+          throw new Error("Format de réponse OTP invalide.");
+        }
         if (otpData.trans_id) setSappayTransId(otpData.trans_id);
+      } else {
+        setSappayTransId('');
       }
 
       setSappayStep('otp');
@@ -258,7 +356,7 @@ export default function PaymentModal({
           body: JSON.stringify({
             invoice_id: sappayInvoiceId,
             payment_processor_id: processors[selectedMethod as string],
-            customer_msisdn: phoneNumber,
+            customer_msisdn: cleanPhoneNumber(phoneNumber),
             otp: otpCode,
             access_token: sappayAccessToken,
             trans_id: sappayTransId
@@ -268,20 +366,43 @@ export default function PaymentModal({
         if (!performRes.ok) {
            let errorMsg = "Transaction refusée par l'opérateur.";
            try {
-             const errorData = await performRes.json();
-             // Prioriser le message de la passerelle s'il existe
-             errorMsg = errorData.response?.gateway_message || errorData.message || errorData.error_description || errorData.error || errorData.details?.message || errorMsg;
+             const textBody = await performRes.text();
+             try {
+               const errorData = JSON.parse(textBody);
+               errorMsg = extractSpecificError(errorData, errorMsg);
+             } catch (e) {
+               errorMsg = `Erreur validation ${performRes.status}`;
+             }
            } catch (e) {
              errorMsg = "Erreur réseau lors de la validation. Vérifiez votre solde.";
            }
            throw new Error(errorMsg);
         }
 
-        const performData = await performRes.json();
+        let performData;
+        try {
+          const textPerform = await performRes.text();
+          performData = JSON.parse(textPerform);
+        } catch (e) {
+          throw new Error("Format de réponse de validation invalide.");
+        }
         
         // On considère SUCCESS comme validé sans admin, PENDING avec admin
-        const isSuccess = performData.status === 'SUCCESS' || performData.invoice_details?.status === 'SUCCESS';
-        const isPending = performData.status === 'PENDING' || performData.invoice_details?.status === 'PENDING';
+        const isSuccess = 
+          performData.success === true ||
+          performData.status === 'SUCCESS' ||
+          performData.status === 200 ||
+          performData.response?.status === 'SUCCESS' ||
+          performData.invoice_details?.status === 'SUCCESS' ||
+          performData.invoice_detail?.status === 'SUCCESS' ||
+          performData.response?.invoice_detail?.status === 'SUCCESS';
+
+        const isPending = 
+          performData.status === 'PENDING' ||
+          performData.response?.status === 'PENDING' ||
+          performData.invoice_details?.status === 'PENDING' ||
+          performData.invoice_detail?.status === 'PENDING' ||
+          performData.response?.invoice_detail?.status === 'PENDING';
 
         if (isSuccess || isPending) {
           onConfirm(selectedMethod as any, sappayInvoiceId, isSuccess);
@@ -303,7 +424,16 @@ export default function PaymentModal({
       } catch (err: any) {
         // Log as warning since it's typically a balance/code issue, not a technical bug
         console.warn("Transaction warning:", err.message);
-        setError(err.message);
+        
+        // Si l'erreur est "OTP does not exist", on propose de le renouveler
+        if (err.message?.toLowerCase().includes("otp does not exist")) {
+          setError("Session OTP expirée ou inexistante. Renouvellement automatique...");
+          setTimeout(() => {
+            handleSappayInit();
+          }, 2000);
+        } else {
+          setError(err.message);
+        }
       } finally {
         setIsProcessing(false);
       }
@@ -451,89 +581,93 @@ export default function PaymentModal({
 
                     <div className="space-y-6">
                       {/* Groupe OTP */}
-                      <div className="space-y-3">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
-                          <Smartphone className="w-3 h-3" /> Mobile Money (Direct OTP) :
-                        </p>
-                        <div className="grid grid-cols-2 gap-3">
-                          {methods.filter(m => m.type === 'otp').map((method) => (
-                            <button
-                              key={method.id}
-                              onClick={() => setSelectedMethod(method.id as any)}
-                              className={cn(
-                                "p-4 rounded-[28px] border-2 flex items-center gap-3 transition-all relative group h-20",
-                                selectedMethod === method.id 
-                                  ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
-                                  : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
-                              )}
-                            >
-                              <PaymentIcon 
-                                id={method.id}
-                                icon={method.icon}
-                                isCustomImg={method.isCustomImg}
-                                bg={method.bg}
-                                color={method.color}
-                                selected={selectedMethod === method.id}
-                              />
-                              <div className="text-left flex-1 min-w-0">
-                                <p className={cn(
-                                  "text-[10px] font-black tracking-tight uppercase italic truncate",
-                                  selectedMethod === method.id ? "text-white" : "text-slate-900"
-                                )}>{method.name}</p>
-                              </div>
-                              {selectedMethod === method.id && (
-                                <div className="absolute bottom-3 right-3">
-                                  <CheckCircle className="w-4 h-4 text-orange-500" />
+                      {methods.filter(m => m.type === 'otp').length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
+                            <Smartphone className="w-3 h-3" /> Mobile Money (Direct OTP) :
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {methods.filter(m => m.type === 'otp').map((method) => (
+                              <button
+                                key={method.id}
+                                onClick={() => setSelectedMethod(method.id as any)}
+                                className={cn(
+                                  "p-4 rounded-[28px] border-2 flex items-center gap-3 transition-all relative group h-20",
+                                  selectedMethod === method.id 
+                                    ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
+                                    : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
+                                )}
+                              >
+                                <PaymentIcon 
+                                  id={method.id}
+                                  icon={method.icon}
+                                  isCustomImg={method.isCustomImg}
+                                  bg={method.bg}
+                                  color={method.color}
+                                  selected={selectedMethod === method.id}
+                                />
+                                <div className="text-left flex-1 min-w-0">
+                                  <p className={cn(
+                                    "text-[10px] font-black tracking-tight uppercase italic truncate",
+                                    selectedMethod === method.id ? "text-white" : "text-slate-900"
+                                  )}>{method.name}</p>
                                 </div>
-                              )}
-                            </button>
-                          ))}
+                                {selectedMethod === method.id && (
+                                  <div className="absolute bottom-3 right-3">
+                                    <CheckCircle className="w-4 h-4 text-orange-500" />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Groupe USSD */}
-                      <div className="space-y-3 pb-6">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
-                          <Clock className="w-3 h-3" /> Mobile Money (Syntaxe USSD) :
-                        </p>
-                        <div className="grid grid-cols-1 gap-3">
-                          {methods.filter(m => m.type === 'ussd').map((method) => (
-                            <button
-                              key={method.id}
-                              onClick={() => setSelectedMethod(method.id as any)}
-                              className={cn(
-                                "p-5 rounded-[28px] border-2 flex items-center gap-4 transition-all relative group",
-                                selectedMethod === method.id 
-                                  ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
-                                  : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
-                              )}
-                            >
-                              <PaymentIcon 
-                                id={method.id}
-                                icon={method.icon}
-                                bg={method.bg}
-                                color={method.color}
-                                selected={selectedMethod === method.id}
-                              />
-                              <div className="text-left flex-1 min-w-0">
-                                <p className={cn(
-                                  "text-[10px] font-black tracking-tight uppercase italic truncate",
-                                  selectedMethod === method.id ? "text-white" : "text-slate-900"
-                                )}>{method.name}</p>
-                                <p className={cn(
-                                  "text-[9px] font-bold uppercase tracking-widest leading-none mt-1",
-                                  selectedMethod === method.id ? "text-slate-400" : "text-slate-400"
-                                )}>Génération manuelle de code</p>
-                              </div>
-                              {selectedMethod === method.id && (
-                                <div className="absolute right-6">
-                                  <CheckCircle className="w-5 h-5 text-orange-500" />
+                      {methods.filter(m => m.type === 'ussd').length > 0 && (
+                        <div className="space-y-3 pb-6">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 italic flex items-center gap-2">
+                            <Clock className="w-3 h-3" /> Mobile Money (Syntaxe USSD) :
+                          </p>
+                          <div className="grid grid-cols-1 gap-3">
+                            {methods.filter(m => m.type === 'ussd').map((method) => (
+                              <button
+                                key={method.id}
+                                onClick={() => setSelectedMethod(method.id as any)}
+                                className={cn(
+                                  "p-5 rounded-[28px] border-2 flex items-center gap-4 transition-all relative group",
+                                  selectedMethod === method.id 
+                                    ? "bg-slate-950 border-slate-950 shadow-xl shadow-slate-950/20" 
+                                    : "border-slate-50 bg-white hover:border-slate-100 shadow-sm"
+                                )}
+                              >
+                                <PaymentIcon 
+                                  id={method.id}
+                                  icon={method.icon}
+                                  bg={method.bg}
+                                  color={method.color}
+                                  selected={selectedMethod === method.id}
+                                />
+                                <div className="text-left flex-1 min-w-0">
+                                  <p className={cn(
+                                    "text-[10px] font-black tracking-tight uppercase italic truncate",
+                                    selectedMethod === method.id ? "text-white" : "text-slate-900"
+                                  )}>{method.name}</p>
+                                  <p className={cn(
+                                    "text-[9px] font-bold uppercase tracking-widest leading-none mt-1",
+                                    selectedMethod === method.id ? "text-slate-400" : "text-slate-400"
+                                  )}>Génération manuelle de code</p>
                                 </div>
-                              )}
-                            </button>
-                          ))}
+                                {selectedMethod === method.id && (
+                                  <div className="absolute right-6">
+                                    <CheckCircle className="w-5 h-5 text-orange-500" />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Groupe Autre (Cash, Card) */}
                       {methods.filter(m => m.type === 'cash' || m.type === 'card').length > 0 && (
@@ -604,7 +738,7 @@ export default function PaymentModal({
                         {selectedMethod === 'ussd' ? "Syntaxe Marchand" : selectedMethod === 'aggregator' ? "Portail PANCHO Pay" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
                       </h3>
                       
-                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'moov' ? (
+                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'moov' || selectedMethod === 'telecel' || selectedMethod === 'coris' ? (
                         <div className="bg-white border-2 border-orange-100 rounded-2xl p-6 mt-4 shadow-inner">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Composez sur votre mobile :</p>
                           <div className="flex flex-col items-center gap-4">
@@ -659,7 +793,7 @@ export default function PaymentModal({
                           </p>
                         </div>
                       ) : (
-                        !isDemo && (
+                        methods.find(m => m.id === selectedMethod)?.type !== 'otp' && !isDemo && (
                           <div>
                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">
                               ID de Transaction / Référence SMS

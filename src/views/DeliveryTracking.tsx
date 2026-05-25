@@ -490,7 +490,11 @@ export default function DeliveryTracking() {
                            { id: 'livraison', status: ['delivered'], label: 'LIVRÉ' }
                          ].map((step, i) => {
                              const isCompleted = step.status.includes(delivery.status);
-                             const isCurrent = (i === 0 && (delivery.status === 'accepted' || delivery.status === 'pending' || delivery.status === 'ready_for_pickup')) || 
+                             const isCurrent = delivery.status !== 'delivered' && (
+                                               (i === 0 && (delivery.status === 'accepted' || delivery.status === 'pending' || delivery.status === 'ready_for_pickup')) || 
+                                               (i === 1 && delivery.status === 'picked_up')
+                                             );
+                             const isCurrentOld = (i === 0 && (delivery.status === 'accepted' || delivery.status === 'pending' || delivery.status === 'ready_for_pickup')) || 
                                                (i === 1 && delivery.status === 'picked_up') || 
                                                (i === 2 && delivery.status === 'delivered');
                              

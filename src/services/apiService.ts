@@ -41,9 +41,12 @@ async function request(endpoint: string, method = 'GET', body?: any, retryCount 
     try {
       err = JSON.parse(text);
     } catch (e) {
-      err = { error: `Unknown error (Status ${response.status})` };
+      err = null;
     }
-    throw new Error(err.details || err.error || `Request failed with status ${response.status}`);
+    if (response.status === 403) {
+      throw new Error(err?.details || err?.error || "Vous n’avez pas les droits pour accéder à cette ressource.");
+    }
+    throw new Error((err && (err.details || err.error)) || `Request failed with status ${response.status}`);
   }
 
   const contentType = response.headers.get("content-type");
@@ -98,25 +101,25 @@ export const api = {
     status: () => request('/drivers/status'),
   },
   config: {
-    get: (key: string) => request(`/config/${key}`),
-    update: (key: string, data: any) => request(`/config/${key}`, 'POST', data),
+    get: (key: string) => request(`/system-preferences/${key}`),
+    update: (key: string, data: any) => request(`/system-preferences/${key}`, 'POST', data),
   },
   health: () => request('/health'),
   admin: {
     users: {
-      list: () => request('/adm-core/users'),
-      create: (data: any) => request('/adm-core/users', 'POST', data),
-      update: (userId: string, data: any) => request(`/adm-core/users/${userId}`, 'PATCH', data),
-      delete: (userId: string) => request(`/adm-core/users/${userId}`, 'DELETE'),
-      updateRole: (userId: string, role: string) => request(`/adm-core/users/${userId}/role`, 'PATCH', { role }),
+      list: () => request('/platform-billing/users'),
+      create: (data: any) => request('/platform-billing/users', 'POST', data),
+      update: (userId: string, data: any) => request(`/platform-billing/users/${userId}`, 'PATCH', data),
+      delete: (userId: string) => request(`/platform-billing/users/${userId}`, 'DELETE'),
+      updateRole: (userId: string, role: string) => request(`/platform-billing/users/${userId}/role`, 'PATCH', { role }),
     },
     withdrawals: {
-      list: () => request('/adm-core/withdrawals'),
-      validate: (id: string) => request(`/adm-core/withdrawals/${id}/valider`, 'POST'),
+      list: () => request('/platform-billing/withdrawals'),
+      validate: (id: string) => request(`/platform-billing/withdrawals/${id}/valider`, 'POST'),
     },
-    reset: () => request('/adm-core/reset', 'POST'),
-    seed: () => request('/adm-core/seed', 'POST'),
-    querySql: (sql: string) => request('/adm-core/query', 'POST', { sql }),
+    reset: () => request('/platform-billing/reset', 'POST'),
+    seed: () => request('/platform-billing/seed', 'POST'),
+    querySql: (sql: string) => request('/platform-billing/query', 'POST', { sql }),
   },
   withdrawals: {
     create: (data: any) => request('/withdrawals', 'POST', data),
