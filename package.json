@@ -6,13 +6,12 @@
   "main": "dist/server.cjs",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs",
     "build:android": "npm run build && npx cap sync android",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
-    "restore-assets": "node restore_images.cjs"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@capacitor/core": "^8.3.1",

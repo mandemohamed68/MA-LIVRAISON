@@ -156,7 +156,7 @@ async function startServer() {
       }
       res.json(user);
     } catch (err) {
-      res.status(500).json({ error: "Failed to fetch user" });
+      res.status(500).json({ error: "Échec de la récupération de l'utilisateur." });
     }
   });
 
@@ -251,7 +251,7 @@ async function startServer() {
         .run(id, userId, title, message, type || 'info', link || null);
       res.json({ id });
     } catch (err) {
-      res.status(500).json({ error: "Failed to create notification" });
+      res.status(500).json({ error: "Échec de la création de la notification." });
     }
   });
 
@@ -377,7 +377,7 @@ async function startServer() {
       res.json({ status: "ok" });
     } catch (err: any) {
       console.error("Delete failed:", err);
-      res.status(500).json({ error: "Delete failed", details: err?.message });
+      res.status(500).json({ error: "Échec de la suppression.", details: err?.message });
     }
   });
 
@@ -395,7 +395,7 @@ async function startServer() {
       
       res.json({ id });
     } catch (err) {
-      res.status(500).json({ error: "Message failed" });
+      res.status(500).json({ error: "Échec de l'envoi du message." });
     }
   });
 
@@ -417,7 +417,7 @@ async function startServer() {
       const busy = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'driver' AND status = 'busy' AND accountStatus = 'active'").get() as any;
       res.json({ available: available.count, busy: busy.count });
     } catch (err) {
-      res.status(500).json({ error: "Failed to fetch driver status" });
+      res.status(500).json({ error: "Échec de la récupération du statut des livreurs." });
     }
   });
 
@@ -437,7 +437,7 @@ async function startServer() {
     }
     const { sql } = req.body;
     if (!sql) {
-      return res.status(400).json({ error: "SQL query is required" });
+      return res.status(400).json({ error: "La requête SQL est requise." });
     }
     try {
       const stmt = db.prepare(sql);

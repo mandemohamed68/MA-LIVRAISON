@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({ 
         registerType: 'autoUpdate',
-        includeAssets: ['logo-pancho.png', 'favicon.png', 'apple.png', 'logo.png', 'android.png'],
+        includeAssets: ['logo-pancho.png', 'favicon.png', 'splash.png'],
         manifest: false // We are using an external manifest in public/manifest.json
       })
     ],
