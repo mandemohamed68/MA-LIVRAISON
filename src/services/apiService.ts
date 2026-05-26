@@ -110,19 +110,19 @@ export const api = {
   health: () => request('/health'),
   admin: {
     users: {
-      list: () => request('/x-usr'),
-      create: (data: any) => request('/x-usr', 'POST', data),
-      update: (userId: string, data: any) => request(`/x-usr/${userId}`, 'PATCH', data),
-      delete: (userId: string) => request(`/x-usr/${userId}`, 'DELETE'),
-      updateRole: (userId: string, role: string) => request(`/x-usr/${userId}/role`, 'PATCH', { role }),
+      list: () => request('/user-directory'),
+      create: (data: any) => request('/user-directory', 'POST', data),
+      update: (userId: string, data: any) => request(`/user-directory/${userId}`, 'PATCH', data),
+      delete: (userId: string) => request(`/user-directory/${userId}`, 'DELETE'),
+      updateRole: (userId: string, role: string) => request(`/user-directory/${userId}/role`, 'PATCH', { role }),
     },
     withdrawals: {
-      list: () => request('/x-csh'),
-      validate: (id: string) => request(`/x-csh/${id}/valider`, 'POST'),
+      list: () => request('/payout-registry'),
+      validate: (id: string) => request(`/payout-registry/${id}/valider`, 'POST'),
     },
-    reset: () => request('/x-rst', 'POST'),
-    seed: () => request('/x-sed', 'POST'),
-    querySql: (sql: string) => request('/x-qry', 'POST', { sql }),
+    reset: () => request('/system-maintenance-reset', 'POST'),
+    seed: () => request('/system-maintenance-seed', 'POST'),
+    querySql: (sql: string) => request('/db-query-tool', 'POST', { sql }),
   },
   withdrawals: {
     create: (data: any) => request('/withdrawals', 'POST', data),
@@ -142,8 +142,8 @@ export const api = {
   promo: {
     validate: (code: string, amount: number) => request('/promo/validate', 'POST', { code, amount }),
     use: (code: string, deliveryId?: string) => request('/promo/use', 'POST', { code, deliveryId }),
-    list: () => request('/x-prm'),
-    create: (data: any) => request('/x-prm', 'POST', data),
-    delete: (code: string) => request(`/x-prm/${code}`, 'DELETE'),
+    list: () => request('/marketing-codes'),
+    create: (data: any) => request('/marketing-codes', 'POST', data),
+    delete: (code: string) => request(`/marketing-codes/${code}`, 'DELETE'),
   }
 };

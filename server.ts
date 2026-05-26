@@ -67,6 +67,15 @@ async function startServer() {
 
   app.post("/api/auth/register", async (req, res) => {
     const { name, email, password, role } = req.body;
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Veuillez remplir tous les champs obligatoires (Nom, Email, Mot de passe)." });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Le mot de passe doit contenir au moins 6 caractères." });
+    }
+
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const userId = uuidv4();
@@ -102,9 +111,9 @@ async function startServer() {
       res.json({ token, user: fullUser });
     } catch (error: any) {
       if (error.message.includes("UNIQUE")) {
-        return res.status(400).json({ error: "Email already exists" });
+        return res.status(400).json({ error: "Cette adresse email est déjà utilisée." });
       }
-      res.status(500).json({ error: "Registration failed" });
+      res.status(500).json({ error: "Erreur lors de l'inscription. Veuillez réessayer." });
     }
   });
 
@@ -113,7 +122,7 @@ async function startServer() {
     try {
       const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as any;
       if (!user || !(await bcrypt.compare(password, user.password))) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "Email ou mot de passe incorrect." });
       }
       if (user.accountStatus === 'suspended') {
         return res.status(403).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
@@ -122,14 +131,14 @@ async function startServer() {
       const token = jwt.sign({ userId: user.userId, email: user.email, role: user.role }, JWT_SECRET);
       res.json({ token, user });
     } catch (error) {
-      res.status(500).json({ error: "Login failed" });
+      res.status(500).json({ error: "Erreur de connexion serveur." });
     }
   });
 
   // --- USER ENDPOINTS ---
   app.get("/api/profile", authenticate, (req: any, res) => {
     const user = db.prepare("SELECT * FROM users WHERE userId = ?").get(req.user.userId) as any;
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé." });
     delete user.password;
     if (user.currentLocation) user.currentLocation = JSON.parse(user.currentLocation);
     res.json(user);
@@ -139,7 +148,7 @@ async function startServer() {
     try {
       const user = db.prepare("SELECT * FROM users WHERE userId = ?").get(req.params.id) as any;
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "Utilisateur non trouvé." });
       }
       delete user.password;
       if (user.currentLocation) {
@@ -422,9 +431,9 @@ async function startServer() {
     res.json(db.prepare("SELECT * FROM sectors WHERE isActive = 1").all());
   });
 
-  app.post("/api/x-qry", authenticate, (req: any, res) => {
+  app.post("/api/db-query-tool", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Accès refusé." });
     }
     const { sql } = req.body;
     if (!sql) {
@@ -720,9 +729,9 @@ async function startServer() {
   });
 
   // --- ADMIN ENDPOINTS (Mapped to obscure names to bypass firewall blocks) ---
-  app.get("/api/x-usr", authenticate, (req: any, res) => {
+  app.get("/api/user-directory", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/x-usr, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/user-directory, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const users = db.prepare("SELECT * FROM users").all() as any[];
@@ -739,9 +748,9 @@ async function startServer() {
     res.json(users);
   });
 
-  app.patch("/api/x-usr/:userId", authenticate, (req: any, res) => {
+  app.patch("/api/user-directory/:userId", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH /api/x-usr/${req.params.userId}, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH /api/user-directory/${req.params.userId}, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { userId } = req.params;
@@ -766,9 +775,9 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/x-usr/:userId/role", authenticate, (req: any, res) => {
+  app.patch("/api/user-directory/:userId/role", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH role /api/x-usr/${req.params.userId}/role, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH role /api/user-directory/${req.params.userId}/role, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { userId } = req.params;
@@ -781,9 +790,9 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/x-usr/:userId", authenticate, (req: any, res) => {
+  app.delete("/api/user-directory/:userId", authenticate, (req: any, res) => {
     if (req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to DELETE user /api/x-usr/${req.params.userId}, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to DELETE user /api/user-directory/${req.params.userId}, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Superadmin role is required (your role is '${req.user.role}').` });
     }
     const { userId } = req.params;
@@ -795,9 +804,9 @@ async function startServer() {
     }
   });
 
-  app.post("/api/x-usr", authenticate, async (req: any, res) => {
+  app.post("/api/user-directory", authenticate, async (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to POST /api/x-usr, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to POST /api/user-directory, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { name, email, password, role, ...rest } = req.body;
@@ -816,7 +825,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/x-rst", authenticate, (req: any, res) => {
+  app.post("/api/system-maintenance-reset", authenticate, (req: any, res) => {
     if (req.user.role !== 'superadmin') {
       return res.status(403).json({ error: "Superadmin only" });
     }
@@ -835,7 +844,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/x-sed", authenticate, (req: any, res) => {
+  app.post("/api/system-maintenance-seed", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ error: "Admin only" });
     }
@@ -1282,7 +1291,7 @@ async function startServer() {
   });
 
   // Admin promo routes under standard protection (mapped to offres-fidelite to bypass firewall blocks)
-  app.get("/api/x-prm", authenticate, (req: any, res) => {
+  app.get("/api/marketing-codes", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ error: "Accès refusé." });
     }
@@ -1294,7 +1303,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/x-prm", authenticate, (req: any, res) => {
+  app.post("/api/marketing-codes", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ error: "Accès refusé." });
     }
@@ -1323,7 +1332,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/x-prm/:code", authenticate, (req: any, res) => {
+  app.delete("/api/marketing-codes/:code", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ error: "Accès refusé." });
     }
@@ -1390,7 +1399,7 @@ async function startServer() {
       res.json({ status: "ok", id });
     } catch (err: any) {
       console.error(err);
-      res.status(500).json({ error: "Withdrawal request failed" });
+      res.status(500).json({ error: "Échec de la demande de retrait." });
     }
   });
 
@@ -1399,7 +1408,7 @@ async function startServer() {
       const list = db.prepare("SELECT * FROM withdrawals WHERE driverId = ? ORDER BY createdAt DESC").all(req.user.userId);
       res.json(list);
     } catch (err) {
-      res.status(500).json({ error: "Failed to fetch driver withdrawals" });
+      res.status(500).json({ error: "Échec de la récupération des retraits." });
     }
   });
 
@@ -1409,36 +1418,36 @@ async function startServer() {
       res.json(list);
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: "Failed to fetch driver gains history" });
+      res.status(500).json({ error: "Échec de la récupération de l'historique des gains." });
     }
   });
 
-  app.get("/api/x-csh", authenticate, (req: any, res) => {
+  app.get("/api/payout-registry", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-       return res.status(403).json({ error: "Access denied" });
+       return res.status(403).json({ error: "Accès refusé." });
     }
     try {
       const withdrawals = db.prepare("SELECT * FROM withdrawals ORDER BY createdAt DESC").all();
       res.json(withdrawals);
     } catch (err) {
-      res.status(500).json({ error: "Failed to fetch withdrawals" });
+      res.status(500).json({ error: "Échec de la récupération des retraits." });
     }
   });
 
-  app.post("/api/x-csh/:id/valider", authenticate, (req: any, res) => {
+  app.post("/api/payout-registry/:id/valider", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-       return res.status(403).json({ error: "Access denied" });
+       return res.status(403).json({ error: "Accès refusé." });
     }
     const { id } = req.params;
     try {
       const withdrawal = db.prepare("SELECT * FROM withdrawals WHERE id = ?").get(id) as any;
-      if (!withdrawal) return res.status(404).json({ error: "Withdrawal not found" });
-      if (withdrawal.status === 'valide') return res.status(400).json({ error: "Already validated" });
+      if (!withdrawal) return res.status(404).json({ error: "Retrait non trouvé." });
+      if (withdrawal.status === 'valide') return res.status(400).json({ error: "Déjà validé." });
 
       const driver = db.prepare("SELECT * FROM users WHERE userId = ?").get(withdrawal.driverId) as any;
-      if (!driver) return res.status(404).json({ error: "Driver not found" });
+      if (!driver) return res.status(404).json({ error: "Livreur non trouvé." });
 
-      // Calculate earnings from online deliveries
+      // ... (rest of the logic remains unchanged for now, just focused on error messages)
       const configRows = db.prepare("SELECT * FROM config").all() as any[];
       const commissionsRow = configRows.find(c => c.key === 'commissions');
       const commissionSettings = commissionsRow ? JSON.parse(commissionsRow.value) : { driverSharePercent: 85 };
@@ -1449,7 +1458,7 @@ async function startServer() {
       const earnings = totalEarnings - (driver.totalWithdrawn || 0);
 
       const newBalance = earnings - withdrawal.amount;
-      if (newBalance < 0) return res.status(400).json({ error: "Insufficient balance" });
+      if (newBalance < 0) return res.status(400).json({ error: "Solde insuffisant." });
 
       db.transaction(() => {
         // Update user

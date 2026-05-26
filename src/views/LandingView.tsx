@@ -205,6 +205,13 @@ export default function LandingView() {
     } catch (err: any) {
       setLocalLoading(false);
       const msg = err.message || '';
+      
+      // If the message is already in French (from our server), use it directly
+      if (/[éèàêîôû]/.test(msg) || msg.includes('déjà') || msg.includes('connexion')) {
+        setError(msg);
+        return;
+      }
+
       if (msg.includes('Not allowed') || err.code === 'auth/operation-not-allowed') {
         setError("L'authentification par email/mot de passe n'est pas activée.");
       } else if (msg.includes('Invalid credentials') || err.code === 'auth/invalid-credential') {
