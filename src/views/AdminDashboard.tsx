@@ -577,7 +577,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-6">
                       <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-slate-100 relative overflow-hidden">
                         {logo ? (
-                          <img src={logo} alt={d.paymentMethod || ''} className="w-full h-full object-cover" />
+                          <img src={logo} alt={d.paymentMethod || ''} className="w-full h-full object-contain" />
                         ) : (
                           <Wallet className="w-7 h-7" />
                         )}
@@ -742,7 +742,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-3 sm:gap-5">
                         <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-orange-600 shadow-sm border border-slate-100 shrink-0 overflow-hidden">
                           {getPaymentLogo(delivery.paymentMethod) ? (
-                            <img src={getPaymentLogo(delivery.paymentMethod)!} alt={delivery.paymentMethod || ''} className="w-full h-full object-contain p-1" />
+                            <img src={getPaymentLogo(delivery.paymentMethod)!} alt={delivery.paymentMethod || ''} className="w-full h-full object-contain" />
                           ) : (
                             <Package className="w-5 h-5" />
                           )}
@@ -2005,7 +2005,7 @@ export default function AdminDashboard() {
                         <div className="flex items-center justify-between mb-4">
                            <div className="flex items-center gap-4">
                               <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center overflow-hidden border border-orange-100">
-                                 <img src="/payments/orange.png" alt="Orange" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=O' }}/>
+                                 <img src="/payments/orange.png" alt="Orange" className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=O' }}/>
                               </div>
                               <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Orange Money</label>
                            </div>
@@ -2036,7 +2036,7 @@ export default function AdminDashboard() {
                         <div className="flex items-center justify-between mb-4">
                            <div className="flex items-center gap-4">
                               <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
-                                 <img src="/payments/moov.png" alt="Moov" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=M' }}/>
+                                 <img src="/payments/moov.png" alt="Moov" className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=M' }}/>
                               </div>
                               <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Moov Money</label>
                            </div>
@@ -2067,7 +2067,7 @@ export default function AdminDashboard() {
                         <div className="flex items-center justify-between mb-4">
                            <div className="flex items-center gap-4">
                               <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center overflow-hidden border border-indigo-100">
-                                 <img src="/payments/telecel.png" alt="Telecel" className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=T' }}/>
+                                 <img src="/payments/telecel-1.png" alt="Telecel" className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '//placehold.co/40?text=T' }}/>
                               </div>
                               <label className="text-[11px] font-black uppercase tracking-[0.1em] text-slate-800">Telecel Money</label>
                            </div>
@@ -2078,7 +2078,7 @@ export default function AdminDashboard() {
                                  onChange={(e) => setConfigForm({ ...configForm!, isTelecelActive: e.target.checked })}
                                  className="sr-only peer"
                                />
-                               <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-slate-400 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                               <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-indigo-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
                            </label>
                         </div>
                         <div className="mt-4">

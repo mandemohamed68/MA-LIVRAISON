@@ -25,10 +25,14 @@ const MoovMoneyIcon = ({ className }: { className?: string }) => (
 );
 
 const TelecelMoneyIcon = ({ className }: { className?: string }) => (
-   <div className={cn("w-full h-full bg-white border-2 border-[#1B4086] rounded-xl flex flex-col items-center justify-center gap-0.5", className)}>
-      <div className="flex w-full items-center justify-center gap-1">
-        <div className="w-2.5 h-2.5 bg-[#1B4086] rounded-tl-sm rounded-br-sm"></div>
-        <div className="w-2.5 h-2.5 bg-[#00A1E0] rounded-tl-sm rounded-br-sm"></div>
+   <div className={cn("w-full h-full bg-white border-2 border-indigo-600 rounded-xl flex items-center justify-center relative overflow-hidden", className)}>
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-cyan-500/10"></div>
+      <div className="relative w-7 h-7 flex items-center justify-center">
+        {/* Simple Stylized 'T' or Swirl approximation in SVG */}
+        <svg viewBox="0 0 24 24" className="w-full h-full text-indigo-700" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v10h-2zM7 9h10v2H7z" opacity=".2"/>
+          <path d="M12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm4 11h-3v3h-2v-3H8v-2h3v-3h2v3h3v2z" className="text-cyan-500" />
+        </svg>
       </div>
    </div>
 );
@@ -43,7 +47,7 @@ const CorisMoneyIcon = ({ className }: { className?: string }) => (
 
 const PaymentIcon = ({ id, icon: Icon, isCustomImg, className, bg, color, selected }: any) => {
   const [hasImage, setHasImage] = useState(false);
-  const logoUrl = `/payments/${id.replace('_ussd', '')}.png`;
+  const logoUrl = id.includes('telecel') ? `/payments/telecel-1.png` : `/payments/${id.replace('_ussd', '')}.png`;
 
   useEffect(() => {
     const img = new Image();
@@ -53,12 +57,12 @@ const PaymentIcon = ({ id, icon: Icon, isCustomImg, className, bg, color, select
 
   return (
     <div className={cn(
-      "w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 overflow-hidden",
+      "w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden",
       selected ? "bg-white/10" : bg,
       isCustomImg || hasImage ? "p-0" : ""
     )}>
       {hasImage ? (
-        <img src={logoUrl} alt={id} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        <img src={logoUrl} alt={id} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
       ) : (
         <Icon className={cn(
           isCustomImg ? "w-full h-full rounded-xl" : "w-6 h-6", 
@@ -494,13 +498,13 @@ export default function PaymentModal({
     // OTP Group
     { id: 'orange', name: 'Orange Money', type: 'otp', icon: OrangeMoneyIcon, color: 'text-orange-600', bg: 'bg-white', border: 'border-orange-100', isCustomImg: true },
     { id: 'moov', name: 'Moov Money', type: 'otp', icon: MoovMoneyIcon, color: 'text-blue-600', bg: 'bg-white', border: 'border-blue-100', isCustomImg: true },
-    { id: 'telecel', name: 'Telecel Cash', type: 'otp', icon: TelecelMoneyIcon, color: 'text-red-600', bg: 'bg-white', border: 'border-red-100', isCustomImg: true },
+    { id: 'telecel', name: 'Telecel Money', type: 'otp', icon: TelecelMoneyIcon, color: 'text-red-600', bg: 'bg-white', border: 'border-red-100', isCustomImg: true },
     { id: 'coris', name: 'Coris Money', type: 'otp', icon: CorisMoneyIcon, color: 'text-blue-600', bg: 'bg-white', border: 'border-blue-100', isCustomImg: true },
     
     // USSD Group
     { id: 'orange_ussd', name: 'Orange (USSD)', type: 'ussd', icon: Smartphone, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
     { id: 'moov_ussd', name: 'Moov (USSD)', type: 'ussd', icon: Smartphone, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
-    { id: 'telecel_ussd', name: 'Telecel (USSD)', type: 'ussd', icon: Smartphone, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
+    { id: 'telecel_ussd', name: 'Telecel Money (USSD)', type: 'ussd', icon: TelecelMoneyIcon, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', isCustomImg: true },
     
     // Other Group
     { id: 'cash', name: 'Paiement Cash', type: 'cash', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
@@ -742,14 +746,15 @@ export default function PaymentModal({
                         />
                       </div>
                       <h3 className="text-xl font-black text-slate-900 tracking-tight italic uppercase">
-                        {selectedMethod === 'ussd' ? "Syntaxe Marchand" : selectedMethod === 'aggregator' ? "Portail PANCHO Pay" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
+                        {selectedMethod === 'ussd' ? "Syntaxe Marchand" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
                       </h3>
                       
-                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'moov' || selectedMethod === 'telecel' || selectedMethod === 'coris' ? (
+                      {/* Only show USSD for pure USSD type or Orange/Telecel where push is not automatic */}
+                      {(methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'telecel') ? (
                         <div className="bg-white border-2 border-orange-100 rounded-2xl p-6 mt-4 shadow-inner">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Composez sur votre mobile :</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center text-left">Composez sur votre mobile :</p>
                           <div className="flex flex-col items-center gap-4">
-                            <p className="text-xl font-black text-indigo-900 tracking-widest select-all">
+                            <p className="text-xl font-black text-indigo-900 tracking-widest select-all text-center">
                               {getUssdString()}
                             </p>
                             <div className="flex gap-2">
@@ -770,22 +775,23 @@ export default function PaymentModal({
                               </button>
                             </div>
                           </div>
-                          <p className="text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest text-center">
-                            {selectedMethod?.includes('orange') ? "Syntaxe Orange Money" : selectedMethod?.includes('moov') ? "Syntaxe Moov Money" : selectedMethod?.includes('telecel') ? "Syntaxe Telecel Cash" : "Syntaxe Marchand"}
-                          </p>
                         </div>
                       ) : (
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 leading-relaxed max-w-xs mx-auto">
-                          Entrez le numéro payeur pour l'envoi de la requête de paiement.
-                        </p>
+                        <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
+                          <p className="text-[11px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed text-center">
+                            {sappayStep === 'init' 
+                              ? `Vérifiez votre numéro. Une demande de code de validation sera envoyée par SMS.` 
+                              : `Le code de validation vous a été envoyé par SMS par votre opérateur Money.`}
+                          </p>
+                        </div>
                       )}
                     </div>
 
                     <div className="space-y-6">
-                      {/* CHAMP NOM DU COMPTE OU ID TRANSACTION */}
-                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' ? (
+                      {/* USSD SPECIFIC INPUTS */}
+                      {methods.find(m => m.id === selectedMethod)?.type === 'ussd' && (
                         <div>
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic text-left">
                             Nom du compte (Facultatif)
                           </label>
                           <input 
@@ -795,46 +801,41 @@ export default function PaymentModal({
                             onChange={e => setAccountName(e.target.value)}
                             className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
                           />
-                          <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2">
-                            Nom utilisé pour effectuer le paiement.
-                          </p>
                         </div>
-                      ) : (
-                        methods.find(m => m.id === selectedMethod)?.type !== 'otp' && !isDemo && (
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">
-                              ID de Transaction / Référence SMS
-                            </label>
-                            <input 
-                              type="text" 
-                              placeholder="Entrez l'identifiant reçu par SMS" 
-                              value={transactionId}
-                              onChange={e => setTransactionId(e.target.value)}
-                              className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
-                            />
-                            <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2">
-                              Vérifiez le SMS de confirmation de votre opérateur.
-                            </p>
-                          </div>
-                        )
                       )}
 
-                      {/* ÉCRAN INITIAL : SAISIE NUMÉRO OU GÉNÉRATION SMS */}
+                      {/* OTHER MANUAL INPUTS (IF NOT OTP) */}
+                      {methods.find(m => m.id === selectedMethod)?.type !== 'otp' && methods.find(m => m.id === selectedMethod)?.type !== 'ussd' && !isDemo && (
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic text-left">
+                            ID de Transaction / Référence SMS
+                          </label>
+                          <input 
+                            type="text" 
+                            placeholder="Entrez l'identifiant reçu par SMS" 
+                            value={transactionId}
+                            onChange={e => setTransactionId(e.target.value)}
+                            className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* STEP 2 SAPPAY INIT: PHONE INPUT */}
                       {methods.find(m => m.id === selectedMethod)?.type === 'otp' && sappayStep === 'init' && (
                         <div className="space-y-6">
                            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex items-start gap-4">
                             <Smartphone className="w-6 h-6 text-blue-500 shrink-0" />
-                            <div className="space-y-1">
+                            <div className="space-y-1 text-left">
                               <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none">Étape 1 : Initialisation</p>
                               <p className="text-[10px] font-bold text-blue-600/80 uppercase tracking-widest leading-relaxed">
                                 {selectedMethod === 'moov' || selectedMethod === 'coris' 
-                                  ? "Générez un code de validation qui vous sera envoyé par SMS par votre opérateur." 
-                                  : "Vérifiez votre numéro pour passer à l'étape suivante (Génération du code OTP via USSD)."}
+                                  ? "Entrez votre numéro. Nous allons envoyer une demande de code à votre opérateur." 
+                                  : "Vérifiez votre numéro et générez votre code OTP via la syntaxe USSD."}
                               </p>
                             </div>
                           </div>
                           <div>
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">Votre numéro de téléphone</label>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic text-left">Numéro de téléphone</label>
                             <input 
                               type="tel" 
                               placeholder="Ex: 70000000" 
@@ -842,12 +843,11 @@ export default function PaymentModal({
                               onChange={e => setPhoneNumber(e.target.value)}
                               className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-xl text-slate-900 focus:outline-none focus:border-orange-500 transition-all outline-none"
                             />
-                            <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2">Format: 8 chiffres (Ex: 65800508)</p>
                           </div>
                         </div>
                       )}
 
-                      {/* ÉCRAN OTP SAPPAY : SAISIE CODE VERSION DYNAMIQUE */}
+                      {/* STEP 2 SAPPAY OTP: OTP INPUT */}
                       {methods.find(m => m.id === selectedMethod)?.type === 'otp' && sappayStep === 'otp' && (
                         <div className="space-y-6">
                           <div className={cn(
@@ -855,23 +855,20 @@ export default function PaymentModal({
                             selectedMethod === 'moov' || selectedMethod === 'coris' ? "bg-emerald-50 border border-emerald-100" : "bg-orange-50 border border-orange-100"
                           )}>
                             {selectedMethod === 'moov' || selectedMethod === 'coris' ? <Smartphone className="w-6 h-6 text-emerald-500 shrink-0" /> : <Clock className="w-6 h-6 text-orange-500 shrink-0" />}
-                            <div className="space-y-1">
+                            <div className="space-y-1 text-left">
                               <p className={cn(
                                 "text-[10px] font-black uppercase tracking-widest leading-none",
                                 selectedMethod === 'moov' || selectedMethod === 'coris' ? "text-emerald-700" : "text-orange-700"
                               )}>
-                                {selectedMethod === 'orange' ? "Orange Money (Burkina)" : 
-                                 selectedMethod === 'telecel' ? "Telecel Cash (Burkina)" :
-                                 selectedMethod === 'moov' ? "Moov Money (Burkina)" : "Coris Money"} : Étape 2
+                                {methods.find(m => m.id === selectedMethod)?.name} : Validation
                               </p>
                               <p className={cn(
                                 "text-[10px] font-bold uppercase tracking-widest leading-relaxed",
                                 selectedMethod === 'moov' || selectedMethod === 'coris' ? "text-emerald-600/80" : "text-orange-600/80"
                               )}>
-                                {selectedMethod === 'orange' ? `Composez *144*4*6*${amount}# sur votre téléphone pour recevoir votre CODE SECRET OTP.` : 
-                                 selectedMethod === 'telecel' ? `Composez *808*4*4*${amount}# sur votre téléphone pour recevoir votre CODE OTP.` : 
-                                 selectedMethod === 'moov' ? "Saisissez le code de validation reçu par SMS et l'ID de transaction." :
-                                 "Saisissez le code de validation à 5 chiffres reçu par SMS."}
+                                {selectedMethod === 'moov' || selectedMethod === 'coris' 
+                                  ? "Saisissez le code de validation reçu par SMS de votre opérateur."
+                                  : "Saisissez le code de validation OTP généré via USSD."}
                               </p>
                             </div>
                           </div>
@@ -879,28 +876,28 @@ export default function PaymentModal({
                           <div className="space-y-4">
                             <div>
                               <div className="flex justify-between items-end mb-3 pl-2">
-                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block italic leading-none">Code de Validation OTP</label>
-                                {selectedMethod === 'orange' || selectedMethod === 'telecel' ? (
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block italic leading-none">Code OTP reçu</label>
+                                {(selectedMethod === 'orange' || selectedMethod === 'telecel') && (
                                   <button 
                                     onClick={() => window.open(`tel:${getUssdString().replace('#', '%23')}`, '_system')}
                                     className="text-[9px] font-black text-orange-500 uppercase tracking-widest flex items-center gap-1 hover:underline"
                                   >
                                     <Smartphone className="w-3 h-3" /> Relancer la syntaxe
                                   </button>
-                                ) : null}
+                                )}
                               </div>
                               <input 
                                 type="text" 
                                 placeholder={selectedMethod === 'coris' ? "00000" : "000000"} 
                                 value={otpCode}
                                 onChange={e => setOtpCode(e.target.value)}
-                                className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-3xl text-center text-slate-900 tracking-[0.25em] focus:outline-none focus:border-orange-500 transition-all outline-none"
+                                className="w-full px-8 py-6 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-black text-3xl text-center text-slate-900 tracking-[0.1em] focus:outline-none focus:border-orange-500 transition-all outline-none"
                               />
                             </div>
 
-                            {selectedMethod === 'moov' && (
+                            {selectedMethod === 'moov' && !sappayTransId && (
                               <div className="pt-2">
-                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic">Référence de Transaction SMS (ID)</label>
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic text-left">Référence de Transaction SMS (TransId)</label>
                                 <input 
                                   type="text" 
                                   placeholder="Ex: OMROR24..." 
@@ -908,7 +905,7 @@ export default function PaymentModal({
                                   onChange={e => setSappayTransId(e.target.value)}
                                   className="w-full px-8 py-4 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-extrabold text-center text-slate-600 focus:outline-none focus:border-orange-500 transition-all outline-none"
                                 />
-                                <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2 text-center italic">Cet identifiant se trouve dans le SMS récapitulatif de Moov.</p>
+                                <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2 text-center italic text-left">Cet identifiant se trouve dans le SMS récapitulatif de Moov.</p>
                               </div>
                             )}
                           </div>
