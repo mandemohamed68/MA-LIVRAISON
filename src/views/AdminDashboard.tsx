@@ -12,7 +12,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { cn } from '../lib/utils';
-import { LoadingScreen } from '../components/LoadingScreen';
+import LoadingScreen from '../components/LoadingScreen';
 import { useAuth, ADMIN_EMAILS } from '../context/AuthContext';
 import { useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LiveMap from '../components/LiveMap';

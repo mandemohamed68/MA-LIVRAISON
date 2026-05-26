@@ -8,7 +8,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import { api } from '../services/apiService';
 import L from 'leaflet';
 import { cn, calculateDistance } from '../lib/utils';
-import { LoadingScreen } from '../components/LoadingScreen';
+import LoadingScreen from '../components/LoadingScreen';
 import AnnouncementBanner from '../components/AnnouncementBanner';
 import NotificationBell from '../components/NotificationBell';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';

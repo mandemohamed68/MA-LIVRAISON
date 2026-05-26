@@ -136,9 +136,21 @@ function AppRoutes() {
 
   return (
     <div className={cn(
-      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20 bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px]",
+      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20 bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#fef3c7]/30 relative overflow-hidden",
       isAdminView && "lg:h-screen lg:overflow-hidden"
     )}>
+      {/* Dynamic Premium Grid Background & Glow Effects (Option 1) */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a0a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a0a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none z-0"></div>
+      
+      {/* Ambient Radial Light Spheres */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-orange-500/10 to-transparent rounded-full blur-[130px] pointer-events-none z-0" />
+      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-gradient-to-tr from-amber-500/10 to-transparent rounded-full blur-[130px] pointer-events-none z-0" />
+      
+      {/* Giant faint overlay watermark of PANCHO Logo (Option 1) */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] opacity-[0.035] pointer-events-none z-0 select-none">
+        <img src="/logo-pancho.png" alt="" className="w-full h-full object-contain filter select-none" />
+      </div>
+
       <AnnouncementBanner />
       <Navbar />
       <NotificationToast />
