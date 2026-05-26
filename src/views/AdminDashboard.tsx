@@ -78,6 +78,13 @@ export default function AdminDashboard() {
     tarifKm: 150
   });
 
+  const [confirmingDeleteRuleId, setConfirmingDeleteRuleId] = useState<string | null>(null);
+  const [confirmingDeletePromoCode, setConfirmingDeletePromoCode] = useState<string | null>(null);
+  const [confirmingDeleteUserId, setConfirmingDeleteUserId] = useState<string | null>(null);
+  const [newSectorName, setNewSectorName] = useState("");
+  const [confirmingDeleteSectorId, setConfirmingDeleteSectorId] = useState<string | null>(null);
+  const [isCreatingSector, setIsCreatingSector] = useState(false);
+
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 4000);
@@ -487,10 +494,10 @@ export default function AdminDashboard() {
 
   const handleDeleteUser = async (userId: string) => {
     if (!isSuperAdmin) return;
-    if (!window.confirm('Supprimer définitivement cet utilisateur ?')) return;
     try {
       await api.admin.users.delete(userId);
       alert('Utilisateur supprimé.');
+      setConfirmingDeleteUserId(null);
       setSelectedUser(null);
     } catch (err) {
       console.error(err);
@@ -1522,27 +1529,88 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
-      case 'Secteurs d\'Ouaga':
+      case 'Secteurs d\'Ouaga': {
+        const handleCreateSector = async (e: React.FormEvent) => {
+          e.preventDefault();
+          if (!newSectorName.trim()) {
+            setToast({ type: 'error', message: 'Veuillez saisir un nom de secteur.' });
+            return;
+          }
+          setIsCreatingSector(true);
+          try {
+            await api.sectors.create({ name: newSectorName.trim(), city: 'Ouagadougou', isActive: true });
+            setNewSectorName("");
+            setToast({ type: 'success', message: 'Secteur ajouté avec succès !' });
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: 'Erreur: ' + (err.message || err) });
+          } finally {
+            setIsCreatingSector(false);
+          }
+        };
+
+        const handleDeleteSector = async (id: string) => {
+          try {
+            await api.sectors.delete(id);
+            setToast({ type: 'success', message: 'Secteur supprimé avec succès !' });
+            setConfirmingDeleteSectorId(null);
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: 'Erreur de suppression: ' + (err.message || err) });
+          }
+        };
+
+        const handleInitializeDefaults = async () => {
+          setIsCreatingSector(true);
+          setToast({ type: 'info', message: 'Initialisation en cours...' });
+          try {
+            for (const n of ['Paspanga', 'Koulouba', 'Gounghin', 'Dassasgho', 'Ouaga 2000']) {
+              await api.sectors.create({ name: n, city: 'Ouagadougou', isActive: true });
+            }
+            setToast({ type: 'success', message: 'Secteurs initialisés avec succès !' });
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: "Erreur d'initialisation: " + (err.message || err) });
+          } finally {
+            setIsCreatingSector(false);
+          }
+        };
+
         return (
-          <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm">
              <div className="flex justify-between items-center mb-8">
                <div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Maillage Territorial</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Maillage Territorial</h3>
                   <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Secteurs actifs et couverture réseau</p>
                </div>
-               <button 
-                 onClick={async () => {
-                   const name = prompt('Nom du nouveau secteur (ex: Wayalghin) :');
-                   if (name) {
-                     await api.sectors.create({ name, city: 'Ouagadougou', isActive: true });
-                    fetchData();
-                   }
-                 }}
-                 className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl"
-               >
-                 <Plus className="w-4 h-4" /> Ajouter Secteur
-               </button>
+               <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+                  <Globe className="w-6 h-6" />
+               </div>
              </div>
+
+             <form onSubmit={handleCreateSector} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 items-end">
+               <div className="md:col-span-3">
+                 <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Nom du nouveau secteur (ex: Wayalghin, Dassasgho...)</label>
+                 <input 
+                   type="text" 
+                   placeholder="Créer un nouveau secteur..."
+                   value={newSectorName}
+                   onChange={e => setNewSectorName(e.target.value)}
+                   className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                   disabled={isCreatingSector}
+                 />
+               </div>
+               <div>
+                 <button 
+                   type="submit"
+                   disabled={isCreatingSector}
+                   className="w-full py-3 bg-slate-900 hover:bg-orange-600 text-white font-extrabold uppercase tracking-widest text-[9px] rounded-xl transition-all"
+                 >
+                   {isCreatingSector ? "Ajout..." : "Enregistrer"}
+                 </button>
+               </div>
+             </form>
+
              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {sectors.map(s => {
                   const activityCount = deliveries.filter(d => 
@@ -1554,15 +1622,33 @@ export default function AdminDashboard() {
                       key={s.id} 
                       className="p-6 bg-slate-50 rounded-3xl border border-slate-100 group transition-all relative"
                     >
-                      <button 
-                        onClick={async () => {
-                          await api.sectors.delete(s.id);
-                          fetchData();
-                        }}
-                        className="absolute top-4 right-4 w-6 h-6 bg-white rounded-lg flex items-center justify-center text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity border border-rose-100 hover:bg-rose-50"
-                      >
-                         <Trash2 className="w-3 h-3" />
-                      </button>
+                      <div className="absolute top-4 right-4">
+                        {confirmingDeleteSectorId === s.id ? (
+                          <div className="flex items-center gap-1 bg-white border border-red-100 p-1.5 rounded-xl shadow-md z-10">
+                            <span className="text-[8px] font-black uppercase text-red-500 mr-1 animate-pulse">Sûr?</span>
+                            <button
+                              onClick={() => handleDeleteSector(s.id)}
+                              className="bg-red-600 hover:bg-red-700 text-white font-extrabold px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider transition-all"
+                            >
+                              Oui
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDeleteSectorId(null)}
+                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold px-2 py-1 rounded-lg text-[8px] uppercase tracking-wider transition-all"
+                            >
+                              Non
+                            </button>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => setConfirmingDeleteSectorId(s.id)}
+                            className="w-8 h-8 bg-white text-rose-500 rounded-xl flex items-center justify-center border border-rose-100 hover:bg-rose-50 transition-all shadow-sm"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                       <Globe className="w-6 h-6 text-slate-300 mb-4 group-hover:text-orange-500 transition-all" />
                       <div className="flex justify-between items-end">
                         <span className="font-black text-slate-900 text-sm uppercase">{s.name}</span>
@@ -1579,17 +1665,15 @@ export default function AdminDashboard() {
                 {sectors.length === 0 && (
                   <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
                     <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest leading-none">Aucun secteur défini dans la base de données</p>
-                    <p className="text-slate-300 font-bold text-[9px] uppercase tracking-widest mt-2 leading-none cursor-pointer" onClick={async () => {
-                       for (const n of ['Paspanga', 'Koulouba', 'Gounghin', 'Dassasgho', 'Ouaga 2000']) {
-                         await api.sectors.create({ name: n, city: 'Ouagadougou', isActive: true });
-                       }
-                       fetchData();
-                    }}>Initialiser avec les secteurs par défaut</p>
+                    <p className="text-slate-300 font-bold text-[9px] uppercase tracking-widest mt-2 leading-none cursor-pointer hover:text-indigo-600" onClick={handleInitializeDefaults}>
+                      Initialiser avec les secteurs par défaut
+                    </p>
                   </div>
                 )}
              </div>
           </div>
         );
+      }
       case 'Annonces Globales':
         return (
           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100">
@@ -2429,13 +2513,13 @@ export default function AdminDashboard() {
         };
 
         const handleDeletePricingRule = async (ruleId: string) => {
-          if (!confirm("Voulez-vous supprimer cette règle ?")) return;
           const newRules = pricingRules.filter((r: any) => r.id !== ruleId);
           setIsSaving(true);
           try {
             await api.config.update('pricing_rules', newRules);
             setPricingRules(newRules);
             setToast({ type: 'success', message: 'Règle supprimée avec succès !' });
+            setConfirmingDeleteRuleId(null);
             await fetchData();
           } catch (err: any) {
             setToast({ type: 'error', message: 'Erreur de suppression: ' + err.message });
@@ -2534,13 +2618,31 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleDeletePricingRule(rule.id)}
-                        className="p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {confirmingDeleteRuleId === rule.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black uppercase text-red-500 mr-1 animate-pulse">Sûr(e) ?</span>
+                          <button
+                            onClick={() => handleDeletePricingRule(rule.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white font-extrabold px-3 py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all"
+                          >
+                            Oui
+                          </button>
+                          <button
+                            onClick={() => setConfirmingDeleteRuleId(null)}
+                            className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold px-3 py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all"
+                          >
+                            Non
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmingDeleteRuleId(rule.id)}
+                          className="p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
@@ -2578,10 +2680,10 @@ export default function AdminDashboard() {
         };
 
         const handleDeletePromo = async (codeToDelete: string) => {
-          if (!confirm(`Voulez-vous vraiment supprimer le code promo ${codeToDelete} ?`)) return;
           try {
             await api.promo.delete(codeToDelete);
             setToast({ type: 'success', message: 'Code promo supprimé avec succès !' });
+            setConfirmingDeletePromoCode(null);
             await fetchData();
           } catch (err: any) {
             setToast({ type: 'error', message: err.message });
@@ -2695,12 +2797,30 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleDeletePromo(promo.code)}
-                        className="p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100"
-                      >
-                        <Trash2 className="w-4 h-4 shrink-0" />
-                      </button>
+                      {confirmingDeletePromoCode === promo.code ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black uppercase text-red-500 mr-1 animate-pulse">Sûr(e) ?</span>
+                          <button
+                            onClick={() => handleDeletePromo(promo.code)}
+                            className="bg-red-600 hover:bg-red-700 text-white font-extrabold px-3 py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all"
+                          >
+                            Oui
+                          </button>
+                          <button
+                            onClick={() => setConfirmingDeletePromoCode(null)}
+                            className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold px-3 py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all"
+                          >
+                            Non
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmingDeletePromoCode(promo.code)}
+                          className="p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100"
+                        >
+                          <Trash2 className="w-4 h-4 shrink-0" />
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
@@ -3335,15 +3455,31 @@ export default function AdminDashboard() {
 
               <div className="mt-8 flex flex-col gap-3">
                 {isSuperAdmin && profile?.userId !== selectedUser.userId && (
-                  <button 
-                    onClick={async () => {
-                      await handleDeleteUser(selectedUser.userId);
-                      setSelectedUser(null);
-                    }}
-                    className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-rose-600 hover:text-white transition-all"
-                  >
-                    Supprimer Compte
-                  </button>
+                  confirmingDeleteUserId === selectedUser.userId ? (
+                    <div className="flex gap-2 w-full animate-bounce">
+                      <button
+                        onClick={async () => {
+                          await handleDeleteUser(selectedUser.userId);
+                        }}
+                        className="flex-1 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all"
+                      >
+                        Sûr ! Supprimer
+                      </button>
+                      <button
+                        onClick={() => setConfirmingDeleteUserId(null)}
+                        className="flex-1 py-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setConfirmingDeleteUserId(selectedUser.userId)}
+                      className="w-full py-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] hover:bg-rose-600 hover:text-white transition-all"
+                    >
+                      Supprimer Compte
+                    </button>
+                  )
                 )}
                 <button 
                   onClick={() => setSelectedUser(null)}
