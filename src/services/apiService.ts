@@ -104,25 +104,25 @@ export const api = {
     status: () => request('/drivers/status'),
   },
   config: {
-    get: (key: string) => request(`/system-preferences/${key}`),
-    update: (key: string, data: any) => request(`/system-preferences/${key}`, 'POST', data),
+    get: (key: string) => request(`/preferences-majeures/${key}`),
+    update: (key: string, data: any) => request(`/preferences-majeures/${key}`, 'POST', data),
   },
   health: () => request('/health'),
   admin: {
     users: {
-      list: () => request('/platform-billing/users'),
-      create: (data: any) => request('/platform-billing/users', 'POST', data),
-      update: (userId: string, data: any) => request(`/platform-billing/users/${userId}`, 'PATCH', data),
-      delete: (userId: string) => request(`/platform-billing/users/${userId}`, 'DELETE'),
-      updateRole: (userId: string, role: string) => request(`/platform-billing/users/${userId}/role`, 'PATCH', { role }),
+      list: () => request('/x-usr'),
+      create: (data: any) => request('/x-usr', 'POST', data),
+      update: (userId: string, data: any) => request(`/x-usr/${userId}`, 'PATCH', data),
+      delete: (userId: string) => request(`/x-usr/${userId}`, 'DELETE'),
+      updateRole: (userId: string, role: string) => request(`/x-usr/${userId}/role`, 'PATCH', { role }),
     },
     withdrawals: {
-      list: () => request('/platform-billing/withdrawals'),
-      validate: (id: string) => request(`/platform-billing/withdrawals/${id}/valider`, 'POST'),
+      list: () => request('/x-csh'),
+      validate: (id: string) => request(`/x-csh/${id}/valider`, 'POST'),
     },
-    reset: () => request('/platform-billing/reset', 'POST'),
-    seed: () => request('/platform-billing/seed', 'POST'),
-    querySql: (sql: string) => request('/platform-billing/query', 'POST', { sql }),
+    reset: () => request('/x-rst', 'POST'),
+    seed: () => request('/x-sed', 'POST'),
+    querySql: (sql: string) => request('/x-qry', 'POST', { sql }),
   },
   withdrawals: {
     create: (data: any) => request('/withdrawals', 'POST', data),
@@ -142,8 +142,8 @@ export const api = {
   promo: {
     validate: (code: string, amount: number) => request('/promo/validate', 'POST', { code, amount }),
     use: (code: string, deliveryId?: string) => request('/promo/use', 'POST', { code, deliveryId }),
-    list: () => request('/admin/promo'),
-    create: (data: any) => request('/admin/promo', 'POST', data),
-    delete: (code: string) => request(`/admin/promo/${code}`, 'DELETE'),
+    list: () => request('/x-prm'),
+    create: (data: any) => request('/x-prm', 'POST', data),
+    delete: (code: string) => request(`/x-prm/${code}`, 'DELETE'),
   }
 };

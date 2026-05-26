@@ -255,7 +255,7 @@ export default function AdminDashboard() {
     }
 
     fetchData();
-    const interval = setInterval(fetchData, 4000); // Poll every 4s
+    const interval = setInterval(fetchData, 10000); // Poll every 10s
 
     return () => clearInterval(interval);
   }, [profile, isMasterAdmin]);
@@ -2744,11 +2744,10 @@ export default function AdminDashboard() {
                     className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs placeholder:text-slate-300"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Date Fin (Optionnelle)</label>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Date & Heure Fin (Optionnelle)</label>
                   <input 
-                    type="date" 
+                    type="datetime-local" 
                     value={promoForm.end_date}
                     onChange={e => setPromoForm({ ...promoForm, end_date: e.target.value })}
                     className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
@@ -2773,8 +2772,8 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </form>
-
-              <div className="space-y-3">
+ 
+               <div className="space-y-3">
                 {promoCodes.length === 0 ? (
                   <p className="text-center py-10 text-slate-400 text-xs font-bold uppercase tracking-widest">Aucun code promo actif actuellement.</p>
                 ) : (
@@ -2792,7 +2791,9 @@ export default function AdminDashboard() {
                             Utilisé {promo.uses_count} fois {promo.max_uses ? `sur un maximum de ${promo.max_uses}` : '(Sans limite globale)'} • Max par utilisateur : {promo.max_per_user}
                           </p>
                           {promo.end_date && (
-                            <p className="text-[9px] font-bold text-red-500 mt-1 uppercase">Expire le : {new Date(promo.end_date).toLocaleDateString()}</p>
+                            <p className="text-[9px] font-bold text-red-500 mt-1 uppercase">
+                              Expire le : {new Date(promo.end_date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' à')}
+                            </p>
                           )}
                         </div>
                       </div>
