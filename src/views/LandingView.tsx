@@ -307,7 +307,7 @@ export default function LandingView() {
             <div className="flex flex-col">
               <div className="flex items-baseline space-x-0.5">
                 <span className="text-3xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">PANCHO</span>
-                <span className="text-3xl font-black text-orange-600 tracking-tighter italic uppercase leading-none">LIVRAISON</span>
+                <span className="text-3xl font-black text-orange-600 tracking-tighter italic uppercase leading-none">EXPRESS</span>
               </div>
               <span className="text-[10px] font-black tracking-[0.4em] text-slate-400 uppercase mt-1">Plateforme Logistique</span>
             </div>
@@ -352,7 +352,7 @@ export default function LandingView() {
             <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2 italic">
               {isRegistering ? "Création de compte" : "Bienvenue"}
             </h2>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle PANCHO LIVRAISON</p>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plateforme de Livraison Professionnelle PANCHO EXPRESS</p>
           </div>
 
           <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100 mb-8">

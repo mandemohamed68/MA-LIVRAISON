@@ -42,7 +42,7 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Acceptation requise</h2>
-            <p className="text-sm text-slate-500 font-medium italic">Pancho Livraison - Plateforme Professionnelle</p>
+            <p className="text-sm text-slate-500 font-medium italic">Pancho Express - Plateforme Professionnelle</p>
           </div>
           <div className="flex gap-1.5">
             {[1, 2, 3].map((i) => (
@@ -72,7 +72,7 @@ export default function TermsAgreementModal({ role, onAccept }: TermsAgreementMo
                 <div className="w-20 h-20 bg-orange-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
                   <ShieldCheck className="w-10 h-10 text-orange-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-4">Bienvenue sur PANCHO LIVRAISON</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mb-4">Bienvenue sur PANCHO EXPRESS</h3>
                 <p className="text-slate-600 leading-relaxed max-w-sm mx-auto mb-8">
                   Pour garantir une expérience sécurisée et professionnelle à tous nos utilisateurs, veuillez consulter et accepter nos conditions d'utilisation.
                 </p>

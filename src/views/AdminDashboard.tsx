@@ -1020,7 +1020,7 @@ export default function AdminDashboard() {
                             await sendNotification(
                               u.userId, 
                               "Dossier Approuvé 🎉", 
-                              "Bienvenue chez PANCHO LIVRAISON ! Votre compte est activé et vos documents sont validés.", 
+                              "Bienvenue chez PANCHO EXPRESS ! Votre compte est activé et vos documents sont validés.", 
                               'success'
                             );
                           } catch(err) {

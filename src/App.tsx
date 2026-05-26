@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { cn } from './lib/utils';
@@ -14,15 +14,15 @@ import TermsAgreementModal from './components/TermsAgreementModal';
 
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Lazy loaded views
-const LandingView = lazy(() => import('./views/LandingView'));
-const ClientDashboard = lazy(() => import('./views/ClientDashboard'));
-const CreateDelivery = lazy(() => import('./views/CreateDelivery'));
-const DriverDashboard = lazy(() => import('./views/DriverDashboard'));
-const AdminDashboard = lazy(() => import('./views/AdminDashboard'));
-const DeliveryTracking = lazy(() => import('./views/DeliveryTracking'));
-const DeliveryHistory = lazy(() => import('./views/DeliveryHistory'));
-const Settings = lazy(() => import('./views/Settings'));
+// Eagerly loaded views for immediate page navigation and smoothness on Web & Mobile (No chunck delay)
+import LandingView from './views/LandingView';
+import ClientDashboard from './views/ClientDashboard';
+import CreateDelivery from './views/CreateDelivery';
+import DriverDashboard from './views/DriverDashboard';
+import AdminDashboard from './views/AdminDashboard';
+import DeliveryTracking from './views/DeliveryTracking';
+import DeliveryHistory from './views/DeliveryHistory';
+import Settings from './views/Settings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
   const { user, profile, isMasterAdmin } = useAuth();
@@ -35,6 +35,20 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
   }
 
   return <>{children}</>;
+};
+
+const PageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      transition={{ duration: 0.28, ease: "easeInOut" }}
+      className="flex-1 flex flex-col relative w-full h-full"
+    >
+      {children}
+    </motion.div>
+  );
 };
 
 function AppRoutes() {
@@ -66,10 +80,10 @@ function AppRoutes() {
         >
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Maintenance <span className="text-orange-500">en cours</span></h1>
           <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
-            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de PANCHO LIVRAISON pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
+            {appConfig.maintenanceMessage || "Nous effectuons actuellement une mise à jour cruciale de PANCHO EXPRESS pour améliorer votre expérience. Nous serons de retour dans quelques instants."}
           </p>
           <div className="px-6 py-2 bg-white/5 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-white/5 italic">
-            Équipe Technique PANCHO LIVRAISON
+            Équipe Technique PANCHO EXPRESS
           </div>
         </motion.div>
       </div>
@@ -95,7 +109,7 @@ function AppRoutes() {
         >
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 italic">Compte <span className="text-red-500">suspendu</span></h1>
           <p className="text-slate-400 font-bold text-sm max-w-sm leading-relaxed mb-8">
-            Votre compte a été temporairement suspendu par l'administration de PANCHO LIVRAISON pour non-respect des règles ou suite à des signalements répétés. Veuillez contacter notre service clientèle pour plus d'informations.
+            Votre compte a été temporairement suspendu par l'administration de PANCHO EXPRESS pour non-respect des règles ou suite à des signalements répétés. Veuillez contacter notre service clientèle pour plus d'informations.
           </p>
           <button 
             onClick={() => { localStorage.removeItem('auth_token'); window.location.href = '/' }} 
@@ -148,59 +162,61 @@ function AppRoutes() {
             <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         }>
-          <Routes location={location}>
-            <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="/" element={<LandingView />} />
-              
-              {/* Client Routes */}
-              <Route path="/client" element={
-                <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
-                  <ClientDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/client/new" element={
-                <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
-                  <CreateDelivery />
-                </ProtectedRoute>
-              } />
-              <Route path="/client/history" element={
-                <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
-                  <DeliveryHistory />
-                </ProtectedRoute>
-              } />
-    
-              {/* Driver Routes */}
-              <Route path="/driver" element={
-                <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
-                  <DriverDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/driver/history" element={
-                <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
-                  <DeliveryHistory />
-                </ProtectedRoute>
-              } />
-    
-              {/* Admin Routes */}
-              <Route path="/admin" element={
-                <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } />
-    
-              {/* Shared Routes */}
-              <Route path="/delivery/:deliveryId" element={
-                <ProtectedRoute>
-                  <DeliveryTracking />
-                </ProtectedRoute>
-              } />
-              <Route path="/settings" element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              } />
-                <Route path="/tracking/:deliveryId" element={<Navigate replace to="/client" />} />
-          </Routes>
+          <AnimatePresence mode="wait" initial={false}>
+            <Routes location={location} key={location.pathname}>
+              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<PageWrapper><LandingView /></PageWrapper>} />
+                
+                {/* Client Routes */}
+                <Route path="/client" element={
+                  <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
+                    <PageWrapper><ClientDashboard /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+                <Route path="/client/new" element={
+                  <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
+                    <PageWrapper><CreateDelivery /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+                <Route path="/client/history" element={
+                  <ProtectedRoute allowedRoles={['client', 'driver', 'admin', 'superadmin']}>
+                    <PageWrapper><DeliveryHistory /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+      
+                {/* Driver Routes */}
+                <Route path="/driver" element={
+                  <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
+                    <PageWrapper><DriverDashboard /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+                <Route path="/driver/history" element={
+                  <ProtectedRoute allowedRoles={['driver', 'admin', 'superadmin']}>
+                    <PageWrapper><DeliveryHistory /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+      
+                {/* Admin Routes */}
+                <Route path="/admin" element={
+                  <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
+                    <PageWrapper><AdminDashboard /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+      
+                {/* Shared Routes */}
+                <Route path="/delivery/:deliveryId" element={
+                  <ProtectedRoute>
+                    <PageWrapper><DeliveryTracking /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <PageWrapper><Settings /></PageWrapper>
+                  </ProtectedRoute>
+                } />
+                  <Route path="/tracking/:deliveryId" element={<Navigate replace to="/client" />} />
+            </Routes>
+          </AnimatePresence>
         </Suspense>
       </main>
       <BottomNav />

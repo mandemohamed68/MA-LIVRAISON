@@ -117,7 +117,7 @@ export default function Navbar() {
             className="bg-amber-400 text-amber-950 text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center h-8"
           >
             <ShieldCheck className="w-3 h-3 mr-2" />
-            Environnement de Test Actif • PANCHO LIVRAISON
+            Environnement de Test Actif • PANCHO EXPRESS
           </motion.div>
         )}
       </AnimatePresence>
@@ -166,7 +166,7 @@ export default function Navbar() {
             <div className="hidden sm:flex flex-col justify-center">
               <div className="flex items-baseline space-x-0.5">
                 <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-white">PANCHO</span>
-                <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-orange-200">LIVRAISON</span>
+                <span className="text-xl sm:text-2xl font-black tracking-tighter uppercase leading-none italic text-orange-200">EXPRESS</span>
               </div>
               <span className="text-[8px] sm:text-[9px] font-black tracking-[0.45em] text-white/50 uppercase mt-1">Plateforme Logistique</span>
             </div>

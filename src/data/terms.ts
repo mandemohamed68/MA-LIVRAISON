@@ -1,13 +1,13 @@
 
 export const CLIENT_TERMS = `
-# Conditions Générales d'Utilisation - Client (PANCHO LIVRAISON)
+# Conditions Générales d'Utilisation - Client (PANCHO EXPRESS)
 
 Dernière mise à jour : 25 Mai 2026
 
-En utilisant la plateforme PANCHO LIVRAISON, vous acceptez les présentes conditions :
+En utilisant la plateforme PANCHO EXPRESS, vous acceptez les présentes conditions :
 
 ### 1. Service de Livraison
-PANCHO LIVRAISON met en relation des clients avec des livreurs indépendants pour le transport de colis et marchandises.
+PANCHO EXPRESS met en relation des clients avec des livreurs indépendants pour le transport de colis et marchandises.
 
 ### 2. Responsabilité du Contenu
 Le client s'engage à ne pas faire livrer de produits illégaux, dangereux ou prohibés par les lois en vigueur.
@@ -20,20 +20,20 @@ Toute annulation après acceptation par un livreur peut donner lieu à des frais
 `;
 
 export const DRIVER_TERMS = `
-# Conditions Générales d'Utilisation - Livreur (PANCHO LIVRAISON)
+# Conditions Générales d'Utilisation - Livreur (PANCHO EXPRESS)
 
 Dernière mise à jour : 25 Mai 2026
 
-En tant que partenaire livreur PANCHO LIVRAISON, vous acceptez les conditions suivantes :
+En tant que partenaire livreur PANCHO EXPRESS, vous acceptez les conditions suivantes :
 
 ### 1. Statut Indépendant
-Le livreur est un prestataire indépendant et n'est pas salarié de PANCHO LIVRAISON.
+Le livreur est un prestataire indépendant et n'est pas salarié de PANCHO EXPRESS.
 
 ### 2. Qualité de Service
 Le livreur s'engage à assurer les livraisons avec professionnalisme et à maintenir son matériel en bon état de fonctionnement.
 
 ### 3. Commissions et Gains
-PANCHO LIVRAISON prélève une commission sur chaque course effectuée, telle que définie dans les paramètres administratifs.
+PANCHO EXPRESS prélève une commission sur chaque course effectuée, telle que définie dans les paramètres administratifs.
 
 ### 4. Sécurité Routière
 Le livreur est seul responsable du respect du code de la route et de sa sécurité lors des trajets.

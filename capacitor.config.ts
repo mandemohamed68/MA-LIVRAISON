@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.pancho.livraison',
-  appName: 'PANCHO LIVRAISON',
+  appName: 'PANCHO EXPRESS',
   webDir: 'dist',
   server: {
     androidScheme: 'http',

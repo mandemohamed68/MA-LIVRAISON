@@ -62,7 +62,7 @@ export default function LoadingScreen() {
           className="text-center w-full"
         >
           <h2 className="text-slate-900 font-black italic text-4xl tracking-tighter mb-1 select-none">
-            PANCHO <span className="text-orange-600">LIVRAISON</span>
+            PANCHO <span className="text-orange-600">EXPRESS</span>
           </h2>
           <motion.p 
             key={message}

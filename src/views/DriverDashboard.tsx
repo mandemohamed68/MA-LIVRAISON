@@ -786,7 +786,7 @@ export default function DriverDashboard() {
                                              <span className={cn("w-1.5 h-1.5 rounded-full", profile?.status === 'online' ? "bg-emerald-500 animate-pulse" : (profile?.status === 'busy' ? "bg-orange-500" : "bg-slate-300"))} /> 
                                              {profile?.status === 'online' ? "En Ligne" : (profile?.status === 'busy' ? "Occupé" : "Hors Ligne")}
                                           </p>
-                                          <h2 className="text-xs font-black italic tracking-tight text-slate-900 mt-0.5">PANCHO LIVRAISON</h2>
+                                          <h2 className="text-xs font-black italic tracking-tight text-slate-900 mt-0.5">PANCHO EXPRESS</h2>
                                        </div>
                                        <button onClick={toggleOnline} className={cn("p-2 rounded-xl transition-all shadow-sm", isOnline ? "bg-slate-900 text-white" : "bg-emerald-500 text-white")}>
                                            <Zap className="w-3.5 h-3.5" />

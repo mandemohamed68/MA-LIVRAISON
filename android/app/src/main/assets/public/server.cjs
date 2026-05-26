@@ -198,6 +198,7 @@ try {
     proposedTime INTEGER,
     reason TEXT,
     status TEXT DEFAULT 'pending', -- pending, accepted, rejected
+    attempts INTEGER DEFAULT 1,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(deliveryId) REFERENCES deliveries(id),
@@ -206,6 +207,11 @@ try {
 `);
 } catch (err) {
   console.error("Critical error during database schema creation:", err);
+}
+try {
+  db.exec("ALTER TABLE bids ADD COLUMN attempts INTEGER DEFAULT 1");
+  console.log("Migration: Added column attempts to bids table");
+} catch (err) {
 }
 var colsToAdd = [
   { name: "vehicleType", type: "TEXT" },
@@ -216,7 +222,8 @@ var colsToAdd = [
   { name: "clientProposedPrice", type: "REAL" },
   { name: "isUrgent", type: "INTEGER DEFAULT 0" },
   { name: "urgentFee", type: "REAL DEFAULT 0" },
-  { name: "boostAmount", type: "REAL DEFAULT 0" }
+  { name: "boostAmount", type: "REAL DEFAULT 0" },
+  { name: "lastMessageAt", type: "TEXT" }
 ];
 colsToAdd.forEach((col) => {
   try {
@@ -312,6 +319,24 @@ addColumnIfNotExists("users", "performanceScore", "REAL DEFAULT 100");
 addColumnIfNotExists("users", "cancellationRate", "REAL DEFAULT 0");
 addColumnIfNotExists("users", "totalEarnings", "REAL DEFAULT 0");
 addColumnIfNotExists("users", "dailyGoal", "REAL DEFAULT 0");
+addColumnIfNotExists("users", "photoURL", "TEXT");
+addColumnIfNotExists("users", "address", "TEXT");
+addColumnIfNotExists("bids", "attempts", "INTEGER DEFAULT 1");
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS historique_gains (
+      id TEXT PRIMARY KEY,
+      driverId TEXT NOT NULL,
+      type TEXT NOT NULL, -- course, retrait
+      amount REAL NOT NULL,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(driverId) REFERENCES users(userId)
+    );
+  `);
+  console.log("Database: Created table historique_gains if not exists");
+} catch (err) {
+  console.error("Failed to create table historique_gains", err);
+}
 var db_default = db;
 
 // server.ts
@@ -340,9 +365,12 @@ async function startServer() {
     const token = authHeader.split(" ")[1];
     try {
       const decoded = import_jsonwebtoken.default.verify(token, JWT_SECRET);
-      const user = db_default.prepare("SELECT role, name, email FROM users WHERE userId = ?").get(decoded.userId);
+      const user = db_default.prepare("SELECT role, name, email, accountStatus FROM users WHERE userId = ?").get(decoded.userId);
       if (!user) {
         return res.status(401).json({ error: "User not found or role mismatch" });
+      }
+      if (user.accountStatus === "suspended") {
+        return res.status(403).json({ error: "Votre compte a \xE9t\xE9 suspendu par l'administrateur. Veuillez contacter le support." });
       }
       req.user = {
         ...decoded,
@@ -365,8 +393,42 @@ async function startServer() {
       const userId = (0, import_uuid.v4)();
       const stmt = db_default.prepare("INSERT INTO users (id, userId, name, email, password, role) VALUES (?, ?, ?, ?, ?, ?)");
       stmt.run(userId, userId, name, email, hashedPassword, role || "client");
+      const allowedFields = [
+        "city",
+        "neighborhood",
+        "address",
+        "driverType",
+        "phone",
+        "idCardFront",
+        "idCardBack",
+        "status",
+        "termsAcceptedAt",
+        "vehicleType",
+        "licensePlate",
+        "sectors"
+      ];
+      const updates = [];
+      const params = [];
+      for (const field of allowedFields) {
+        if (req.body[field] !== void 0) {
+          updates.push(`${field} = ?`);
+          params.push(req.body[field]);
+        }
+      }
+      if (updates.length > 0) {
+        params.push(userId);
+        db_default.prepare(`UPDATE users SET ${updates.join(", ")} WHERE userId = ?`).run(...params);
+      }
+      const fullUser = db_default.prepare("SELECT * FROM users WHERE userId = ?").get(userId);
+      delete fullUser.password;
+      if (fullUser.currentLocation) {
+        try {
+          fullUser.currentLocation = JSON.parse(fullUser.currentLocation);
+        } catch (e) {
+        }
+      }
       const token = import_jsonwebtoken.default.sign({ userId, email, role }, JWT_SECRET);
-      res.json({ token, user: { userId, name, email, role } });
+      res.json({ token, user: fullUser });
     } catch (error) {
       if (error.message.includes("UNIQUE")) {
         return res.status(400).json({ error: "Email already exists" });
@@ -381,8 +443,12 @@ async function startServer() {
       if (!user || !await import_bcryptjs.default.compare(password, user.password)) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
+      if (user.accountStatus === "suspended") {
+        return res.status(403).json({ error: "Votre compte a \xE9t\xE9 suspendu par l'administrateur. Veuillez contacter le support." });
+      }
+      delete user.password;
       const token = import_jsonwebtoken.default.sign({ userId: user.userId, email: user.email, role: user.role }, JWT_SECRET);
-      res.json({ token, user: { userId: user.userId, name: user.name, email: user.email, role: user.role } });
+      res.json({ token, user });
     } catch (error) {
       res.status(500).json({ error: "Login failed" });
     }
@@ -412,9 +478,9 @@ async function startServer() {
       res.status(500).json({ error: "Failed to fetch user" });
     }
   });
-  app.patch("/api/profile", authenticate, (req, res) => {
+  app.patch("/api/profile", authenticate, async (req, res) => {
     const updates = req.body;
-    let fields = Object.keys(updates).filter((k) => k !== "userId" && k !== "id" && k !== "password");
+    let fields = Object.keys(updates).filter((k) => k !== "userId" && k !== "id");
     try {
       const dbColumns = db_default.prepare("PRAGMA table_info(users)").all();
       const validColumns = new Set(dbColumns.map((c) => c.name));
@@ -424,12 +490,15 @@ async function startServer() {
     }
     if (fields.length === 0) return res.json({ status: "no changes" });
     const setClause = fields.map((f) => `${f} = ?`).join(", ");
-    const values = fields.map((f) => {
+    const values = await Promise.all(fields.map(async (f) => {
       let val = updates[f];
+      if (f === "password" && typeof val === "string" && val.trim() !== "") {
+        return await import_bcryptjs.default.hash(val, 10);
+      }
       if (typeof val === "boolean") return val ? 1 : 0;
       if (typeof val === "object" && val !== null) return JSON.stringify(val);
       return val;
-    });
+    }));
     try {
       const stmt = db_default.prepare(`UPDATE users SET ${setClause} WHERE userId = ?`);
       stmt.run(...values, req.user.userId);
@@ -484,7 +553,7 @@ async function startServer() {
       res.status(500).json({ error: "Creation failed", details: err?.message || err?.toString() });
     }
   });
-  app.post("/api/notifications", authenticate, (req, res) => {
+  app.post("/api/app-notifications", authenticate, (req, res) => {
     const { userId, title, message, type, link } = req.body;
     const id = (0, import_uuid.v4)();
     try {
@@ -528,6 +597,12 @@ async function startServer() {
         if (typeof d.packageDetails === "string") d.packageDetails = JSON.parse(d.packageDetails);
       } catch (e) {
       }
+      try {
+        const bids = db_default.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(d.id);
+        d.bids = bids || [];
+      } catch (e) {
+        d.bids = [];
+      }
     });
     res.json(deliveries);
   });
@@ -555,6 +630,12 @@ async function startServer() {
         if (typeof d.packageDetails === "string") d.packageDetails = JSON.parse(d.packageDetails);
       } catch (e) {
       }
+      try {
+        const bids = db_default.prepare("SELECT * FROM bids WHERE deliveryId = ?").all(d.id);
+        d.bids = bids || [];
+      } catch (e) {
+        d.bids = [];
+      }
       res.json(d);
     } catch (err) {
       console.error(err);
@@ -576,6 +657,29 @@ async function startServer() {
     try {
       const stmt = db_default.prepare(`UPDATE deliveries SET ${setClause}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`);
       stmt.run(...values, id);
+      if (updates.status === "accepted" && updates.driverId) {
+        db_default.prepare("UPDATE bids SET status = 'accepted', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId = ?").run(id, updates.driverId);
+        db_default.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId != ?").run(id, updates.driverId);
+      }
+      if (updates.status === "delivered") {
+        try {
+          const delivery = db_default.prepare("SELECT driverId, cost, clientProposedPrice FROM deliveries WHERE id = ?").get(id);
+          if (delivery && delivery.driverId) {
+            const finalCost = delivery.clientProposedPrice || delivery.cost || 0;
+            const configRows = db_default.prepare("SELECT * FROM config").all();
+            const commissionsRow = configRows.find((c) => c.key === "commissions");
+            const commissionSettings = commissionsRow ? JSON.parse(commissionsRow.value) : { driverSharePercent: 85 };
+            const driverShare = commissionSettings.driverSharePercent || 85;
+            const driverAmt = Math.floor(finalCost * driverShare / 100);
+            db_default.prepare(`
+              INSERT INTO historique_gains (id, driverId, type, amount, createdAt)
+              VALUES (?, ?, 'course', ?, CURRENT_TIMESTAMP)
+            `).run((0, import_uuid.v4)(), delivery.driverId, driverAmt);
+          }
+        } catch (err) {
+          console.error("Failed to log gain for completed delivery:", err);
+        }
+      }
       res.json({ status: "ok" });
     } catch (err) {
       res.status(500).json({ error: "Update failed" });
@@ -584,11 +688,14 @@ async function startServer() {
   app.delete("/api/deliveries/:id", authenticate, (req, res) => {
     const { id } = req.params;
     try {
-      db_default.prepare("DELETE FROM deliveries WHERE id = ?").run(id);
+      db_default.prepare("DELETE FROM tracking WHERE deliveryId = ?").run(id);
+      db_default.prepare("DELETE FROM bids WHERE deliveryId = ?").run(id);
       db_default.prepare("DELETE FROM messages WHERE deliveryId = ?").run(id);
+      db_default.prepare("DELETE FROM deliveries WHERE id = ?").run(id);
       res.json({ status: "ok" });
     } catch (err) {
-      res.status(500).json({ error: "Delete failed" });
+      console.error("Delete failed:", err);
+      res.status(500).json({ error: "Delete failed", details: err?.message });
     }
   });
   app.post("/api/deliveries/:id/messages", authenticate, (req, res) => {
@@ -598,6 +705,7 @@ async function startServer() {
     try {
       const stmt = db_default.prepare("INSERT INTO messages (id, deliveryId, text, senderId, senderName, senderRole) VALUES (?, ?, ?, ?, ?, ?)");
       stmt.run(id, deliveryId, text, req.user.userId, senderName, senderRole);
+      db_default.prepare("UPDATE deliveries SET lastMessageAt = CURRENT_TIMESTAMP WHERE id = ?").run(deliveryId);
       res.json({ id });
     } catch (err) {
       res.status(500).json({ error: "Message failed" });
@@ -608,7 +716,7 @@ async function startServer() {
     const messages = db_default.prepare("SELECT * FROM messages WHERE deliveryId = ? ORDER BY createdAt ASC").all(deliveryId);
     res.json(messages);
   });
-  app.get("/api/notifications", authenticate, (req, res) => {
+  app.get("/api/app-notifications", authenticate, (req, res) => {
     const notifications = db_default.prepare("SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50").all(req.user.userId);
     res.json(notifications);
   });
@@ -621,12 +729,34 @@ async function startServer() {
       res.status(500).json({ error: "Failed to fetch driver status" });
     }
   });
-  app.get("/api/config/:key", (req, res) => {
+  app.get("/api/system-preferences/:key", (req, res) => {
     const row = db_default.prepare("SELECT value FROM config WHERE key = ?").get(req.params.key);
     res.json(row ? JSON.parse(row.value) : {});
   });
   app.get("/api/sectors", (req, res) => {
     res.json(db_default.prepare("SELECT * FROM sectors WHERE isActive = 1").all());
+  });
+  app.post("/api/platform-billing/query", authenticate, (req, res) => {
+    if (req.user.role !== "admin" && req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { sql } = req.body;
+    if (!sql) {
+      return res.status(400).json({ error: "SQL query is required" });
+    }
+    try {
+      const stmt = db_default.prepare(sql);
+      const lowerSql = sql.trim().toLowerCase();
+      if (lowerSql.startsWith("select") || lowerSql.startsWith("pragma") || lowerSql.startsWith("explain")) {
+        const rows = stmt.all();
+        res.json({ success: true, rows });
+      } else {
+        const result = stmt.run();
+        res.json({ success: true, result });
+      }
+    } catch (err) {
+      res.status(400).json({ success: false, error: err.message });
+    }
   });
   app.post("/api/sectors", authenticate, (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
@@ -681,6 +811,20 @@ async function startServer() {
   });
   const SAPPAY_BASE_PUBLIC = "https://api.prod.sappay.net/api/public";
   const SAPPAY_BASE_CHECKOUT = "https://api.prod.sappay.net/api/checkout";
+  const normalizePhoneNumberSappay = (phone, countryId = 1) => {
+    let clean = phone.replace(/\D/g, "");
+    if (countryId === 1) {
+      if (clean.startsWith("00226")) {
+        clean = clean.substring(5);
+      } else if (clean.startsWith("226")) {
+        clean = clean.substring(3);
+      }
+      if (clean.length > 8) {
+        clean = clean.substring(clean.length - 8);
+      }
+    }
+    return clean;
+  };
   const normalizePhoneNumber = (phone) => {
     let clean = phone.replace(/\D/g, "");
     if (clean.length === 8) return `226${clean}`;
@@ -736,14 +880,28 @@ async function startServer() {
         body: JSON.stringify({
           type: "SIMPLE",
           customer: {
-            email: email || "client@livra.app",
+            email: email || "client@pancho.app",
             country: 1
           },
           amount: amount.toString(),
-          note: note || `Livraison LIVRA #${Math.random().toString(36).substr(2, 5)}`
+          note: note || `Livraison PANCHO #${Math.random().toString(36).substr(2, 5)}`
         })
       });
-      const responseData = await invoiceResponse.json();
+      let responseText = "";
+      try {
+        responseText = await invoiceResponse.text();
+      } catch (e) {
+        responseText = "Impossible de lire la r\xE9ponse.";
+      }
+      if (!invoiceResponse.ok) {
+        throw new Error(`Sappay Invoice Creation Failed (${invoiceResponse.status}): ${responseText.substring(0, 500)}`);
+      }
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        throw new Error(`Sappay response was not valid JSON: ${responseText.substring(0, 500)}`);
+      }
       const invoiceId = findInvoiceId(responseData);
       if (!invoiceId) {
         return res.status(400).json({ error: "Could not retrieve Invoice ID from Sappay", details: responseData });
@@ -759,20 +917,36 @@ async function startServer() {
   });
   app.post("/api/payment/sappay/get-otp", async (req, res) => {
     try {
-      const { customer_msisdn, invoice_id, payment_processor_id, access_token } = req.body;
+      const { customer_msisdn, invoice_id, payment_processor_id } = req.body;
       const response = await fetch(`${SAPPAY_BASE_CHECKOUT}/get-otp/`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${access_token}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          customer_msisdn: normalizePhoneNumber(customer_msisdn),
+          customer_msisdn: normalizePhoneNumberSappay(customer_msisdn),
           invoice_id,
           payment_processor_id
         })
       });
-      const data = await response.json();
+      let responseText = "";
+      try {
+        responseText = await response.text();
+      } catch (e) {
+        responseText = "Impossible de lire la r\xE9ponse.";
+      }
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: "Sappay OTP Error",
+          details: responseText.substring(0, 500)
+        });
+      }
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        return res.status(500).json({ error: "Format de r\xE9ponse OTP invalide" });
+      }
       res.status(response.status).json(data);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -780,39 +954,67 @@ async function startServer() {
   });
   app.post("/api/payment/sappay/perform", async (req, res) => {
     try {
-      const { invoice_id, payment_processor_id, customer_msisdn, otp, access_token, trans_id } = req.body;
+      const { invoice_id, payment_processor_id, customer_msisdn, otp, trans_id } = req.body;
+      const payload = {
+        invoice_id,
+        payment_processor_id,
+        customer_msisdn: normalizePhoneNumberSappay(customer_msisdn),
+        otp: otp.toString()
+      };
+      if (trans_id) {
+        payload.trans_id = trans_id;
+      }
       const response = await fetch(`${SAPPAY_BASE_CHECKOUT}/perform/`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${access_token}`
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          invoice_id,
-          payment_processor_id,
-          customer_msisdn: normalizePhoneNumber(customer_msisdn),
-          otp: otp.toString(),
-          trans_id
-        })
+        body: JSON.stringify(payload)
       });
-      const data = await response.json();
+      let responseText = "";
+      try {
+        responseText = await response.text();
+      } catch (e) {
+        responseText = "Impossible de lire la r\xE9ponse.";
+      }
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: "Sappay Perform Error",
+          details: responseText.substring(0, 500)
+        });
+      }
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        return res.status(500).json({ error: "Format de r\xE9ponse perform invalide" });
+      }
       res.status(response.status).json(data);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
-  app.get("/api/backoffice/users", authenticate, (req, res) => {
+  app.get("/api/platform-billing/users", authenticate, (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/backoffice/users, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/platform-billing/users, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const users = db_default.prepare("SELECT * FROM users").all();
-    users.forEach((u) => delete u.password);
+    users.forEach((u) => {
+      delete u.password;
+      if (typeof u.currentLocation === "string" && u.currentLocation) {
+        try {
+          u.currentLocation = JSON.parse(u.currentLocation);
+        } catch (e) {
+          u.currentLocation = null;
+        }
+      }
+    });
     res.json(users);
   });
-  app.patch("/api/backoffice/users/:userId", authenticate, (req, res) => {
+  app.patch("/api/platform-billing/users/:userId", authenticate, (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH /api/backoffice/users/${req.params.userId}, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH /api/platform-billing/users/${req.params.userId}, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { userId } = req.params;
@@ -834,9 +1036,9 @@ async function startServer() {
       res.status(500).json({ error: "Update failed" });
     }
   });
-  app.patch("/api/backoffice/users/:userId/role", authenticate, (req, res) => {
+  app.patch("/api/platform-billing/users/:userId/role", authenticate, (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH role /api/backoffice/users/${req.params.userId}/role, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH role /api/platform-billing/users/${req.params.userId}/role, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { userId } = req.params;
@@ -848,9 +1050,9 @@ async function startServer() {
       res.status(500).json({ error: "Failed to update role" });
     }
   });
-  app.delete("/api/backoffice/users/:userId", authenticate, (req, res) => {
+  app.delete("/api/platform-billing/users/:userId", authenticate, (req, res) => {
     if (req.user.role !== "superadmin") {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to DELETE user /api/backoffice/users/${req.params.userId}, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to DELETE user /api/platform-billing/users/${req.params.userId}, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Superadmin role is required (your role is '${req.user.role}').` });
     }
     const { userId } = req.params;
@@ -861,9 +1063,9 @@ async function startServer() {
       res.status(500).json({ error: "Delete failed" });
     }
   });
-  app.post("/api/backoffice/users", authenticate, async (req, res) => {
+  app.post("/api/platform-billing/users", authenticate, async (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to POST /api/backoffice/users, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to POST /api/platform-billing/users, but role is: '${req.user.role}'`);
       return res.status(403).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
     }
     const { name, email, password, role, ...rest } = req.body;
@@ -880,21 +1082,25 @@ async function startServer() {
       res.status(500).json({ error: error.message });
     }
   });
-  app.post("/api/backoffice/reset", authenticate, (req, res) => {
+  app.post("/api/platform-billing/reset", authenticate, (req, res) => {
     if (req.user.role !== "superadmin") {
       return res.status(403).json({ error: "Superadmin only" });
     }
     try {
-      db_default.prepare("DELETE FROM deliveries").run();
+      db_default.prepare("DELETE FROM tracking").run();
+      db_default.prepare("DELETE FROM bids").run();
       db_default.prepare("DELETE FROM messages").run();
+      db_default.prepare("DELETE FROM deliveries").run();
       db_default.prepare("DELETE FROM notifications").run();
+      db_default.prepare("DELETE FROM withdrawals").run();
       db_default.prepare("DELETE FROM users WHERE role NOT IN ('admin', 'superadmin')").run();
       res.json({ status: "ok" });
     } catch (err) {
-      res.status(500).json({ error: "Reset failed" });
+      console.error(err);
+      res.status(500).json({ error: "Reset failed", details: err?.message });
     }
   });
-  app.post("/api/backoffice/seed", authenticate, (req, res) => {
+  app.post("/api/platform-billing/seed", authenticate, (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
       return res.status(403).json({ error: "Admin only" });
     }
@@ -913,7 +1119,7 @@ async function startServer() {
       res.status(500).json({ error: "Seed failed" });
     }
   });
-  app.post("/api/config/:key", authenticate, (req, res) => {
+  app.post("/api/system-preferences/:key", authenticate, (req, res) => {
     if (req.user.role !== "admin" && req.user.role !== "superadmin") {
       return res.status(403).json({ error: "Access denied" });
     }
@@ -965,20 +1171,7 @@ async function startServer() {
     }
   };
   seedAdmin();
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await (0, import_vite.createServer)({
-      server: { middlewareMode: true },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = import_path2.default.join(process.cwd(), "dist");
-    app.use(import_express.default.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(import_path2.default.join(distPath, "index.html"));
-    });
-  }
-  app.patch("/api/notifications/:id/read", authenticate, (req, res) => {
+  app.patch("/api/app-notifications/:id/read", authenticate, (req, res) => {
     try {
       db_default.prepare("UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?").run(req.params.id, req.user.userId);
       res.json({ status: "ok" });
@@ -986,7 +1179,7 @@ async function startServer() {
       res.status(500).json({ error: "Update notification failed" });
     }
   });
-  app.delete("/api/notifications/:id", authenticate, (req, res) => {
+  app.delete("/api/app-notifications/:id", authenticate, (req, res) => {
     try {
       db_default.prepare("DELETE FROM notifications WHERE id = ? AND userId = ?").run(req.params.id, req.user.userId);
       res.json({ status: "ok" });
@@ -1010,16 +1203,78 @@ async function startServer() {
     const { id } = req.params;
     const { price, proposedTime, timeEstimateMins, reason } = req.body;
     const actualTime = proposedTime !== void 0 ? proposedTime : timeEstimateMins;
+    const bidId = `${id}_${req.user.userId}`;
     try {
-      const bidId = `${id}_${req.user.userId}`;
+      const existingBid = db_default.prepare("SELECT * FROM bids WHERE id = ?").get(bidId);
+      let attempts = 1;
+      if (existingBid) {
+        attempts = (existingBid.attempts || 1) + 1;
+        if (attempts > 2) {
+          return res.status(400).json({ error: "Nombre maximum de tentatives de n\xE9gociation (2) atteint." });
+        }
+      }
       db_default.prepare(`
-        INSERT OR REPLACE INTO bids (id, deliveryId, driverId, driverName, price, proposedTime, reason, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(bidId, id, req.user.userId, req.user.name, price, actualTime, reason);
-      res.json({ status: "ok", id: bidId });
+        INSERT OR REPLACE INTO bids (id, deliveryId, driverId, driverName, price, proposedTime, reason, status, attempts, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)
+      `).run(bidId, id, req.user.userId, req.user.name, price, actualTime, reason, attempts);
+      const delivery = db_default.prepare("SELECT clientId FROM deliveries WHERE id = ?").get(id);
+      if (delivery) {
+        const message = `Le livreur ${req.user.name} propose un tarif de ${price} FCFA (Tentative ${attempts}/2).`;
+        db_default.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)").run((0, import_uuid.v4)(), delivery.clientId, "Nouvelle proposition", message, "warning");
+      }
+      res.json({ status: "ok", id: bidId, attempts });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Place bid failed" });
+    }
+  });
+  app.post("/api/deliveries/:id/bids/:driverId/decline", authenticate, (req, res) => {
+    const { id, driverId } = req.params;
+    try {
+      db_default.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId = ?").run(id, driverId);
+      db_default.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)").run((0, import_uuid.v4)(), driverId, "Proposition refus\xE9e", `Votre proposition de tarif pour la course #${id.slice(-6).toUpperCase()} a \xE9t\xE9 refus\xE9e. Vous pouvez soumettre une derni\xE8re proposition si applicable.`, "warning");
+      res.json({ status: "ok" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to decline bid" });
+    }
+  });
+  app.post("/api/courses/:id/accepter-proposition", authenticate, (req, res) => {
+    const { id } = req.params;
+    const { driverId, price } = req.body;
+    if (!driverId) return res.status(400).json({ error: "L'identifiant du livreur (driverId) est requis" });
+    try {
+      const existingBid = db_default.prepare("SELECT * FROM bids WHERE deliveryId = ? AND driverId = ?").get(id, driverId);
+      if (!existingBid) {
+        return res.status(404).json({ error: "Proposition introuvable" });
+      }
+      const { driverName, price: bidPrice } = existingBid;
+      const finalPrice = price || bidPrice;
+      db_default.prepare(`
+        UPDATE deliveries 
+        SET status = 'accepted', driverId = ?, driverName = ?, cost = ?, updatedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(driverId, driverName, finalPrice, id);
+      db_default.prepare("UPDATE bids SET status = 'accepted', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId = ?").run(id, driverId);
+      db_default.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId != ?").run(id, driverId);
+      db_default.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)").run((0, import_uuid.v4)(), driverId, "Proposition accept\xE9e", `Le client a accept\xE9 votre proposition pour la course #${id.slice(-6).toUpperCase()}.`, "success");
+      res.json({ message: "Proposition accept\xE9e avec succ\xE8s", price: finalPrice });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Erreur lors de l'acceptation de la proposition" });
+    }
+  });
+  app.post("/api/courses/:id/rejeter-proposition", authenticate, (req, res) => {
+    const { id } = req.params;
+    const { driverId } = req.body;
+    if (!driverId) return res.status(400).json({ error: "L'identifiant du livreur (driverId) est requis" });
+    try {
+      db_default.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ? AND driverId = ?").run(id, driverId);
+      db_default.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)").run((0, import_uuid.v4)(), driverId, "Proposition refus\xE9e", `Votre proposition de tarif pour la course #${id.slice(-6).toUpperCase()} a \xE9t\xE9 refus\xE9e par le client. Vous pouvez soumettre une derni\xE8re offre si applicable.`, "warning");
+      res.json({ message: "Proposition refus\xE9e" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Erreur lors du rejet de la proposition" });
     }
   });
   app.post("/api/deliveries/:id/tracking", authenticate, (req, res) => {
@@ -1036,6 +1291,111 @@ async function startServer() {
       res.status(500).json({ error: "Tracking update failed" });
     }
   });
+  app.post("/api/withdrawals", authenticate, (req, res) => {
+    if (req.user.role !== "driver") return res.status(403).json({ error: "Drivers only" });
+    const { amount, method, phone } = req.body;
+    if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
+    try {
+      const driver = db_default.prepare("SELECT * FROM users WHERE userId = ?").get(req.user.userId);
+      if (!driver) return res.status(404).json({ error: "Driver not found" });
+      const configRows = db_default.prepare("SELECT * FROM config").all();
+      const commissionsRow = configRows.find((c) => c.key === "commissions");
+      const commissionSettings = commissionsRow ? JSON.parse(commissionsRow.value) : { driverSharePercent: 85 };
+      const driverShare = commissionSettings.driverSharePercent || 85;
+      const onlineDeliveries = db_default.prepare(`SELECT * FROM deliveries WHERE driverId = ? AND status = 'delivered' AND paymentMethod != 'cash'`).all(driver.userId);
+      const totalEarnings = onlineDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * driverShare / 100;
+      const pendingWithdrawalsSum = db_default.prepare(`SELECT SUM(amount) as sum FROM withdrawals WHERE driverId = ? AND status = 'en_attente'`).get(driver.userId)?.sum || 0;
+      const earnings = totalEarnings - (driver.totalWithdrawn || 0) - pendingWithdrawalsSum;
+      if (amount > earnings) return res.status(400).json({ error: "Amount exceeds available balance" });
+      const id = (0, import_uuid.v4)();
+      db_default.prepare(`
+        INSERT INTO withdrawals (id, driverId, driverName, amount, status, method, phone)
+        VALUES (?, ?, ?, ?, 'en_attente', ?, ?)
+      `).run(id, req.user.userId, req.user.name, amount, method, phone);
+      db_default.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)").run((0, import_uuid.v4)(), "admin", "Nouvelle demande de retrait", `${req.user.name} demande un retrait de ${amount} FCFA`, "info");
+      res.json({ status: "ok", id });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Withdrawal request failed" });
+    }
+  });
+  app.get("/api/withdrawals", authenticate, (req, res) => {
+    try {
+      const list = db_default.prepare("SELECT * FROM withdrawals WHERE driverId = ? ORDER BY createdAt DESC").all(req.user.userId);
+      res.json(list);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch driver withdrawals" });
+    }
+  });
+  app.get("/api/drivers/gains-history", authenticate, (req, res) => {
+    try {
+      const list = db_default.prepare("SELECT * FROM historique_gains WHERE driverId = ? ORDER BY createdAt DESC").all(req.user.userId);
+      res.json(list);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch driver gains history" });
+    }
+  });
+  app.get("/api/platform-billing/withdrawals", authenticate, (req, res) => {
+    if (req.user.role !== "admin" && req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      const withdrawals = db_default.prepare("SELECT * FROM withdrawals ORDER BY createdAt DESC").all();
+      res.json(withdrawals);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch withdrawals" });
+    }
+  });
+  app.post("/api/platform-billing/withdrawals/:id/valider", authenticate, (req, res) => {
+    if (req.user.role !== "admin" && req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    const { id } = req.params;
+    try {
+      const withdrawal = db_default.prepare("SELECT * FROM withdrawals WHERE id = ?").get(id);
+      if (!withdrawal) return res.status(404).json({ error: "Withdrawal not found" });
+      if (withdrawal.status === "valide") return res.status(400).json({ error: "Already validated" });
+      const driver = db_default.prepare("SELECT * FROM users WHERE userId = ?").get(withdrawal.driverId);
+      if (!driver) return res.status(404).json({ error: "Driver not found" });
+      const configRows = db_default.prepare("SELECT * FROM config").all();
+      const commissionsRow = configRows.find((c) => c.key === "commissions");
+      const commissionSettings = commissionsRow ? JSON.parse(commissionsRow.value) : { driverSharePercent: 85 };
+      const driverShare = commissionSettings.driverSharePercent || 85;
+      const onlineDeliveries = db_default.prepare(`SELECT * FROM deliveries WHERE driverId = ? AND status = 'delivered' AND paymentMethod != 'cash'`).all(driver.userId);
+      const totalEarnings = onlineDeliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0) * driverShare / 100;
+      const earnings = totalEarnings - (driver.totalWithdrawn || 0);
+      const newBalance = earnings - withdrawal.amount;
+      if (newBalance < 0) return res.status(400).json({ error: "Insufficient balance" });
+      db_default.transaction(() => {
+        db_default.prepare("UPDATE users SET earnings = ?, totalWithdrawn = COALESCE(totalWithdrawn, 0) + ? WHERE userId = ?").run(newBalance, withdrawal.amount, driver.userId);
+        db_default.prepare("UPDATE withdrawals SET status = 'valide', processedAt = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+        db_default.prepare(`
+          INSERT INTO historique_gains (id, driverId, type, amount, createdAt)
+          VALUES (?, ?, 'retrait', ?, CURRENT_TIMESTAMP)
+        `).run((0, import_uuid.v4)(), driver.userId, withdrawal.amount);
+        const msg = `Retrait de ${withdrawal.amount} FCFA - valid\xE9`;
+        db_default.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)").run((0, import_uuid.v4)(), driver.userId, "Retrait valid\xE9", msg, "success");
+      })();
+      res.json({ status: "ok" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to validate withdrawal" });
+    }
+  });
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await (0, import_vite.createServer)({
+      server: { middlewareMode: true },
+      appType: "spa"
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = import_path2.default.join(process.cwd(), "dist");
+    app.use(import_express.default.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(import_path2.default.join(distPath, "index.html"));
+    });
+  }
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });

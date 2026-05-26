@@ -1,6 +1,6 @@
 {
-	"appId": "com.malivraison.app",
-	"appName": "LIVRA",
+	"appId": "com.pancho.livraison",
+	"appName": "PANCHO EXPRESS",
 	"webDir": "dist",
 	"server": {
 		"androidScheme": "http",
