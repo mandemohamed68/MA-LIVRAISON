@@ -32,6 +32,36 @@ export default function ClientDashboard() {
   const [paymentDelivery, setPaymentDelivery] = useState<DeliveryRequest | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // Cancellation States
+  const [cancellingDelivery, setCancellingDelivery] = useState<DeliveryRequest | null>(null);
+  const [cancelReason, setCancelReason] = useState('Je ne veux plus');
+  const [customReason, setCustomReason] = useState('');
+  const [isCancelConfirming, setIsCancelConfirming] = useState(false);
+
+  const handleCancelDelivery = async () => {
+    if (!cancellingDelivery) return;
+    const finalReason = cancelReason === 'Autre' ? customReason : cancelReason;
+    if (!finalReason.trim()) {
+      alert("Le motif d'annulation est obligatoire.");
+      return;
+    }
+    setIsCancelConfirming(true);
+    try {
+      await api.deliveries.cancel(cancellingDelivery.id, finalReason);
+      alert("Votre course a été annulée avec succès.");
+      setCancellingDelivery(null);
+      setCustomReason('');
+      setCancelReason('Je ne veux plus');
+      // Refresh
+      const jobs = await api.deliveries.list();
+      setDeliveries(jobs);
+    } catch (err: any) {
+      alert("Erreur lors de l'annulation: " + (err.message || err));
+    } finally {
+      setIsCancelConfirming(false);
+    }
+  };
+
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const handleScroll = () => {
@@ -416,6 +446,14 @@ export default function ClientDashboard() {
                             </div>
                             )
                           )}
+                          {!activeDelivery.isPaid && activeDelivery.status !== 'cancelled' && activeDelivery.status !== 'delivered' && (
+                            <button
+                              onClick={() => setCancellingDelivery(activeDelivery)}
+                              className="w-full mt-3 bg-red-50 text-red-600 font-extrabold py-3.5 px-4 rounded-xl text-[10px] uppercase tracking-widest hover:bg-red-100/80 transition-all active:scale-95 flex items-center justify-center gap-2 border border-red-100"
+                            >
+                              ✕ Annuler la course
+                            </button>
+                          )}
                         </div>
                       </div>
                   </motion.div>
@@ -494,6 +532,92 @@ export default function ClientDashboard() {
         amount={paymentDelivery?.cost || 0}
         onConfirm={handlePay}
       />
+
+      {/* Cancellation Modal */}
+      <AnimatePresence>
+        {cancellingDelivery && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[32px] w-full max-w-sm p-8 shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Annuler votre course</h3>
+                <button 
+                  onClick={() => setCancellingDelivery(null)}
+                  className="p-2 hover:bg-slate-50 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 font-bold mb-6 leading-relaxed uppercase tracking-wider">
+                L'annulation est gratuite avant paiement. Merci d'indiquer votre motif :
+              </p>
+
+              <div className="space-y-2 mb-6">
+                {[
+                  "Je ne veux plus",
+                  "Livreur non trouvé",
+                  "Délai trop long",
+                  "Erreur de commande",
+                  "Autre"
+                ].map(reason => (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setCancelReason(reason)}
+                    className={cn(
+                      "w-full text-left p-4 rounded-2xl border font-bold text-xs transition-all flex items-center justify-between",
+                      cancelReason === reason 
+                        ? "bg-red-50 border-red-200 text-red-700" 
+                        : "bg-slate-50 border-slate-100/50 text-slate-700 hover:bg-slate-100"
+                    )}
+                  >
+                    <span>{reason}</span>
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border flex items-center justify-center",
+                      cancelReason === reason ? "border-red-500 bg-red-500 text-white" : "border-slate-300"
+                    )}>
+                      {cancelReason === reason && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {cancelReason === 'Autre' && (
+                <textarea
+                  value={customReason}
+                  onChange={e => setCustomReason(e.target.value)}
+                  placeholder="Veuillez préciser le motif..."
+                  rows={2}
+                  className="w-full bg-slate-50 border border-slate-150 text-slate-800 p-4 rounded-2xl focus:outline-none focus:border-red-500 transition-all font-bold text-xs mb-6"
+                />
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancellingDelivery(null)}
+                  className="flex-1 py-4 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Retour
+                </button>
+                <button
+                  type="button"
+                  disabled={isCancelConfirming}
+                  onClick={handleCancelDelivery}
+                  className="flex-1 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-red-200 flex items-center justify-center"
+                >
+                  {isCancelConfirming ? "Annulation..." : "Confirmer"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

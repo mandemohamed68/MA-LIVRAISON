@@ -55,6 +55,29 @@ export default function AdminDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
+  // Promo Code States
+  const [promoCodes, setPromoCodes] = useState<any[]>([]);
+  const [promoForm, setPromoForm] = useState({
+    code: '',
+    type: 'percentage' as 'percentage' | 'fixed',
+    value: 10,
+    start_date: '',
+    end_date: '',
+    max_uses: '',
+    max_per_user: 1
+  });
+  const [isCreatingPromo, setIsCreatingPromo] = useState(false);
+
+  // Pricing Rule States
+  const [pricingRules, setPricingRules] = useState<any[]>([]);
+  const [pricingForm, setPricingForm] = useState({
+    vehicleType: 'moto',
+    poidsMin: 0,
+    poidsMax: 10,
+    baseCost: 1000,
+    tarifKm: 150
+  });
+
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 4000);
@@ -188,14 +211,16 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData, withdrawalsList] = await Promise.all([
+      const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData, withdrawalsList, promoList, rulesList] = await Promise.all([
         api.admin.users.list().then(res => res || []).catch(() => []),
         api.deliveries.list().then(res => res || []).catch(() => []),
         api.config.get('app_config').then(res => res || { mode: 'prod' }).catch(() => ({ mode: 'prod' })),
         api.config.get('commissions').then(res => res || null).catch(() => null),
         api.sectors.list().then(res => res || []).catch(() => []),
         api.announcements.list().then(res => res || []).catch(() => []),
-        api.admin.withdrawals.list().then(res => res || []).catch(() => [])
+        api.admin.withdrawals.list().then(res => res || []).catch(() => []),
+        api.promo.list().then(res => res || []).catch(() => []),
+        api.config.get('pricing_rules').then(res => res || []).catch(() => [])
       ]);
 
       setUsers(usersList);
@@ -205,6 +230,8 @@ export default function AdminDashboard() {
       setSectors(sectorsData);
       setAnnouncements(announcementsData);
       setWithdrawals(withdrawalsList);
+      setPromoCodes(promoList);
+      setPricingRules(Array.isArray(rulesList) ? rulesList : []);
     } catch (err) {
       console.error("Error polling local API:", err);
     } finally {
@@ -386,6 +413,8 @@ export default function AdminDashboard() {
       { name: 'Validations Paiements', icon: CreditCard },
       { name: 'Paiements Livreurs', icon: Wallet },
       ...(isSuperAdmin ? [{ name: 'Commissions', icon: Percent }] : []),
+      { name: 'Tarification', icon: Settings },
+      { name: 'Codes Promo', icon: BadgePercent },
     ]},
     ...(isSuperAdmin ? [{
       group: 'SYSTÈME & DATA', items: [
@@ -2372,6 +2401,314 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
+      case 'Tarification': {
+        const handleAddPricingRule = async (e: React.FormEvent) => {
+          e.preventDefault();
+          const newRules = [...pricingRules, {
+            id: Math.random().toString(36).substring(2, 9),
+            ...pricingForm
+          }];
+          setIsSaving(true);
+          try {
+            await api.config.update('pricing_rules', newRules);
+            setPricingRules(newRules);
+            setToast({ type: 'success', message: 'Règle de tarification ajoutée avec succès !' });
+            setPricingForm({
+              vehicleType: 'moto',
+              poidsMin: 0,
+              poidsMax: 10,
+              baseCost: 1000,
+              tarifKm: 150
+            });
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: 'Erreur: ' + err.message });
+          } finally {
+            setIsSaving(false);
+          }
+        };
+
+        const handleDeletePricingRule = async (ruleId: string) => {
+          if (!confirm("Voulez-vous supprimer cette règle ?")) return;
+          const newRules = pricingRules.filter((r: any) => r.id !== ruleId);
+          setIsSaving(true);
+          try {
+            await api.config.update('pricing_rules', newRules);
+            setPricingRules(newRules);
+            setToast({ type: 'success', message: 'Règle supprimée avec succès !' });
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: 'Erreur de suppression: ' + err.message });
+          } finally {
+            setIsSaving(false);
+          }
+        };
+
+        return (
+          <div className="space-y-8">
+            <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Paramètres des Coûts de Course</h3>
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Configurez les formules de calcul par véhicule, poids et distance</p>
+                </div>
+                <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+                  <Settings className="w-6 h-6" />
+                </div>
+              </div>
+
+              <form onSubmit={handleAddPricingRule} className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 items-end">
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Véhicule</label>
+                  <select 
+                    value={pricingForm.vehicleType}
+                    onChange={e => setPricingForm({ ...pricingForm, vehicleType: e.target.value })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs appearance-none"
+                  >
+                    <option value="moto">Moto (P4, Zem)</option>
+                    <option value="tricycle">Tricycle Cargo</option>
+                    <option value="voiture">Voiture / Van</option>
+                    <option value="camionnette">Fourgonnette</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Poids Min (Kg)</label>
+                  <input 
+                    type="number" 
+                    value={pricingForm.poidsMin}
+                    onChange={e => setPricingForm({ ...pricingForm, poidsMin: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Poids Max (Kg)</label>
+                  <input 
+                    type="number" 
+                    value={pricingForm.poidsMax}
+                    onChange={e => setPricingForm({ ...pricingForm, poidsMax: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Pris de base (F)</label>
+                  <input 
+                    type="number" 
+                    value={pricingForm.baseCost}
+                    onChange={e => setPricingForm({ ...pricingForm, baseCost: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Tarif/Km (F)</label>
+                  <input 
+                    type="number" 
+                    value={pricingForm.tarifKm}
+                    onChange={e => setPricingForm({ ...pricingForm, tarifKm: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs mb-2"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={isSaving}
+                    className="w-full py-3 bg-slate-900 hover:bg-indigo-600 text-white font-extrabold uppercase tracking-widest text-[9px] rounded-xl transition-all"
+                  >
+                    Ajouter
+                  </button>
+                </div>
+              </form>
+
+              <div className="space-y-3">
+                {pricingRules.length === 0 ? (
+                  <p className="text-center py-10 text-slate-400 text-xs font-bold uppercase tracking-widest">Aucune règle spécifique. Tarifs standards appliqués.</p>
+                ) : (
+                  pricingRules.map((rule: any) => (
+                    <div key={rule.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between hover:bg-white transition-all shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-xs capitalize">
+                          {rule.vehicleType?.slice(0, 4)}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-slate-900 uppercase font-black">Véhicule : {rule.vehicleType}</p>
+                          <p className="text-[10px] font-bold text-slate-400 tracking-wider">
+                            Poids admissible: {rule.poidsMin} kg à {rule.poidsMax} kg • Coût Fixe: {rule.baseCost} F • Tarif/Km: {rule.tarifKm} F/km
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeletePricingRule(rule.id)}
+                        className="p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+      case 'Codes Promo': {
+        const handleCreatePromo = async (e: React.FormEvent) => {
+          e.preventDefault();
+          if (!promoForm.code.trim()) {
+            alert("Veuillez saisir un code promo.");
+            return;
+          }
+          setIsCreatingPromo(true);
+          try {
+            await api.promo.create(promoForm);
+            setToast({ type: 'success', message: 'Code promo créé avec succès !' });
+            setPromoForm({
+              code: '',
+              type: 'percentage',
+              value: 10,
+              start_date: '',
+              end_date: '',
+              max_uses: '',
+              max_per_user: 1
+            });
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: err.message });
+          } finally {
+            setIsCreatingPromo(false);
+          }
+        };
+
+        const handleDeletePromo = async (codeToDelete: string) => {
+          if (!confirm(`Voulez-vous vraiment supprimer le code promo ${codeToDelete} ?`)) return;
+          try {
+            await api.promo.delete(codeToDelete);
+            setToast({ type: 'success', message: 'Code promo supprimé avec succès !' });
+            await fetchData();
+          } catch (err: any) {
+            setToast({ type: 'error', message: err.message });
+          }
+        };
+
+        return (
+          <div className="space-y-8">
+            <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Gestion des Codes Promotionnels</h3>
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Créez et gérez les ristournes appliquées sur les courses</p>
+                </div>
+                <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+                  <BadgePercent className="w-6 h-6" />
+                </div>
+              </div>
+
+              <form onSubmit={handleCreatePromo} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 items-end">
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Code (Ex: PANCHO25)</label>
+                  <input 
+                    type="text" 
+                    placeholder="PANCHO20"
+                    value={promoForm.code}
+                    onChange={e => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs uppercase placeholder:text-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Type</label>
+                  <select 
+                    value={promoForm.type}
+                    onChange={e => setPromoForm({ ...promoForm, type: e.target.value as any })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs appearance-none"
+                  >
+                    <option value="percentage">Pourcentage (%)</option>
+                    <option value="fixed">Montant fixe (FCFA)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Valeur (Ex: 20 ou 500)</label>
+                  <input 
+                    type="number" 
+                    value={promoForm.value}
+                    onChange={e => setPromoForm({ ...promoForm, value: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Limite utilisations</label>
+                  <input 
+                    type="number" 
+                    placeholder="Illimité"
+                    value={promoForm.max_uses}
+                    onChange={e => setPromoForm({ ...promoForm, max_uses: e.target.value })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs placeholder:text-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Date Fin (Optionnelle)</label>
+                  <input 
+                    type="date" 
+                    value={promoForm.end_date}
+                    onChange={e => setPromoForm({ ...promoForm, end_date: e.target.value })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Uti. max par client</label>
+                  <input 
+                    type="number" 
+                    value={promoForm.max_per_user}
+                    onChange={e => setPromoForm({ ...promoForm, max_per_user: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs"
+                  />
+                </div>
+                <div className="md:col-span-2 font-black">
+                  <button 
+                    type="submit"
+                    disabled={isCreatingPromo}
+                    className="w-full py-4 bg-slate-900 hover:bg-orange-600 text-white font-extrabold uppercase tracking-widest text-[9px] rounded-xl transition-all"
+                  >
+                    {isCreatingPromo ? "Création..." : "Enregistrer le code promo"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="space-y-3">
+                {promoCodes.length === 0 ? (
+                  <p className="text-center py-10 text-slate-400 text-xs font-bold uppercase tracking-widest">Aucun code promo actif actuellement.</p>
+                ) : (
+                  promoCodes.map((promo: any) => (
+                    <div key={promo.code} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between hover:bg-white transition-all shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl font-black text-xs">
+                          {promo.code}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                            {promo.type === 'percentage' ? `Réduction: -${promo.value}%` : `Réduction: -${promo.value} FCFA`}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400 tracking-wider">
+                            Utilisé {promo.uses_count} fois {promo.max_uses ? `sur un maximum de ${promo.max_uses}` : '(Sans limite globale)'} • Max par utilisateur : {promo.max_per_user}
+                          </p>
+                          {promo.end_date && (
+                            <p className="text-[9px] font-bold text-red-500 mt-1 uppercase">Expire le : {new Date(promo.end_date).toLocaleDateString()}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeletePromo(promo.code)}
+                        className="p-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-all border border-red-100"
+                      >
+                        <Trash2 className="w-4 h-4 shrink-0" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
       default:
         return (
           <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-slate-100 shadow-sm text-center px-10">

@@ -205,7 +205,8 @@ const colsToAdd = [
   { name: 'isUrgent', type: 'INTEGER DEFAULT 0' },
   { name: 'urgentFee', type: 'REAL DEFAULT 0' },
   { name: 'boostAmount', type: 'REAL DEFAULT 0' },
-  { name: 'lastMessageAt', type: 'TEXT' }
+  { name: 'lastMessageAt', type: 'TEXT' },
+  { name: 'cancelReason', type: 'TEXT' }
 ];
 
 colsToAdd.forEach(col => {
@@ -346,6 +347,37 @@ try {
   console.log("Database: Created table historique_gains if not exists");
 } catch (err) {
   console.error("Failed to create table historique_gains", err);
+}
+
+// Create promo_codes and promo_usages tables
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS promo_codes (
+      code TEXT PRIMARY KEY,
+      type TEXT NOT NULL, -- percentage, fixed
+      value REAL NOT NULL,
+      start_date TEXT, -- ISO Date string
+      end_date TEXT,   -- ISO Date string
+      max_uses INTEGER, -- maximum total usages (< 0 or NULL for unlimited)
+      uses_count INTEGER DEFAULT 0,
+      max_per_user INTEGER DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS promo_usages (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      userId TEXT NOT NULL,
+      deliveryId TEXT,
+      used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(code) REFERENCES promo_codes(code),
+      FOREIGN KEY(userId) REFERENCES users(userId)
+    );
+  `);
+  console.log("Database: Created promo tables if not exists");
+} catch (err) {
+  console.error("Failed to create promo tables:", err);
 }
 
 export default db;

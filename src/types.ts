@@ -199,6 +199,7 @@ export interface DeliveryRequest {
   lastMessageAt?: string;
   clientPhone?: string;
   notes?: string;
+  cancelReason?: string;
 
   createdAt: string;
   updatedAt: string;

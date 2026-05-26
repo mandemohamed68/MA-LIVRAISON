@@ -232,6 +232,7 @@ export default function CreateDelivery() {
   // Promo Code
   const [promoCode, setPromoCode] = useState("");
   const [discount, setDiscount] = useState(0);
+  const [pricingRules, setPricingRules] = useState<any[]>([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
     "cash" | "aggregator" | "ussd" | "orange" | "moov" | "telecel" | "coris"
   >("cash");
@@ -249,6 +250,9 @@ export default function CreateDelivery() {
             maxSimultaneousDeliveries: 3
           } as any);
         }
+        
+        const rules = await api.config.get('pricing_rules').catch(() => []);
+        setPricingRules(Array.isArray(rules) ? rules : []);
       } catch (e) {
         console.error("Error fetching commissions locally:", e);
       }
@@ -282,15 +286,23 @@ export default function CreateDelivery() {
     };
   }, [profile?.userId]);
 
-  const handleApplyPromo = () => {
-    if (promoCode.toUpperCase() === "LIVRAISON100") {
-      setDiscount(100);
-      alert("Promo de 100 F appliquée !");
-    } else if (promoCode.toUpperCase() === "FREE") {
-      setDiscount(500);
-      alert("Promo de 500 F appliquée !");
-    } else {
-      alert("Code Invalide");
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) {
+      alert("Veuillez saisir un code promo.");
+      return;
+    }
+    const preDiscountCost = estimatedCost + discount || 1000;
+    try {
+      const res = await api.promo.validate(promoCode, preDiscountCost);
+      if (res.valid) {
+        setDiscount(res.discount);
+        alert(`Ristourne de ${res.discount} FCFA appliquée !`);
+      } else {
+        alert("Code promo invalide : " + (res.reason || "non éligible"));
+        setDiscount(0);
+      }
+    } catch (err: any) {
+      alert("Erreur validation : " + (err.message || err));
       setDiscount(0);
     }
   };
@@ -315,19 +327,32 @@ export default function CreateDelivery() {
 
       const calculatePrice = (distToUse: number) => {
         let basePrice = 0;
+        const currentWeight = Number(weight || 0);
 
-        if (vehicleType === "moto") {
-          if (distToUse <= 10) basePrice = 1000;
-          else if (distToUse <= 15) basePrice = 1500;
-          else basePrice = 1500 + Math.ceil(distToUse - 15) * 150;
-        } else if (vehicleType === "tricycle") {
-          basePrice = 3000 + (distToUse > 5 ? Math.ceil(distToUse - 5) * 250 : 0);
-        } else if (vehicleType === "camionnette") {
-          basePrice = 7500 + (distToUse > 5 ? Math.ceil(distToUse - 5) * 500 : 0);
+        // Find match in dynamic admin configured pricing rules
+        const matchedRule = pricingRules.find((rule: any) => 
+          rule.vehicleType === vehicleType && 
+          currentWeight >= rule.poidsMin && 
+          currentWeight <= rule.poidsMax
+        );
+
+        if (matchedRule) {
+          basePrice = matchedRule.baseCost + Math.ceil(distToUse) * matchedRule.tarifKm;
+        } else {
+          // Standard Fallback pricing algorithm
+          if (vehicleType === "moto") {
+            if (distToUse <= 10) basePrice = 1000;
+            else if (distToUse <= 15) basePrice = 1500;
+            else basePrice = 1500 + Math.ceil(distToUse - 15) * 150;
+          } else if (vehicleType === "tricycle") {
+            basePrice = 3000 + (distToUse > 5 ? Math.ceil(distToUse - 5) * 250 : 0);
+          } else if (vehicleType === "camionnette") {
+            basePrice = 7500 + (distToUse > 5 ? Math.ceil(distToUse - 5) * 500 : 0);
+          }
         }
 
         if (vehicleType === "moto") {
-          basePrice += Number(weight || 0) * 100;
+          basePrice += currentWeight * 100;
         }
 
         if (isUrgent) {
@@ -402,6 +427,13 @@ export default function CreateDelivery() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
+      if (discount > 0 && promoCode.trim()) {
+        try {
+          await api.promo.use(promoCode.trim());
+        } catch (couponErr) {
+          console.error("Promo record usage error:", couponErr);
+        }
+      }
       navigate(`/delivery/${newDelivery.id}`);
     } catch (e: any) {
       console.error(e);

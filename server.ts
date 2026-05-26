@@ -1066,6 +1066,271 @@ async function startServer() {
     }
   });
 
+  // --- COURSE CANCELLATION ENDPOINTS ---
+  app.post("/api/courses/:id/annuler", authenticate, (req: any, res) => {
+    const { id } = req.params;
+    const { motif } = req.body;
+
+    if (!motif) {
+      return res.status(400).json({ error: "Un motif d'annulation est obligatoire." });
+    }
+
+    try {
+      const delivery = db.prepare("SELECT * FROM deliveries WHERE id = ?").get(id) as any;
+      if (!delivery) {
+        return res.status(404).json({ error: "Course introuvable." });
+      }
+
+      // Check access permission
+      if (req.user.role !== 'admin' && req.user.role !== 'superadmin' && delivery.clientId !== req.user.userId) {
+        return res.status(403).json({ error: "Vous n’êtes pas autorisé à annuler cette course." });
+      }
+
+      // Check payment status
+      if (delivery.isPaid === 1) {
+        return res.status(400).json({ error: "Impossible d'annuler une course déjà payée." });
+      }
+
+      // Set status to cancelled and write reason
+      db.prepare(`
+        UPDATE deliveries 
+        SET status = 'cancelled', cancelReason = ?, updatedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(motif, id);
+
+      // Notify the driver if any is assigned
+      if (delivery.driverId) {
+        db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+          .run(
+            uuidv4(), 
+            delivery.driverId, 
+            'Course annulée par le client 🛑', 
+            `La course #${id.slice(-6).toUpperCase()} a été annulée par le client. Motif: ${motif}`, 
+            'warning'
+          );
+      }
+
+      // Notify other pending bidders
+      const activeBids = db.prepare("SELECT driverId FROM bids WHERE deliveryId = ? AND status = 'pending'").all(id) as any[];
+      activeBids.forEach(bid => {
+        db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+          .run(
+            uuidv4(), 
+            bid.driverId, 
+            'Course annulée 🛑', 
+            `La course #${id.slice(-6).toUpperCase()} sur laquelle vous aviez postulé a été annulée par le client.`, 
+            'info'
+          );
+      });
+
+      // Reject all bids on this course
+      db.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ?").run(id);
+
+      res.json({ message: "Course annulée avec succès." });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Erreur lors de l'annulation de la course : " + err.message });
+    }
+  });
+
+  app.post("/api/deliveries/:id/cancel", authenticate, (req: any, res) => {
+    const { id } = req.params;
+    const { motif, reason } = req.body;
+    const selectedMotif = motif || reason || "Je ne veux plus";
+
+    try {
+      const delivery = db.prepare("SELECT * FROM deliveries WHERE id = ?").get(id) as any;
+      if (!delivery) {
+        return res.status(404).json({ error: "Course introuvable." });
+      }
+
+      if (req.user.role !== 'admin' && req.user.role !== 'superadmin' && delivery.clientId !== req.user.userId) {
+        return res.status(403).json({ error: "Vous n’êtes pas autorisé à annuler cette course." });
+      }
+
+      if (delivery.isPaid === 1) {
+        return res.status(400).json({ error: "Impossible d'annuler une course déjà payée." });
+      }
+
+      db.prepare(`
+        UPDATE deliveries 
+        SET status = 'cancelled', cancelReason = ?, updatedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(selectedMotif, id);
+
+      if (delivery.driverId) {
+        db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+          .run(
+            uuidv4(), 
+            delivery.driverId, 
+            'Course annulée par le client 🛑', 
+            `La course #${id.slice(-6).toUpperCase()} a été annulée par le client. Motif: ${selectedMotif}`, 
+            'warning'
+          );
+      }
+
+      // Notify potential bidders
+      const activeBids = db.prepare("SELECT driverId FROM bids WHERE deliveryId = ? AND status = 'pending'").all(id) as any[];
+      activeBids.forEach(bid => {
+        db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")
+          .run(
+            uuidv4(), 
+            bid.driverId, 
+            'Course annulée 🛑', 
+            `La course #${id.slice(-6).toUpperCase()} sur laquelle vous aviez postulé a été annulée par le client.`, 
+            'info'
+          );
+      });
+
+      db.prepare("UPDATE bids SET status = 'rejected', updatedAt = CURRENT_TIMESTAMP WHERE deliveryId = ?").run(id);
+
+      res.json({ message: "Course annulée avec succès." });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Erreur lors de l'annulation de la course : " + err.message });
+    }
+  });
+
+  // --- PROMO CODE ENDPOINTS ---
+  app.post("/api/promo/validate", authenticate, (req: any, res) => {
+    const { code, amount } = req.body;
+    if (!code) {
+      return res.status(400).json({ error: "Le code promo est requis." });
+    }
+    const cleanCode = code.trim().toUpperCase();
+
+    try {
+      const promo = db.prepare("SELECT * FROM promo_codes WHERE code = ?").get(cleanCode) as any;
+      if (!promo) {
+        return res.status(404).json({ error: "Code promo invalide." });
+      }
+
+      if (promo.is_active === 0) {
+        return res.status(400).json({ error: "Ce code promo n'est plus actif." });
+      }
+
+      const nowStr = new Date().toISOString();
+      if (promo.start_date && promo.start_date > nowStr) {
+        return res.status(400).json({ error: "Ce code promo n'est pas encore valide." });
+      }
+
+      if (promo.end_date && promo.end_date < nowStr) {
+        return res.status(400).json({ error: "Ce code promo a expiré." });
+      }
+
+      if (promo.max_uses !== null && promo.max_uses >= 0 && promo.uses_count >= promo.max_uses) {
+        return res.status(400).json({ error: "Ce code promo a atteint sa limite d'utilisation globale." });
+      }
+
+      // Check per-user limit
+      const usageCount = db.prepare("SELECT COUNT(*) as count FROM promo_usages WHERE code = ? AND userId = ?").get(cleanCode, req.user.userId) as any;
+      if (usageCount && usageCount.count >= promo.max_per_user) {
+        return res.status(400).json({ error: "Vous avez déjà utilisé ce code promo." });
+      }
+
+      // Calculate discount
+      let discount = 0;
+      if (promo.type === 'percentage') {
+        discount = amount * (promo.value / 100);
+      } else {
+        discount = promo.value;
+      }
+
+      if (discount > amount) {
+        discount = amount;
+      }
+
+      res.json({
+        success: true,
+        code: promo.code,
+        type: promo.type,
+        value: promo.value,
+        discount: Math.round(discount)
+      });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Erreur lors de la validation du code promo: " + err.message });
+    }
+  });
+
+  app.post("/api/promo/use", authenticate, (req: any, res) => {
+    const { code, deliveryId } = req.body;
+    if (!code) return res.status(400).json({ error: "Code requis" });
+    const cleanCode = code.trim().toUpperCase();
+
+    try {
+      const promo = db.prepare("SELECT * FROM promo_codes WHERE code = ? AND is_active = 1").get(cleanCode) as any;
+      if (!promo) return res.status(404).json({ error: "Code promo introuvable ou inactif" });
+
+      const usageId = uuidv4();
+      db.prepare("INSERT INTO promo_usages (id, code, userId, deliveryId) VALUES (?, ?, ?, ?)")
+        .run(usageId, cleanCode, req.user.userId, deliveryId || null);
+
+      db.prepare("UPDATE promo_codes SET uses_count = uses_count + 1 WHERE code = ?").run(cleanCode);
+
+      res.json({ success: true, usageId });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Erreur d'utilisation du code promo" });
+    }
+  });
+
+  // Admin promo routes under standard protection
+  app.get("/api/admin/promo", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Accès refusé." });
+    }
+    try {
+      const promos = db.prepare("SELECT * FROM promo_codes ORDER BY created_at DESC").all();
+      res.json(promos);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/promo", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Accès refusé." });
+    }
+    const { code, type, value, start_date, end_date, max_uses, max_per_user } = req.body;
+    if (!code || !type || value === undefined) {
+      return res.status(400).json({ error: "Champs obligatoires manquants." });
+    }
+    const cleanCode = code.trim().toUpperCase();
+
+    try {
+      db.prepare(`
+        INSERT OR REPLACE INTO promo_codes (code, type, value, start_date, end_date, max_uses, max_per_user, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(
+        cleanCode, 
+        type, 
+        value, 
+        start_date || null, 
+        end_date || null, 
+        max_uses !== undefined && max_uses !== '' ? Number(max_uses) : null, 
+        max_per_user !== undefined && max_per_user !== '' ? Number(max_per_user) : 1
+      );
+      res.json({ success: true, code: cleanCode });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/promo/:code", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Accès refusé." });
+    }
+    const { code } = req.params;
+    try {
+      db.prepare("DELETE FROM promo_usages WHERE code = ?").run(code);
+      db.prepare("DELETE FROM promo_codes WHERE code = ?").run(code);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/deliveries/:id/tracking", authenticate, (req: any, res) => {
     const { id } = req.params;
     const { lat, lng } = req.body;

@@ -85,6 +85,7 @@ export const api = {
       place: (id: string, data: any) => request(`/deliveries/${id}/bids`, 'POST', data),
       decline: (id: string, driverId: string) => request(`/deliveries/${id}/bids/${driverId}/decline`, 'POST'),
     },
+    cancel: (id: string, motif: string) => request(`/courses/${id}/annuler`, 'POST', { motif }),
     coursesNegotiations: {
       accepter: (id: string, driverId: string, price: number) => request(`/courses/${id}/accepter-proposition`, 'POST', { driverId, price }),
       rejeter: (id: string, driverId: string) => request(`/courses/${id}/rejeter-proposition`, 'POST', { driverId }),
@@ -137,5 +138,12 @@ export const api = {
     list: () => request('/sectors'),
     create: (data: any) => request('/sectors', 'POST', data),
     delete: (id: string) => request(`/sectors/${id}`, 'DELETE'),
+  },
+  promo: {
+    validate: (code: string, amount: number) => request('/promo/validate', 'POST', { code, amount }),
+    use: (code: string, deliveryId?: string) => request('/promo/use', 'POST', { code, deliveryId }),
+    list: () => request('/admin/promo'),
+    create: (data: any) => request('/admin/promo', 'POST', data),
+    delete: (code: string) => request(`/admin/promo/${code}`, 'DELETE'),
   }
 };
