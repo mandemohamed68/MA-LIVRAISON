@@ -329,7 +329,10 @@ export default function PaymentModal({
         } catch (e) {
           throw new Error("Format de réponse OTP invalide.");
         }
-        if (otpData.trans_id) setSappayTransId(otpData.trans_id);
+        
+        // Correctly extract trans_id for Moov/Coris (often inside response object)
+        const tId = otpData.trans_id || otpData.response?.trans_id || otpData.response?.transactionId;
+        if (tId) setSappayTransId(tId);
       } else {
         setSappayTransId('');
       }
