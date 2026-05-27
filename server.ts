@@ -730,6 +730,17 @@ async function startServer() {
   });
 
   // --- ADMIN ENDPOINTS (Mapped to obscure names to bypass firewall blocks) ---
+  // --- SYSTEM INFO ---
+  app.get("/api/admin/system/db-info", authenticate, (req: any, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') return res.status(403).json({ error: "Access denied" });
+    const useMariaDB = process.env.DB_HOST !== undefined;
+    res.json({ 
+      engine: useMariaDB ? 'MariaDB' : 'SQLite (Local)',
+      host: process.env.DB_HOST || 'local',
+      database: process.env.DB_NAME || 'local.db'
+    });
+  });
+
   app.get("/api/user-directory", authenticate, (req: any, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/user-directory, but role is: '${req.user.role}'`);

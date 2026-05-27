@@ -169,6 +169,18 @@ export default function DriverDashboard() {
     rib: ''
   });
 
+  const openVerificationModal = () => {
+    setVerificationForm({
+      guarantorName: profile?.guarantorName || '',
+      guarantorPhone: profile?.guarantorPhone || '',
+      cniFront: profile?.identityCardUrl || '',
+      cniBack: profile?.identityCardBackUrl || '',
+      criminalRecord: profile?.criminalRecordUrl || '',
+      rib: profile?.rib || ''
+    });
+    setIsVerificationModalOpen(true);
+  };
+
   const handleVerificationSubmit = async () => {
     if (!profile) return;
     setIsProcessingAction(true);
@@ -1217,6 +1229,29 @@ export default function DriverDashboard() {
                     </motion.div>
                  )}
 
+                 {(!profile?.identityCardUrl || !profile?.guarantorName) && (
+                    <motion.div 
+                       initial={{ y: 20, opacity: 0 }}
+                       animate={{ y: 0, opacity: 1 }}
+                       className="absolute top-24 left-6 right-6 z-[40]"
+                    >
+                       <div className="bg-indigo-600 p-4 rounded-2xl shadow-xl flex items-center justify-between gap-4 border border-indigo-400">
+                          <div className="flex items-center gap-3">
+                             <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white">
+                                <ShieldCheck className="w-4 h-4" />
+                             </div>
+                             <div>
+                                <p className="text-[10px] font-black text-white uppercase tracking-wider leading-none">Dossier incomplet</p>
+                                <p className="text-[9px] text-indigo-100 mt-1 font-bold">Complétez vos documents pour gagner en confiance.</p>
+                             </div>
+                          </div>
+                          <button onClick={openVerificationModal} className="px-3 py-2 bg-white text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0">
+                             Compléter
+                          </button>
+                       </div>
+                    </motion.div>
+                 )}
+
                  {isOnline && filteredPendingJobs.length === 0 && activeJobs.length === 0 && !selectedPendingJob && (
                     <motion.div 
                       initial={{ y: 50, opacity: 0 }}
@@ -1503,7 +1538,7 @@ export default function DriverDashboard() {
                 </div>
 
                 <div className="space-y-4">
-                  <button onClick={() => setIsVerificationModalOpen(true)} className="w-full bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex items-center justify-between hover:bg-slate-50">
+                  <button onClick={openVerificationModal} className="w-full bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex items-center justify-between hover:bg-slate-50">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500"><ShieldCheck className="w-5 h-5"/></div>
                       <div>

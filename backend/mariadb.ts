@@ -23,7 +23,10 @@ export default function initMariaDB() {
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorName varchar(255) DEFAULT NULL AFTER idCardBack");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorPhone varchar(50) DEFAULT NULL AFTER guarantorName");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorCniUrl text DEFAULT NULL AFTER guarantorPhone");
-    console.log("MariaDB: Vérification/Ajout des colonnes de profil réussie.");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS criminalRecordUrl text DEFAULT NULL AFTER guarantorCniUrl");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS verificationStatus varchar(50) DEFAULT 'unverified'");
+    connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
+    console.log("MariaDB: Vérification/Ajout des colonnes de profil et système réussie.");
   } catch (err: any) {
     console.warn("Migration MariaDB (profil) ignorée ou échouée:", err.message);
   }

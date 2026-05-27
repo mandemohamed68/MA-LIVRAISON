@@ -211,15 +211,36 @@ const colsToAdd = [
   { name: 'cancelReason', type: 'TEXT' }
 ];
 
+const withdrawCols = [
+  { name: 'withdrawalInfo', type: 'TEXT' }
+];
+
+const userCols = [
+  { name: 'rib', type: 'TEXT' },
+  { name: 'guarantorName', type: 'TEXT' },
+  { name: 'guarantorPhone', type: 'TEXT' },
+  { name: 'identityCardUrl', type: 'TEXT' },
+  { name: 'identityCardBackUrl', type: 'TEXT' },
+  { name: 'criminalRecordUrl', type: 'TEXT' },
+  { name: 'verificationStatus', type: 'TEXT' }
+];
+
 colsToAdd.forEach(col => {
   try {
     db.exec(`ALTER TABLE deliveries ADD COLUMN ${col.name} ${col.type}`);
-    console.log(`Migration: Added column ${col.name} to deliveries table`);
-  } catch (err: any) {
-    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
-      console.warn(`Migration notice for column ${col.name}:`, err.message);
-    }
-  }
+  } catch (err) {}
+});
+
+withdrawCols.forEach(col => {
+  try {
+    db.exec(`ALTER TABLE withdrawals ADD COLUMN ${col.name} ${col.type}`);
+  } catch (err) {}
+});
+
+userCols.forEach(col => {
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`);
+  } catch (err) {}
 });
 
 // MIGRATION: Upgrade the check constraint on 'role' in 'users' table to support 'superadmin'

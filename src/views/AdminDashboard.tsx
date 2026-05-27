@@ -48,6 +48,7 @@ export default function AdminDashboard() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [isExecutingSql, setIsExecutingSql] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dbInfo, setDbInfo] = useState<{ engine: string; host: string; database: string } | null>(null);
   const [activeMenu, setActiveMenu] = useState(queryTab || 'Vue d\'ensemble');
   const [isSaving, setIsSaving] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -217,6 +218,18 @@ export default function AdminDashboard() {
   }, [deliveries, users]);
 
   const fetchData = async () => {
+    try {
+      const dbResponse = await fetch('/api/admin/system/db-info', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (dbResponse.ok) {
+        const dbData = await dbResponse.json();
+        setDbInfo(dbData);
+      }
+    } catch (err) {
+      console.warn("Could not fetch DB info", err);
+    }
+
     try {
       const [usersList, deliveriesList, configData, commissionsData, sectorsData, announcementsData, withdrawalsList, promoList, rulesList] = await Promise.all([
         api.admin.users.list().then(res => res || []).catch(() => []),
@@ -2920,6 +2933,30 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-slate-100">
+            <button onClick={() => {logout(); navigate('/');}} className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-xl transition-all mb-6">
+              <LogOut className="w-4 h-4" />
+              Déconnexion
+            </button>
+
+            {dbInfo && (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-2 mb-2">
+                   <Database className="w-3 h-3 text-indigo-500" />
+                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Base active</span>
+                </div>
+                <div className="flex justify-between items-center">
+                   <span className="text-[10px] font-black text-slate-700">{dbInfo.engine}</span>
+                   <div className="flex items-center gap-1">
+                      <div className={cn("w-1.5 h-1.5 rounded-full", dbInfo.engine === 'MariaDB' ? 'bg-emerald-500' : 'bg-amber-500 animated-pulse')}></div>
+                      <span className="text-[8px] font-bold text-slate-400 uppercase">Live</span>
+                   </div>
+                </div>
+                <p className="text-[8px] font-medium text-slate-400 mt-1 truncate">{dbInfo.database}</p>
+              </div>
+            )}
           </div>
         </div>
       </aside>
