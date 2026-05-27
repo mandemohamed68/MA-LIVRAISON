@@ -1,7 +1,6 @@
 import mysql2 from 'mysql2';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const SyncMysql = require('sync-mysql');
+// @ts-ignore
+import SyncMysql from 'sync-mysql';
 
 console.log("Connecté à MariaDB via sync-mysql.");
 

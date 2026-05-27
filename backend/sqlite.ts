@@ -211,11 +211,11 @@ const colsToAdd = [
 
 colsToAdd.forEach(col => {
   try {
-    db.exec(\`ALTER TABLE deliveries ADD COLUMN \${col.name} \${col.type}\`);
-    console.log(\`Migration: Added column \${col.name} to deliveries table\`);
+    db.exec(`ALTER TABLE deliveries ADD COLUMN ${col.name} ${col.type}`);
+    console.log(`Migration: Added column ${col.name} to deliveries table`);
   } catch (err: any) {
     if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
-      console.warn(\`Migration notice for column \${col.name}:\`, err.message);
+      console.warn(`Migration notice for column ${col.name}:`, err.message);
     }
   }
 });
@@ -235,7 +235,7 @@ try {
       db.exec("ALTER TABLE users RENAME TO _users_old;");
       
       // Create new table with updated constraints
-      db.exec(\`
+      db.exec(`
         CREATE TABLE users (
           id TEXT PRIMARY KEY,
           userId TEXT UNIQUE,
@@ -258,7 +258,7 @@ try {
           earnings REAL DEFAULT 0,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         );
-      \`);
+      `);
       
       const pragmaOld = db.prepare("PRAGMA table_info(_users_old)").all() as Array<{ name: string }>;
       const pragmaNew = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
@@ -268,7 +268,7 @@ try {
       
       const commonCols = newColNames.filter(c => oldColNames.has(c)).join(', ');
       
-      db.exec(\`INSERT INTO users (\${commonCols}) SELECT \${commonCols} FROM _users_old;\`);
+      db.exec(`INSERT INTO users (${commonCols}) SELECT ${commonCols} FROM _users_old;`);
       
       // Drop old table
       db.exec("DROP TABLE _users_old;");
@@ -285,11 +285,11 @@ try {
 // MIGRATIONS: Add columns if they do not exist
 function addColumnIfNotExists(tableName: string, columnName: string, columnDef: string) {
   try {
-    db.exec(\`ALTER TABLE \${tableName} ADD COLUMN \${columnName} \${columnDef}\`);
-    console.log(\`Migration: Added \${columnName} to \${tableName}\`);
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+    console.log(`Migration: Added ${columnName} to ${tableName}`);
   } catch (e: any) {
     if (!e.message.includes('duplicate column name')) {
-      console.warn(\`Migration notice for \${tableName}.\${columnName}: \${e.message}\`);
+      console.warn(`Migration notice for ${tableName}.${columnName}: ${e.message}`);
     }
   }
 }
@@ -328,7 +328,7 @@ addColumnIfNotExists('bids', 'attempts', "INTEGER DEFAULT 1");
 
 // Create historique_gains table
 try {
-  db.exec(\`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS historique_gains (
       id TEXT PRIMARY KEY,
       driverId TEXT NOT NULL,
@@ -337,7 +337,7 @@ try {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(driverId) REFERENCES users(userId)
     );
-  \`);
+  `);
   console.log("Database: Created table historique_gains if not exists");
 } catch (err) {
   console.error("Failed to create table historique_gains", err);
@@ -345,7 +345,7 @@ try {
 
 // Create promo_codes and promo_usages tables
 try {
-  db.exec(\`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS promo_codes (
       code TEXT PRIMARY KEY,
       type TEXT NOT NULL, -- percentage, fixed
@@ -368,7 +368,7 @@ try {
       FOREIGN KEY(code) REFERENCES promo_codes(code),
       FOREIGN KEY(userId) REFERENCES users(userId)
     );
-  \`);
+  `);
   console.log("Database: Created promo tables if not exists");
 } catch (err) {
   console.error("Failed to create promo tables:", err);
