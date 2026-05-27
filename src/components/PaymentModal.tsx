@@ -292,9 +292,9 @@ export default function PaymentModal({
       setSappayInvoiceId(initData.invoice_id);
       setSappayAccessToken(initData.access_token);
 
-      // 2. Déclenchement OTP : obligatoire pour Moov Money et Coris Money, mais pas pour Orange ou Telecel
-      const isMoovOrCoris = selectedMethod === 'moov' || selectedMethod === 'coris';
-      if (isMoovOrCoris) {
+      // 2. Déclenchement OTP : obligatoire pour Moov Money, Coris Money et Telecel Money
+      const needsOtpInitiation = selectedMethod === 'moov' || selectedMethod === 'coris';
+      if (needsOtpInitiation) {
         const otpRes = await fetch(getApiUrl('/api/payment/sappay/get-otp'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -752,7 +752,7 @@ export default function PaymentModal({
                         {selectedMethod === 'ussd' ? "Syntaxe Marchand" : `Validation ${methods.find(m => m.id === selectedMethod)?.name}`}
                       </h3>
                       
-                      {/* Only show USSD for pure USSD type or Orange/Telecel where push is not automatic */}
+                      {/* Only show USSD for pure USSD type or Orange where push is not automatic */}
                       {(methods.find(m => m.id === selectedMethod)?.type === 'ussd' || selectedMethod === 'orange' || selectedMethod === 'telecel') ? (
                         <div className="bg-white border-2 border-orange-100 rounded-2xl p-6 mt-4 shadow-inner">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center text-left">Composez sur votre mobile :</p>
@@ -831,7 +831,7 @@ export default function PaymentModal({
                             <div className="space-y-1 text-left">
                               <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none">Étape 1 : Initialisation</p>
                               <p className="text-[10px] font-bold text-blue-600/80 uppercase tracking-widest leading-relaxed">
-                                {selectedMethod === 'moov' || selectedMethod === 'coris' 
+                                {selectedMethod === 'moov' || selectedMethod === 'coris'
                                   ? "Entrez votre numéro. Nous allons envoyer une demande de code à votre opérateur." 
                                   : "Vérifiez votre numéro et générez votre code OTP via la syntaxe USSD."}
                               </p>
@@ -855,21 +855,21 @@ export default function PaymentModal({
                         <div className="space-y-6">
                           <div className={cn(
                             "rounded-2xl p-5 flex items-start gap-4 shadow-sm",
-                            selectedMethod === 'moov' || selectedMethod === 'coris' ? "bg-emerald-50 border border-emerald-100" : "bg-orange-50 border border-orange-100"
+                            (selectedMethod === 'moov' || selectedMethod === 'coris') ? "bg-emerald-50 border border-emerald-100" : "bg-orange-50 border border-orange-100"
                           )}>
-                            {selectedMethod === 'moov' || selectedMethod === 'coris' ? <Smartphone className="w-6 h-6 text-emerald-500 shrink-0" /> : <Clock className="w-6 h-6 text-orange-500 shrink-0" />}
+                            {(selectedMethod === 'moov' || selectedMethod === 'coris') ? <Smartphone className="w-6 h-6 text-emerald-500 shrink-0" /> : <Clock className="w-6 h-6 text-orange-500 shrink-0" />}
                             <div className="space-y-1 text-left">
                               <p className={cn(
                                 "text-[10px] font-black uppercase tracking-widest leading-none",
-                                selectedMethod === 'moov' || selectedMethod === 'coris' ? "text-emerald-700" : "text-orange-700"
+                                (selectedMethod === 'moov' || selectedMethod === 'coris') ? "text-emerald-700" : "text-orange-700"
                               )}>
                                 {methods.find(m => m.id === selectedMethod)?.name} : Validation
                               </p>
                               <p className={cn(
                                 "text-[10px] font-bold uppercase tracking-widest leading-relaxed",
-                                selectedMethod === 'moov' || selectedMethod === 'coris' ? "text-emerald-600/80" : "text-orange-600/80"
+                                (selectedMethod === 'moov' || selectedMethod === 'coris') ? "text-emerald-600/80" : "text-orange-600/80"
                               )}>
-                                {selectedMethod === 'moov' || selectedMethod === 'coris' 
+                                {(selectedMethod === 'moov' || selectedMethod === 'coris') 
                                   ? "Saisissez le code de validation reçu par SMS de votre opérateur."
                                   : "Saisissez le code de validation OTP généré via USSD."}
                               </p>
@@ -898,7 +898,7 @@ export default function PaymentModal({
                               />
                             </div>
 
-                            {selectedMethod === 'moov' && !sappayTransId && (
+                            {(selectedMethod === 'moov' || selectedMethod === 'coris') && !sappayTransId && (
                               <div className="pt-2">
                                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 pl-2 block italic text-left">Référence de Transaction SMS (TransId)</label>
                                 <input 
@@ -908,7 +908,7 @@ export default function PaymentModal({
                                   onChange={e => setSappayTransId(e.target.value)}
                                   className="w-full px-8 py-4 bg-slate-50 border-2 border-slate-100 rounded-[28px] font-extrabold text-center text-slate-600 focus:outline-none focus:border-orange-500 transition-all outline-none"
                                 />
-                                <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2 text-center italic text-left">Cet identifiant se trouve dans le SMS récapitulatif de Moov.</p>
+                                <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase mt-2 pl-2 text-center italic text-left">Cet identifiant se trouve dans le SMS récapitulatif de votre opérateur.</p>
                               </div>
                             )}
                           </div>
