@@ -220,7 +220,7 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     try {
       const dbResponse = await fetch('/api/admin/system/db-info', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
       });
       if (dbResponse.ok) {
         const dbData = await dbResponse.json();
@@ -2389,7 +2389,7 @@ export default function AdminDashboard() {
               <div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Exploration de la Base de Données</h3>
                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mt-1">
-                  Accès structuré aux tables Firestore "users", "deliveries", "settings"
+                   {dbInfo ? `Connecté à : ${dbInfo.engine} (${dbInfo.database})` : 'Récupération des informations de connexion...'}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -2941,8 +2941,8 @@ export default function AdminDashboard() {
               Déconnexion
             </button>
 
-            {dbInfo && (
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            {dbInfo ? (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mt-2">
                 <div className="flex items-center gap-2 mb-2">
                    <Database className="w-3 h-3 text-indigo-500" />
                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Base active</span>
@@ -2950,11 +2950,16 @@ export default function AdminDashboard() {
                 <div className="flex justify-between items-center">
                    <span className="text-[10px] font-black text-slate-700">{dbInfo.engine}</span>
                    <div className="flex items-center gap-1">
-                      <div className={cn("w-1.5 h-1.5 rounded-full", dbInfo.engine === 'MariaDB' ? 'bg-emerald-500' : 'bg-amber-500 animated-pulse')}></div>
+                      <div className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_5px]", dbInfo.engine === 'MariaDB' ? 'bg-emerald-500 shadow-emerald-500' : 'bg-amber-500 shadow-amber-500 animate-pulse')}></div>
                       <span className="text-[8px] font-bold text-slate-400 uppercase">Live</span>
                    </div>
                 </div>
-                <p className="text-[8px] font-medium text-slate-400 mt-1 truncate">{dbInfo.database}</p>
+                <p className="text-[8px] font-medium text-slate-400 mt-1 truncate max-w-full opacity-60">{dbInfo.database}</p>
+                <p className="text-[7px] text-slate-300 mt-0.5">{dbInfo.host}</p>
+              </div>
+            ) : (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-center p-2">
+                <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Récupération DB...</span>
               </div>
             )}
           </div>

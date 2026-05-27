@@ -732,7 +732,7 @@ async function startServer() {
   // --- ADMIN ENDPOINTS (Mapped to obscure names to bypass firewall blocks) ---
   // --- SYSTEM INFO ---
   app.get("/api/admin/system/db-info", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') return res.status(403).json({ error: "Access denied" });
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') return res.status(403).json({ error: "Access denied" });
     const useMariaDB = process.env.DB_HOST !== undefined;
     res.json({ 
       engine: useMariaDB ? 'MariaDB' : 'SQLite (Local)',
