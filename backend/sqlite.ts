@@ -155,6 +155,7 @@ try {
     status TEXT DEFAULT 'pending',
     method TEXT,
     phone TEXT,
+    withdrawalInfo TEXT,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     processedAt DATETIME,
     FOREIGN KEY(driverId) REFERENCES users(userId)
@@ -312,6 +313,12 @@ addColumnIfNotExists('users', 'withdrawalRequested', "INTEGER DEFAULT 0");
 addColumnIfNotExists('users', 'withdrawalAmount', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'withdrawalMethod', "TEXT");
 addColumnIfNotExists('users', 'withdrawalPhone', "TEXT");
+addColumnIfNotExists('users', 'rib', "TEXT");
+addColumnIfNotExists('users', 'idCardFront', "TEXT");
+addColumnIfNotExists('users', 'idCardBack', "TEXT");
+addColumnIfNotExists('users', 'guarantorName', "TEXT");
+addColumnIfNotExists('users', 'guarantorPhone', "TEXT");
+addColumnIfNotExists('users', 'guarantorCniUrl', "TEXT");
 addColumnIfNotExists('users', 'totalWithdrawn', "REAL DEFAULT 0");
 addColumnIfNotExists('users', 'withdrawalRequestedAt', "TEXT");
 addColumnIfNotExists('users', 'updatedAt', "TEXT");

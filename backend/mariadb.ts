@@ -17,9 +17,15 @@ export default function initMariaDB() {
   // MIGRATION: Auto-add withdrawalPhone column if missing
   try {
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawalPhone varchar(50) DEFAULT NULL AFTER phone");
-    console.log("MariaDB: Vérification/Ajout de la colonne withdrawalPhone réussie.");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS rib varchar(255) DEFAULT NULL AFTER withdrawalPhone");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS idCardFront text DEFAULT NULL AFTER rib");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS idCardBack text DEFAULT NULL AFTER idCardFront");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorName varchar(255) DEFAULT NULL AFTER idCardBack");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorPhone varchar(50) DEFAULT NULL AFTER guarantorName");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorCniUrl text DEFAULT NULL AFTER guarantorPhone");
+    console.log("MariaDB: Vérification/Ajout des colonnes de profil réussie.");
   } catch (err: any) {
-    console.warn("Migration MariaDB (withdrawalPhone) ignorée ou échouée:", err.message);
+    console.warn("Migration MariaDB (profil) ignorée ou échouée:", err.message);
   }
 
   return {

@@ -164,7 +164,9 @@ export default function DriverDashboard() {
     guarantorName: '',
     guarantorPhone: '',
     cniFront: null as string | null,
-    criminalRecord: null as string | null
+    cniBack: null as string | null,
+    criminalRecord: null as string | null,
+    rib: ''
   });
 
   const handleVerificationSubmit = async () => {
@@ -176,13 +178,16 @@ export default function DriverDashboard() {
         guarantorName: verificationForm.guarantorName,
         guarantorPhone: verificationForm.guarantorPhone,
         identityCardUrl: verificationForm.cniFront,
+        identityCardBackUrl: verificationForm.cniBack,
         criminalRecordUrl: verificationForm.criminalRecord,
+        rib: verificationForm.rib,
         updatedAt: new Date().toISOString()
       };
       await api.profile.update(updates);
       
       setIsVerificationModalOpen(false);
       setToastMessage("Dossier soumis avec succès !");
+      refreshProfile?.();
     } catch (e) {
       console.error(e);
       setToastMessage("Erreur lors de la soumission");
@@ -544,17 +549,36 @@ export default function DriverDashboard() {
 
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   const [withdrawalAmountInput, setWithdrawalAmountInput] = useState('');
+  const [withdrawalMethod, setWithdrawalMethod] = useState<'mobile_money' | 'bank_transfer'>('mobile_money');
+  const [withdrawalInfo, setWithdrawalInfo] = useState('');
+
+  const initWithdrawal = () => {
+    if (profile?.withdrawalPhone) {
+      setWithdrawalMethod('mobile_money');
+      setWithdrawalInfo(profile.withdrawalPhone);
+    } else if (profile?.rib) {
+      setWithdrawalMethod('bank_transfer');
+      setWithdrawalInfo(profile.rib);
+    } else {
+      setWithdrawalMethod('mobile_money');
+      setWithdrawalInfo('');
+    }
+    setIsWithdrawalModalOpen(true);
+  };
 
   const handleWithdrawal = async () => {
     const amount = Number(withdrawalAmountInput);
     if (!profile || earnings < 500) { setToastMessage("Solde insuffisant"); return; }
     if (!amount || amount < 500 || amount > earnings) { setToastMessage("Montant invalide"); return; }
+    if (!withdrawalInfo) { setToastMessage("Veuillez renseigner les coordonnées de retrait"); return; }
+    
     setIsWithdrawing(true);
     try {
       await api.withdrawals.create({
         amount: amount,
-        method: 'mobile_money',
-        phone: profile.phone || ''
+        method: withdrawalMethod,
+        phone: withdrawalMethod === 'mobile_money' ? withdrawalInfo : '',
+        withdrawalInfo: withdrawalInfo
       });
       setToastMessage("Votre demande a bien été envoyée à l'administrateur.");
       setIsWithdrawalModalOpen(false);
@@ -1308,7 +1332,7 @@ export default function DriverDashboard() {
                       </div>
                    </div>
                    
-                   <button onClick={() => setIsWithdrawalModalOpen(true)} disabled={earnings < 500} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95">
+                   <button onClick={initWithdrawal} disabled={earnings < 500} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95">
                       <ArrowRight className="w-3 h-3" /> Demander un retrait
                    </button>
                 </div>
@@ -1506,32 +1530,45 @@ export default function DriverDashboard() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center">
               <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="bg-white w-full max-w-md rounded-t-[40px] sm:rounded-3xl p-5 lg:p-6 max-h-[90vh] overflow-y-auto">
                  <div className="flex justify-between items-center mb-8">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Vérification Sécurisée</h3>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Dossier de Vérification</h3>
                     <button onClick={() => setIsVerificationModalOpen(false)} className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500"><X className="w-5 h-5" /></button>
                  </div>
 
                  <div className="space-y-6 mb-8">
                     <div>
-                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Identité du Guaranteur (Référence physique)</label>
+                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Identité du Guaranteur</label>
+                       <div className="space-y-2">
+                          <input 
+                             type="text" 
+                             placeholder="Nom complet du garant" 
+                             value={verificationForm.guarantorName} 
+                             onChange={e => setVerificationForm({...verificationForm, guarantorName: e.target.value})}
+                             className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 outline-none"
+                          />
+                          <input 
+                             type="tel" 
+                             placeholder="Téléphone du garant" 
+                             value={verificationForm.guarantorPhone} 
+                             onChange={e => setVerificationForm({...verificationForm, guarantorPhone: e.target.value})}
+                             className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 outline-none"
+                          />
+                       </div>
+                    </div>
+
+                    <div>
+                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">RIB / IBAN de Compensation (Opt.)</label>
                        <input 
                           type="text" 
-                          placeholder="Nom complet du garant" 
-                          value={verificationForm.guarantorName} 
-                          onChange={e => setVerificationForm({...verificationForm, guarantorName: e.target.value})}
+                          placeholder="Ex: CM21..." 
+                          value={verificationForm.rib} 
+                          onChange={e => setVerificationForm({...verificationForm, rib: e.target.value})}
                           className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 outline-none"
-                       />
-                       <input 
-                          type="tel" 
-                          placeholder="Téléphone du garant" 
-                          value={verificationForm.guarantorPhone} 
-                          onChange={e => setVerificationForm({...verificationForm, guarantorPhone: e.target.value})}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 outline-none mt-2"
                        />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Pièce d'identité</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">ID (Recto)</label>
                           <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.cniFront ? 'border-indigo-500' : '')}>
                              {verificationForm.cniFront ? (
                                 <img src={verificationForm.cniFront} className="w-full h-full object-cover" />
@@ -1542,38 +1579,35 @@ export default function DriverDashboard() {
                                 const file = e.target.files?.[0];
                                 if (file) {
                                    try {
-                                     setToastMessage("Compression de l'image...");
+                                     setToastMessage("Traitement...");
                                      const base64 = await compressImage(file);
                                      setVerificationForm({...verificationForm, cniFront: base64});
                                      setToastMessage("");
                                    } catch (err: any) {
-                                     setToastMessage(err.message || "Erreur de traitement de l'image");
+                                     setToastMessage(err.message || "Erreur image");
                                    }
                                 }
                              }} />
                           </div>
                        </div>
                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Casier Judiciaire</label>
-                          <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.criminalRecord ? 'border-indigo-500' : '')}>
-                             {verificationForm.criminalRecord ? (
-                                <div className="text-emerald-500 flex flex-col items-center">
-                                   <FileCheck className="w-8 h-8" />
-                                   <span className="text-[8px] font-bold mt-1">AJOUTÉ</span>
-                                </div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">ID (Verso)</label>
+                          <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.cniBack ? 'border-indigo-500' : '')}>
+                             {verificationForm.cniBack ? (
+                                <img src={verificationForm.cniBack} className="w-full h-full object-cover" />
                              ) : (
-                                <FileText className="w-6 h-6 text-slate-300" />
+                                <Camera className="w-6 h-6 text-slate-300" />
                              )}
-                             <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                             <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
                                 const file = e.target.files?.[0];
                                 if (file) {
                                    try {
-                                     setToastMessage("Compression du fichier...");
+                                     setToastMessage("Traitement...");
                                      const base64 = await compressImage(file);
-                                     setVerificationForm({...verificationForm, criminalRecord: base64});
+                                     setVerificationForm({...verificationForm, cniBack: base64});
                                      setToastMessage("");
                                    } catch (err: any) {
-                                     setToastMessage(err.message || "Erreur de traitement du fichier");
+                                     setToastMessage(err.message || "Erreur image");
                                    }
                                 }
                              }} />
@@ -1582,16 +1616,46 @@ export default function DriverDashboard() {
                     </div>
                  </div>
 
+                 <div className="space-y-2 mb-8">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block pb-2">Casier Judiciaire / Autres (Opt.)</label>
+                    <div className={cn("relative h-24 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.criminalRecord ? 'border-indigo-500' : '')}>
+                       {verificationForm.criminalRecord ? (
+                          <div className="text-emerald-500 flex flex-col items-center">
+                             <FileCheck className="w-8 h-8" />
+                             <span className="text-[8px] font-bold mt-1 uppercase tracking-widest">Document OK</span>
+                          </div>
+                       ) : (
+                          <div className="flex flex-col items-center text-slate-300">
+                            <FileText className="w-6 h-6" />
+                            <span className="text-[8px] font-black uppercase tracking-widest mt-1">PDF ou IMAGE</span>
+                          </div>
+                       )}
+                       <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                             try {
+                               setToastMessage("Traitement...");
+                               const base64 = await compressImage(file);
+                               setVerificationForm({...verificationForm, criminalRecord: base64});
+                               setToastMessage("");
+                             } catch (err: any) {
+                               setToastMessage(err.message || "Erreur fichier");
+                             }
+                          }
+                       }} />
+                    </div>
+                 </div>
+
                  <div className="bg-indigo-50 rounded-2xl p-4 border border-indigo-100 flex items-start gap-3 mb-8">
                     <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
                     <p className="text-[11px] font-medium text-indigo-700 leading-relaxed">
-                       Ces informations sont strictement confidentielles. Elles permettent de certifier votre compte et de protéger la plateforme contre les incidents.
+                       Ces informations sont strictement confidentielles. Elles permettent de certifier votre compte et de protéger la plateforme.
                     </p>
                  </div>
 
                  <button 
                   onClick={handleVerificationSubmit}
-                  disabled={!verificationForm.guarantorName || !verificationForm.guarantorPhone || !verificationForm.cniFront || isProcessingAction}
+                  disabled={isProcessingAction}
                   className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-200 disabled:opacity-50 active:scale-95 transition-all"
                  >
                     {isProcessingAction ? 'Envoi en cours...' : 'Soumettre mon dossier'}
@@ -1607,11 +1671,50 @@ export default function DriverDashboard() {
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsWithdrawalModalOpen(false)} />
               <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} className="bg-white rounded-3xl p-6 w-full max-w-sm relative z-10 shadow-2xl flex flex-col gap-6">
                  <div>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter mb-2">Montant du retrait</h2>
-                    <p className="text-xs text-slate-500">Combien souhaitez-vous retirer ? (Solde max: {earnings} FCFA)</p>
+                     <h2 className="text-2xl font-black text-slate-900 tracking-tighter mb-2">Retrait des gains</h2>
+                     <p className="text-[10px] text-slate-500 font-bold">Solde actuel : <span className="text-indigo-600 font-black">{earnings.toLocaleString('fr-FR')} FCFA</span></p>
                  </div>
                  
+                  <div className="space-y-4 mb-4">
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <button 
+                         onClick={() => {
+                           setWithdrawalMethod('mobile_money');
+                           setWithdrawalInfo(profile?.withdrawalPhone || '');
+                         }}
+                         type="button"
+                         className={cn("flex-1 py-1 px-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all", withdrawalMethod === 'mobile_money' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400')}
+                      >
+                         Mobile Money
+                      </button>
+                      <button 
+                         onClick={() => {
+                           setWithdrawalMethod('bank_transfer');
+                           setWithdrawalInfo(profile?.rib || '');
+                         }}
+                         type="button"
+                         className={cn("flex-1 py-1 px-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all", withdrawalMethod === 'bank_transfer' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400')}
+                      >
+                         RIB / IBAN
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 px-1">
+                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                          {withdrawalMethod === 'mobile_money' ? 'Numéro de retrait' : 'Coordonnées Bancaires (RIB)'}
+                       </label>
+                       <input 
+                          type="text" 
+                          placeholder={withdrawalMethod === 'mobile_money' ? "Ex: 0707..." : "Ex: CM21..."}
+                          value={withdrawalInfo}
+                          onChange={e => setWithdrawalInfo(e.target.value)}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold focus:border-indigo-500 outline-none"
+                       />
+                    </div>
+                  </div>
+
                  <div className="relative">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2 px-1">Montant à retirer</label>
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                        <span className="text-slate-400 font-bold">FCFA</span>
                     </div>
@@ -1628,7 +1731,7 @@ export default function DriverDashboard() {
                     <button onClick={() => setIsWithdrawalModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-colors">
                       Annuler
                     </button>
-                    <button onClick={handleWithdrawal} disabled={isWithdrawing || !withdrawalAmountInput || Number(withdrawalAmountInput) < 500 || Number(withdrawalAmountInput) > earnings} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50">
+                    <button onClick={handleWithdrawal} disabled={isWithdrawing || !withdrawalAmountInput || Number(withdrawalAmountInput) < 500 || Number(withdrawalAmountInput) > earnings || !withdrawalInfo} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50">
                       Confirmer
                     </button>
                  </div>

@@ -447,7 +447,14 @@ export default function AdminDashboard() {
     vehicleType: 'Moto',
     licensePlate: '',
     driverType: 'freelance',
-    sectors: []
+    sectors: [],
+    withdrawalPhone: '',
+    rib: '',
+    idCardFront: '',
+    idCardBack: '',
+    guarantorName: '',
+    guarantorPhone: '',
+    guarantorCniUrl: ''
   });
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -473,6 +480,13 @@ export default function AdminDashboard() {
         newUserProfile.licensePlate = newUserData.licensePlate;
         newUserProfile.driverType = newUserData.driverType;
         newUserProfile.sectors = JSON.stringify(newUserData.sectors);
+        newUserProfile.withdrawalPhone = newUserData.withdrawalPhone;
+        newUserProfile.rib = newUserData.rib;
+        newUserProfile.idCardFront = newUserData.idCardFront;
+        newUserProfile.idCardBack = newUserData.idCardBack;
+        newUserProfile.guarantorName = newUserData.guarantorName;
+        newUserProfile.guarantorPhone = newUserData.guarantorPhone;
+        newUserProfile.guarantorCniUrl = newUserData.guarantorCniUrl;
       }
 
       await api.admin.users.create(newUserProfile);
@@ -482,7 +496,9 @@ export default function AdminDashboard() {
       setNewUserData({
         role: 'client',
         name: '', email: '', phone: '', password: '',
-        vehicleType: 'Moto', licensePlate: '', driverType: 'freelance', sectors: []
+        vehicleType: 'Moto', licensePlate: '', driverType: 'freelance', sectors: [],
+        withdrawalPhone: '', rib: '', idCardFront: '', idCardBack: '',
+        guarantorName: '', guarantorPhone: '', guarantorCniUrl: ''
       });
     } catch (err: any) {
       console.error(err);
@@ -1030,6 +1046,11 @@ export default function AdminDashboard() {
                     {u.role === 'driver' && u.verificationStatus === 'pending' && (
                       <div className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-[8px] font-black uppercase tracking-widest animate-pulse border border-blue-200">
                          Dossier à vérifier
+                      </div>
+                    )}
+                    {u.role === 'driver' && (!u.idCardFront || !u.idCardBack || !u.guarantorName) && (
+                      <div className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[8px] font-black uppercase tracking-widest border border-rose-100">
+                         Dossier Incomplet
                       </div>
                     )}
                     {u.accountStatus === 'pending_approval' && (
@@ -3129,6 +3150,75 @@ export default function AdminDashboard() {
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Immatriculation</label>
                       <input type="text" value={newUserData.licensePlate || ''} onChange={e => setNewUserData({...newUserData, licensePlate: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Tél. Compensation (Opt.)</label>
+                        <input type="tel" value={newUserData.withdrawalPhone} onChange={e => setNewUserData({...newUserData, withdrawalPhone: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">RIB / IBAN (Opt.)</label>
+                        <input type="text" value={newUserData.rib} onChange={e => setNewUserData({...newUserData, rib: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-indigo-100" />
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-50 rounded-2xl p-4 space-y-4">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">Dossier / Garant (Optionnel)</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input 
+                          type="text" 
+                          placeholder="Nom Garant" 
+                          value={newUserData.guarantorName} 
+                          onChange={e => setNewUserData({...newUserData, guarantorName: e.target.value})} 
+                          className="w-full bg-white border-none rounded-xl px-3 py-2 text-[10px] font-bold" 
+                        />
+                        <input 
+                          type="tel" 
+                          placeholder="Tél Garant" 
+                          value={newUserData.guarantorPhone} 
+                          onChange={e => setNewUserData({...newUserData, guarantorPhone: e.target.value})} 
+                          className="w-full bg-white border-none rounded-xl px-3 py-2 text-[10px] font-bold" 
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <div 
+                          onClick={() => document.getElementById('adminIdFront')?.click()}
+                          className="flex-1 h-20 border-2 border-dashed border-amber-200 rounded-xl flex items-center justify-center cursor-pointer bg-white"
+                        >
+                          {newUserData.idCardFront ? (
+                            <img src={newUserData.idCardFront} className="h-full w-full object-cover rounded-xl" />
+                          ) : (
+                            <span className="text-[8px] font-black text-amber-400 uppercase">ID Recto</span>
+                          )}
+                          <input id="adminIdFront" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setNewUserData({...newUserData, idCardFront: reader.result as string});
+                              reader.readAsDataURL(file);
+                            }
+                          }} />
+                        </div>
+                        <div 
+                          onClick={() => document.getElementById('adminIdBack')?.click()}
+                          className="flex-1 h-20 border-2 border-dashed border-amber-200 rounded-xl flex items-center justify-center cursor-pointer bg-white"
+                        >
+                          {newUserData.idCardBack ? (
+                            <img src={newUserData.idCardBack} className="h-full w-full object-cover rounded-xl" />
+                          ) : (
+                            <span className="text-[8px] font-black text-amber-400 uppercase">ID Verso</span>
+                          )}
+                          <input id="adminIdBack" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setNewUserData({...newUserData, idCardBack: reader.result as string});
+                              reader.readAsDataURL(file);
+                            }
+                          }} />
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}

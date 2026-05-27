@@ -84,7 +84,8 @@ async function startServer() {
       
       // Dynamically save extra registration body fields (city, neighborhood, phone, etc.)
       const allowedFields = [
-        'city', 'neighborhood', 'address', 'driverType', 'phone', 'withdrawalPhone', 'idCardFront', 'idCardBack',
+        'city', 'neighborhood', 'address', 'driverType', 'phone', 'withdrawalPhone', 'rib', 'idCardFront', 'idCardBack',
+        'guarantorName', 'guarantorPhone', 'guarantorCniUrl',
         'status', 'termsAcceptedAt', 'vehicleType', 'licensePlate', 'sectors'
       ];
       const updates = [];
@@ -1364,7 +1365,7 @@ async function startServer() {
   // --- WITHDRAWALS ---
   app.post("/api/withdrawals", authenticate, (req: any, res) => {
     if (req.user.role !== 'driver') return res.status(400).json({ error: "Drivers only" });
-    const { amount, method, phone } = req.body;
+    const { amount, method, phone, withdrawalInfo } = req.body;
     if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
 
     try {
@@ -1388,9 +1389,9 @@ async function startServer() {
 
       const id = uuidv4();
       db.prepare(`
-        INSERT INTO withdrawals (id, driverId, driverName, amount, status, method, phone)
-        VALUES (?, ?, ?, ?, 'en_attente', ?, ?)
-      `).run(id, req.user.userId, req.user.name, amount, method, phone);
+        INSERT INTO withdrawals (id, driverId, driverName, amount, status, method, phone, withdrawalInfo)
+        VALUES (?, ?, ?, ?, 'en_attente', ?, ?, ?)
+      `).run(id, req.user.userId, req.user.name, amount, method, phone, withdrawalInfo || phone);
 
       // Create a notification for admin
       db.prepare("INSERT INTO notifications (id, userId, title, message, type) VALUES (?, ?, ?, ?, ?)")

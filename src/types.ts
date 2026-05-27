@@ -119,6 +119,7 @@ export interface UserProfile {
   avatar?: string;
   photoURL?: string;
   displayName?: string;
+  rib?: string;
   createdAt: string;
 }
 

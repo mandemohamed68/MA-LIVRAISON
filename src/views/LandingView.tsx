@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Truck, Package, MapPin, ArrowRight, UserCheck, User, ShieldCheck, Mail, Lock, Phone, ChevronRight, Globe, Zap, Camera, CheckSquare, Settings, Facebook } from 'lucide-react';
+import { Truck, Package, MapPin, ArrowRight, UserCheck, User, ShieldCheck, Mail, Lock, Phone, ChevronRight, Globe, Zap, Camera, CheckSquare, Settings, Facebook, Plus, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { UserRole } from '../types';
@@ -82,6 +82,12 @@ export default function LandingView() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [withdrawalPhone, setWithdrawalPhone] = useState('');
+  const [rib, setRib] = useState('');
+  const [guarantorName, setGuarantorName] = useState('');
+  const [guarantorPhone, setGuarantorPhone] = useState('');
+  const [idCardFront, setIdCardFront] = useState('');
+  const [idCardBack, setIdCardBack] = useState('');
+  const [guarantorCniUrl, setGuarantorCniUrl] = useState('');
   const [city, setCity] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
   const [address, setAddress] = useState('');
@@ -91,10 +97,7 @@ export default function LandingView() {
   const [confirmResult, setConfirmResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
-
-  const [idCardFront, setIdCardFront] = useState<string | null>(null);
-  const [idCardBack, setIdCardBack] = useState<string | null>(null);
-
+  
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
@@ -197,8 +200,12 @@ export default function LandingView() {
           driverType,
           phone,
           withdrawalPhone,
+          rib,
           idCardFront,
           idCardBack,
+          guarantorName,
+          guarantorPhone,
+          guarantorCniUrl,
           status: role === 'driver' ? 'online' : 'offline'
         });
       } else {
@@ -540,16 +547,27 @@ export default function LandingView() {
                   />
                 </div>
                 {role === 'driver' ? (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic" title="Ce numéro sera utilisé pour vos retraits de gains">Téléphone de compensation</label>
-                    <input 
-                      required
-                      type="tel"
-                      value={withdrawalPhone}
-                      onChange={e => setWithdrawalPhone(e.target.value)}
-                      placeholder="Numéro Mobile Money"
-                      className="w-full bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic" title="Ce numéro sera utilisé pour vos retraits de gains">Téléphone de compensation (Optionnel)</label>
+                      <input 
+                        type="tel"
+                        value={withdrawalPhone}
+                        onChange={e => setWithdrawalPhone(e.target.value)}
+                        placeholder="Numéro Mobile Money"
+                        className="w-full bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">RIB / Compte Bancaire (Optionnel)</label>
+                      <input 
+                        type="text"
+                        value={rib}
+                        onChange={e => setRib(e.target.value)}
+                        placeholder="Votre RIB ou IBAN"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                      />
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
@@ -567,16 +585,102 @@ export default function LandingView() {
               </div>
 
               {role === 'driver' && (
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Mot de Passe</label>
-                  <input 
-                    required
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Min. 6 caractères"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
-                  />
+                <div className="space-y-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldCheck className="w-5 h-5 text-orange-500" />
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Dossier Chauffeur (Optionnel)</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">CNI Recto (Optionnel)</label>
+                      <div 
+                        onClick={() => document.getElementById('idCardFrontInput')?.click()}
+                        className="h-32 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 transition-all bg-white relative overflow-hidden"
+                      >
+                        {idCardFront ? (
+                          <img src={idCardFront} className="absolute inset-0 w-full h-full object-cover" alt="Recto CNI" />
+                        ) : (
+                          <>
+                            <Plus className="w-6 h-6 text-slate-300 mb-2" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Ajouter Photo</span>
+                          </>
+                        )}
+                        <input id="idCardFrontInput" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => setIdCardFront(reader.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">CNI Verso (Optionnel)</label>
+                      <div 
+                        onClick={() => document.getElementById('idCardBackInput')?.click()}
+                        className="h-32 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 transition-all bg-white relative overflow-hidden"
+                      >
+                        {idCardBack ? (
+                          <img src={idCardBack} className="absolute inset-0 w-full h-full object-cover" alt="Verso CNI" />
+                        ) : (
+                          <>
+                            <Plus className="w-6 h-6 text-slate-300 mb-2" />
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Ajouter Photo</span>
+                          </>
+                        )}
+                        <input id="idCardBackInput" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => setIdCardBack(reader.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t border-slate-200">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Références d'un Garant (Optionnel)</label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input 
+                        type="text"
+                        value={guarantorName}
+                        onChange={e => setGuarantorName(e.target.value)}
+                        placeholder="Nom du garant"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                      />
+                      <input 
+                        type="tel"
+                        value={guarantorPhone}
+                        onChange={e => setGuarantorPhone(e.target.value)}
+                        placeholder="Téléphone du garant"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex gap-3">
+                    <Info className="w-5 h-5 text-orange-500 shrink-0" />
+                    <p className="text-[10px] font-bold text-orange-700 leading-relaxed">
+                      L'envoi de ces documents n'est pas obligatoire pour l'inscription, mais votre dossier devra être complété pour valider définitivement votre accès.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Définir un Mot de Passe</label>
+                    <input 
+                      required
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Min. 6 caractères"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                    />
+                  </div>
                 </div>
               )}
 
