@@ -84,7 +84,7 @@ async function startServer() {
       
       // Dynamically save extra registration body fields (city, neighborhood, phone, etc.)
       const allowedFields = [
-        'city', 'neighborhood', 'address', 'driverType', 'phone', 'idCardFront', 'idCardBack',
+        'city', 'neighborhood', 'address', 'driverType', 'phone', 'withdrawalPhone', 'idCardFront', 'idCardBack',
         'status', 'termsAcceptedAt', 'vehicleType', 'licensePlate', 'sectors'
       ];
       const updates = [];

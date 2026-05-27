@@ -1,11 +1,14 @@
+import initMariaDB from './mariadb.js';
+import initSQLiteDB from './sqlite.js';
+
 const useMariaDB = process.env.DB_HOST !== undefined;
 
 let db: any;
 
 if (useMariaDB) {
-  db = require('./mariadb').default;
+  db = initMariaDB();
 } else {
-  db = require('./sqlite').default;
+  db = initSQLiteDB();
 }
 
 export default db;

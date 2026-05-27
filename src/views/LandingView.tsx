@@ -81,6 +81,7 @@ export default function LandingView() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [withdrawalPhone, setWithdrawalPhone] = useState('');
   const [city, setCity] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
   const [address, setAddress] = useState('');
@@ -195,6 +196,7 @@ export default function LandingView() {
           address,
           driverType,
           phone,
+          withdrawalPhone,
           idCardFront,
           idCardBack,
           status: role === 'driver' ? 'online' : 'offline'
@@ -537,6 +539,34 @@ export default function LandingView() {
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>
+                {role === 'driver' ? (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic" title="Ce numéro sera utilisé pour vos retraits de gains">Téléphone de compensation</label>
+                    <input 
+                      required
+                      type="tel"
+                      value={withdrawalPhone}
+                      onChange={e => setWithdrawalPhone(e.target.value)}
+                      placeholder="Numéro Mobile Money"
+                      className="w-full bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Mot de Passe</label>
+                    <input 
+                      required
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Min. 6 caractères"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {role === 'driver' && (
                 <div className="space-y-1.5">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Mot de Passe</label>
                   <input 
@@ -548,7 +578,7 @@ export default function LandingView() {
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:border-orange-500 transition-all outline-none"
                   />
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">

@@ -2,9 +2,10 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const dbPath = process.env.DATABASE_URL || path.join(process.cwd(), 'local.db');
-let db: any;
-let isCorrupted = false;
+export default function initSQLiteDB() {
+  const dbPath = process.env.DATABASE_URL || path.join(process.cwd(), 'local.db');
+  let db: any;
+  let isCorrupted = false;
 
 // Attempt to open and run a health check
 try {
@@ -374,4 +375,6 @@ try {
   console.error("Failed to create promo tables:", err);
 }
 
-export default db;
+
+  return db;
+}
