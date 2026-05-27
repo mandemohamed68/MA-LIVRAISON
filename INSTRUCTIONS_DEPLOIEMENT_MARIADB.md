@@ -72,18 +72,16 @@ nano .env
 👉 Changez le mot de passe MariaDB (`DB_PASS`) en `mot_de_passe_super_secret` (ou ce que vous avez rempli). Réinsérez ici vos clés `VITE_FIREBASE` puisqu'on conserve Firebase Auth et Sauvegardez !
 
 ### Déployer la base de données MariaDB
-Le schéma complet avec les tables `users`, `deliveries`, etc., vous attend.
+Le schéma complet avec les tables `users`, `deliveries`, etc. (ainsi que les partitions de données annuelles pour l'optimisation des performances) vous attend.
 ```bash
-mariadb -u pancho_user -p pancho_livraison_db < schema-mariadb.sql.example
+mariadb -u pancho_user -p pancho_livraison_db < MARIADB_SCHEMA_PARTITIONED.sql
 ```
 *(Saisissez le mot de passe créé à l'étape 2)*
 
 ### Adapter le connecteur Backend !
-Si vous souhaitez remplacer SQLite par MariaDB dans votre projet, copiez le fichier d'exemple dans votre backend :
-```bash
-mkdir -p backend
-cp backend-mariadb.ts.example backend/db.ts
-```
+Si vous souhaitez remplacer SQLite par MariaDB dans votre projet, assurez vous simplement de bien définir les variables d'environnement `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` et `DB_PORT` dans le fichier `.env`. Le code choisira automatiquement votre base de données locale MariaDB via le connecteur sync-mysql. 
+
+Laissez `DATABASE_URL` tel quel (ou commentez-le) car, tant que `DB_HOST` est défini, l'application basculera sur MariaDB !
 
 ---
 
