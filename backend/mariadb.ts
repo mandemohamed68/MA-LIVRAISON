@@ -14,6 +14,14 @@ export default function initMariaDB() {
     multipleStatements: true
   });
 
+  // MIGRATION: Auto-add withdrawalPhone column if missing
+  try {
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawalPhone varchar(50) DEFAULT NULL AFTER phone");
+    console.log("MariaDB: Vérification/Ajout de la colonne withdrawalPhone réussie.");
+  } catch (err: any) {
+    console.warn("Migration MariaDB (withdrawalPhone) ignorée ou échouée:", err.message);
+  }
+
   return {
     prepare: (sql: string) => {
       // Ignore SQLite pragmas

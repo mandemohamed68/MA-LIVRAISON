@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `earnings` double DEFAULT 0,
   `walletBalance` double DEFAULT 0,
   `phone` varchar(50) DEFAULT NULL,
+  `withdrawalPhone` varchar(50) DEFAULT NULL,
   `vehicleType` varchar(50) DEFAULT NULL,
   `licensePlate` varchar(50) DEFAULT NULL,
   `photoURL` text DEFAULT NULL,
