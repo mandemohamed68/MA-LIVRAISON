@@ -1061,7 +1061,7 @@ export default function DriverDashboard() {
                        <motion.div 
                          initial={{ y: '100%' }} 
                          animate={{ y: 0 }} 
-                         className="absolute bottom-6 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-md bg-white rounded-[28px] p-5 sm:p-6 shadow-2xl border border-slate-100/80 z-[110] max-h-[65vh] overflow-y-auto hide-scrollbar"
+                      className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] xl:bottom-6 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-full md:max-w-md bg-white rounded-[28px] p-5 sm:p-6 shadow-2xl border border-slate-100/80 z-[110] max-h-[65vh] overflow-y-auto hide-scrollbar"
                        >
                            <div className="flex justify-between items-start mb-4">
                               <div>
@@ -1178,9 +1178,9 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 100, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-8 left-4 right-4 z-[40] max-w-lg mx-auto"
+                      className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] xl:bottom-8 left-0 right-0 z-[40]"
                     >
-                      <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
+                      <div className="flex overflow-x-auto gap-4 px-4 pb-4 snap-x hide-scrollbar pointer-events-auto">
                         <AnimatePresence>
                           {filteredPendingJobs.map((job, index) => (
                              <motion.div 
@@ -1224,7 +1224,7 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 50, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[40]"
+                      className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] xl:bottom-8 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[40]"
                     >
                       <div className="bg-slate-900/95 backdrop-blur-xl p-5 rounded-3xl shadow-2xl border border-slate-800 flex flex-col items-center justify-between gap-4 pointer-events-auto">
                         <div className="flex items-center gap-3 w-full">
@@ -1252,7 +1252,7 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 50, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[40]"
+                      className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] xl:bottom-8 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[40]"
                     >
                       <div className="bg-slate-900/90 backdrop-blur-xl p-4 rounded-3xl shadow-2xl border border-slate-800 flex flex-col items-center gap-3 pointer-events-auto">
                         <div className="flex items-center gap-3 w-full">
