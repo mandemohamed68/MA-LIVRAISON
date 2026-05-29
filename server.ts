@@ -321,7 +321,51 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     }
 
     query += " ORDER BY createdAt DESC LIMIT 100";
-    const deliveries = db.prepare(query).all(...params) as any[];
+    let deliveries = db.prepare(query).all(...params) as any[];
+    
+    // --- DISPATCHING POLICY ---
+    if (role === 'driver') {
+      try {
+        const driver = db.prepare("SELECT currentLocation FROM users WHERE userId = ?").get(userId) as any;
+        let driverLoc: any = null;
+        if (driver && driver.currentLocation) {
+          driverLoc = JSON.parse(driver.currentLocation);
+        }
+
+        deliveries = deliveries.filter(d => {
+          // Always show jobs they are already working on
+          if (d.status !== 'pending' && d.driverId === userId) return true;
+          if (d.status !== 'pending') return false; // Par sécurité
+
+          // If no location reported yet, allow all (or enforce locality later)
+          if (!driverLoc || !driverLoc.lat || !driverLoc.lng) return true;
+
+          // Urgent deliveries bypass radius delays
+          if (d.isUrgent) return true;
+
+          let originData = typeof d.origin === 'string' ? JSON.parse(d.origin) : d.origin;
+          if (!originData || !originData.lat || !originData.lng) return true;
+
+          const distanceKm = calculateDistance(driverLoc.lat, driverLoc.lng, originData.lat, originData.lng);
+          const ageInMinutes = (Date.now() - new Date(d.createdAt).getTime()) / 60000;
+
+          // Politique d'expansion radiale :
+          // - Immédiat: < 3 km
+          // - Après 1 minute: jusqu'à 6 km
+          // - Après 3 minutes: jusqu'à 10 km
+          // - Au-delà de 5 minutes: tout le secteur
+          if (distanceKm <= 3) return true;
+          if (distanceKm <= 6 && ageInMinutes >= 1) return true;
+          if (distanceKm <= 10 && ageInMinutes >= 3) return true;
+          if (ageInMinutes >= 5) return true;
+
+          return false;
+        });
+      } catch (e) {
+        console.error("Error in dispatching logic:", e);
+      }
+    }
+
     deliveries.forEach(d => {
       try { if (typeof d.origin === 'string') d.origin = JSON.parse(d.origin); } catch(e){}
       try { if (typeof d.destination === 'string') d.destination = JSON.parse(d.destination); } catch(e){}

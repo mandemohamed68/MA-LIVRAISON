@@ -321,16 +321,20 @@ export default function DriverDashboard() {
 
     const watchId = await GeolocationService.watchPosition(
       (coords) => {
-        setUserLocation(coords);
-        setGpsError(null);
-        setLoading(false);
         const now = Date.now();
         
         // Critical: Distance check to avoid redundant writes if stationary
+        // Also avoid excessive state updates to prevent re-rendering the whole dashboard
         let significantMove = true;
         if (lastCoords) {
           const distance = calculateDistance(lastCoords.lat, lastCoords.lng, coords.lat, coords.lng);
-          significantMove = distance > 0.01; // More than 10 meters
+          significantMove = distance > 0.005; // More than 5 meters
+        }
+
+        if (!lastCoords || significantMove || (now - lastUpdate > 30000)) {
+          setUserLocation(coords);
+          setGpsError(null);
+          setLoading(false);
         }
 
         const currentProfile = profileRef.current;
