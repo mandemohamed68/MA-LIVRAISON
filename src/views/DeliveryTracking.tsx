@@ -308,7 +308,7 @@ export default function DeliveryTracking() {
   const centerMap = hasValidFromCoords ? [delivery.from.lat, delivery.from.lng] as [number, number] : centerOUAGA;
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 font-sans relative overflow-hidden">
+    <div className="flex flex-col flex-1 bg-slate-50 font-sans relative overflow-hidden h-full">
       {loading && (
         <div className="fixed top-0 left-0 right-0 z-[100] h-1 overflow-hidden bg-indigo-100">
           <motion.div 

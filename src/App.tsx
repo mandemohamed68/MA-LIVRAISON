@@ -137,7 +137,7 @@ function AppRoutes() {
   return (
     <div className={cn(
       "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20 bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#fef3c7]/30 relative overflow-x-hidden",
-      isAdminView && "lg:h-screen lg:overflow-hidden"
+      (isAdminView || isFullBleedView) && "h-screen lg:h-[100dvh] overflow-hidden"
     )}>
       {/* Dynamic Premium Grid Background & Glow Effects (Option 1) */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a0a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a0a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none z-0"></div>

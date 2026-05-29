@@ -199,32 +199,114 @@ export default function CreateDelivery() {
 
   const detectLocation = useCallback(async () => {
     setIsDetectingLocation(true);
-    try {
-      const { GeolocationService } = await import('../services/GeolocationService');
-      const position = await GeolocationService.getCurrentPosition();
-      
-      const lat = position.lat;
-      const lng = position.lng;
-
-      setFrom((prev) => {
-        if (!prev) {
-          setDirectionStep("to");
-          return { lat, lng, address: "Ma position..." };
+    
+    const getBrowserPosition = (options: PositionOptions) => {
+      return new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("La géolocalisation n'est pas supportée par votre navigateur."));
+          return;
         }
-        return prev;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          (err) => reject(err),
+          options
+        );
       });
-      setIsDetectingLocation(false);
+    };
 
+    try {
+      let lat = 0;
+      let lng = 0;
+      let usedIPFallback = false;
+
+      // 1. Try modern GPS Geolocation
+      try {
+        const coords = await getBrowserPosition({
+          enableHighAccuracy: false,
+          timeout: 4000,
+          maximumAge: 10000,
+        });
+        lat = coords.lat;
+        lng = coords.lng;
+      } catch (gpsError: any) {
+        console.warn("Standard accuracy failed, trying high accuracy...", gpsError);
+        try {
+          const coords = await getBrowserPosition({
+            enableHighAccuracy: true,
+            timeout: 6000,
+            maximumAge: 0,
+          });
+          lat = coords.lat;
+          lng = coords.lng;
+        } catch (highAccError: any) {
+          console.warn("GPS failed, falling back to IP-based Geolocation...", highAccError);
+          // 2. Fetch IP location when GPS is blocked/unsupported (e.g. non-localhost HTTP)
+          try {
+            const res = await fetch("https://ipapi.co/json/");
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.latitude && data.longitude) {
+                lat = data.latitude;
+                lng = data.longitude;
+                usedIPFallback = true;
+              } else {
+                throw new Error("No lat/lng returned");
+              }
+            } else {
+              throw new Error("ipapi error response");
+            }
+          } catch (ipApiError) {
+            console.warn("ipapi failed, trying freeipapi...", ipApiError);
+            const res = await fetch("https://freeipapi.com/api/json");
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.latitude && data.longitude) {
+                lat = data.latitude;
+                lng = data.longitude;
+                usedIPFallback = true;
+              } else {
+                throw new Error("No lat/lng from freeipapi");
+              }
+            } else {
+              throw new Error("All geolocation APIs failed");
+            }
+          }
+        }
+      }
+
+      const initialLabel = usedIPFallback ? "Ma position (approximative)..." : "Ma position...";
+      setFrom({
+        lat,
+        lng,
+        address: initialLabel
+      });
+      setFromSearch(initialLabel);
+      setDirectionStep("to");
+
+      // 3. Reverse Geocode the exact coordinates using OpenStreetMap Nominatim API
       try {
         const address = await reverseGeocode(lat, lng);
-        setFrom((prev) =>
-          prev && prev.lat === lat ? { ...prev, address } : prev
-        );
-      } catch (e) {
-        console.error("Geocoding failed", e);
+        setFrom({
+          lat,
+          lng,
+          address
+        });
+        setFromSearch(address);
+      } catch (geocodeErr) {
+        console.error("Nominatim reverse geocode failing: ", geocodeErr);
+        // Fallback address is coordinates formatted nicely
+        const fallbackAddress = `Position obtenue (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        setFrom({
+          lat,
+          lng,
+          address: fallbackAddress
+        });
+        setFromSearch(fallbackAddress);
       }
-    } catch (error) {
-      console.warn("Geolocation fallback:", error);
+    } catch (err: any) {
+      console.error("All position detection strategies failed completely:", err);
+      alert("Impossible d'obtenir votre position. Veuillez l'indiquer manuellement sur la carte.");
+    } finally {
       setIsDetectingLocation(false);
     }
   }, []);
@@ -444,7 +526,7 @@ export default function CreateDelivery() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px] font-sans relative overflow-hidden">
+    <div className="flex flex-col flex-1 bg-slate-50 [background-image:radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:24px_24px] font-sans relative overflow-hidden h-full">
       {/* Header - Transparent over Map in Step 1 */}
       <header className="absolute top-0 left-0 right-0 z-50 p-4 flex items-center justify-between">
         <button
@@ -625,14 +707,14 @@ export default function CreateDelivery() {
                   {isDetectingLocation && (
                     <Loader2 className="w-4 h-4 animate-spin text-orange-500 mr-2" />
                   )}
-                  {!from && !isDetectingLocation && (
+                  {!isDetectingLocation && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         detectLocation();
                       }}
-                      className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors mr-2"
-                      title="Ma position"
+                      className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors mr-2 shrink-0"
+                      title="Me localiser"
                     >
                       <Crosshair className="w-4 h-4" />
                     </button>
