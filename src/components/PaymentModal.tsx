@@ -104,6 +104,19 @@ export default function PaymentModal({
   const [sappayTransId, setSappayTransId] = useState('');
   const [sappayStep, setSappayStep] = useState<'init' | 'otp' | 'pending'>('init');
   const [error, setError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentFailed, setPaymentFailed] = useState(false);
+  const [failedMessage, setFailedMessage] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setPaymentSuccess(false);
+      setPaymentFailed(false);
+      setFailedMessage('');
+      setOtpCode('');
+      setError(null);
+    }
+  }, [isOpen]);
 
   const isDemo = false;
 
@@ -419,10 +432,16 @@ export default function PaymentModal({
           performData.response?.invoice_detail?.status === 'PENDING';
 
         if (isSuccess || isPending) {
-          onConfirm(selectedMethod as any, sappayInvoiceId, isSuccess);
           if (isSuccess) {
-            onClose();
+            setPaymentSuccess(true);
+            setIsProcessing(false);
+            onConfirm(selectedMethod as any, sappayInvoiceId, true);
+            setTimeout(() => {
+              onClose();
+              setPaymentSuccess(false);
+            }, 3000);
           } else {
+            onConfirm(selectedMethod as any, sappayInvoiceId, false);
             // PENDING : On attend la validation finale (admin ou webhook)
             setSappayStep('pending');
             setWaitingForAdmin(true);
@@ -446,7 +465,8 @@ export default function PaymentModal({
             handleSappayInit();
           }, 2000);
         } else {
-          setError(err.message);
+          setFailedMessage(err.message || "Le paiement a échoué. Veuillez réessayer.");
+          setPaymentFailed(true);
         }
       } finally {
         setIsProcessing(false);
@@ -487,12 +507,17 @@ export default function PaymentModal({
         }
       } else {
         if (selectedMethod) {
+          setPaymentSuccess(true);
           onConfirm(selectedMethod as any, transactionId, true);
-          onClose();
+          setTimeout(() => {
+            onClose();
+            setPaymentSuccess(false);
+          }, 3000);
         }
       }
     } catch (e: any) {
-      setError(e.message || "Erreur lors du paiement");
+      setFailedMessage(e.message || "Erreur lors du paiement");
+      setPaymentFailed(true);
       setIsProcessing(false);
     }
   };
@@ -556,7 +581,7 @@ export default function PaymentModal({
           >
             {/* Header / Actions - Top Buttons */}
             <div className="absolute top-6 left-6 right-6 z-20 flex justify-between items-center">
-              {step > 1 ? (
+              {step > 1 && !paymentSuccess && !paymentFailed ? (
                 <button 
                   onClick={() => setStep(step - 1)}
                   className="w-10 h-10 bg-slate-100/50 backdrop-blur border border-white/50 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
@@ -564,18 +589,76 @@ export default function PaymentModal({
                   <ArrowLeft className="w-5 h-5" />
                 </button>
               ) : <div />}
-              <button 
-                onClick={onClose}
-                className="w-10 h-10 bg-slate-100/50 backdrop-blur border border-white/50 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {!paymentSuccess && (
+                <button 
+                  onClick={onClose}
+                  className="w-10 h-10 bg-slate-100/50 backdrop-blur border border-white/50 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             {/* Content Area - Scrollable */}
             <div className="flex-1 overflow-y-auto px-8 pt-10 pb-8 custom-scrollbar">
               <AnimatePresence mode="wait">
-                {step === 1 ? (
+                {paymentSuccess ? (
+                  <motion.div 
+                    key="payment-success"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="py-12 text-center space-y-8"
+                  >
+                    <div className="w-24 h-24 bg-emerald-500 text-white rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-emerald-500/20">
+                      <CheckCircle className="w-12 h-12" />
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h3 className="text-3xl font-black text-emerald-600 tracking-tighter italic uppercase leading-none">Paiement Réussi !</h3>
+                      <p className="text-[11px] text-slate-500 font-bold leading-relaxed max-w-xs mx-auto uppercase tracking-widest italic">
+                        Votre paiement via {methods.find(m => m.id === selectedMethod)?.name || 'notre service'} a été validé avec succès.
+                      </p>
+                    </div>
+
+                    {(sappayInvoiceId || transactionId) && (
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 max-w-sm mx-auto">
+                        <p className="text-[10px] font-black uppercase text-emerald-800 tracking-widest leading-none mb-1">RÉFÉRENCE DE TRANSACTION</p>
+                        <p className="font-mono text-xs text-emerald-600 tracking-wider break-all">
+                          {sappayInvoiceId || transactionId}
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : paymentFailed ? (
+                  <motion.div 
+                    key="payment-failed"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="py-12 text-center space-y-8"
+                  >
+                    <div className="w-24 h-24 bg-red-500 text-white rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-red-500/20">
+                      <AlertCircle className="w-12 h-12" />
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h3 className="text-3xl font-black text-red-600 tracking-tighter italic uppercase leading-none border-b border-red-50 pb-2">Échec du Paiement</h3>
+                      <p className="text-[11px] text-slate-500 font-bold leading-relaxed max-w-xs mx-auto uppercase tracking-widest italic my-2">
+                        Le paiement via {methods.find(m => m.id === selectedMethod)?.name || 'notre service'} n'a pas pu aboutir.
+                      </p>
+                    </div>
+
+                    {failedMessage && (
+                      <div className="bg-red-50 border border-red-100 rounded-2xl p-5 max-w-sm mx-auto text-left">
+                        <p className="text-[10px] font-black uppercase text-red-800 tracking-widest leading-none mb-2">Message d'erreur</p>
+                        <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide leading-relaxed">
+                          {failedMessage}
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : step === 1 ? (
                   <motion.div 
                     key="step1"
                     initial={{ opacity: 0, x: -20 }}
@@ -967,7 +1050,40 @@ export default function PaymentModal({
 
             {/* Footer - Fixed Button */}
             <div className="p-8 bg-slate-50/50 border-t border-slate-100 shrink-0">
-              {step === 1 ? (
+              {paymentSuccess ? (
+                <button
+                  disabled={true}
+                  className="w-full py-5 bg-emerald-500 text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[24px] flex items-center justify-center gap-4 italic shadow-lg shadow-emerald-500/20"
+                >
+                  <Loader2 className="w-5 h-5 animate-spin" /> VEUILLEZ PATIENTER...
+                </button>
+              ) : paymentFailed ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => {
+                      setPaymentFailed(false);
+                      setFailedMessage('');
+                      setError(null);
+                      setOtpCode('');
+                    }}
+                    className="w-full py-5 bg-red-600 text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[24px] shadow-2xl shadow-red-600/30 hover:bg-slate-950 active:scale-95 transition-all flex items-center justify-center gap-4 italic"
+                  >
+                    RÉESSAYER LE PAIEMENT
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setPaymentFailed(false);
+                      setFailedMessage('');
+                      setError(null);
+                      setOtpCode('');
+                      setStep(1); // Retour au choix du moyen de paiement
+                    }} 
+                    className="w-full text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                  >
+                    Choisir un autre mode
+                  </button>
+                </div>
+              ) : step === 1 ? (
                 <button
                   disabled={!selectedMethod}
                   onClick={handleInitialConfirm}
