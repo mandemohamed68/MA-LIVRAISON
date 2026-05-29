@@ -21,8 +21,6 @@ CREATE TABLE IF NOT EXISTS `users` (
   `city` varchar(255) DEFAULT NULL,
   `neighborhood` varchar(255) DEFAULT NULL,
   `verificationStatus` varchar(50) DEFAULT 'pending',
-  `guarantorName` varchar(255) DEFAULT NULL,
-  `guarantorPhone` varchar(50) DEFAULT NULL,
   `identityCardUrl` text DEFAULT NULL,
   `criminalRecordUrl` text DEFAULT NULL,
   `currentLocation` text DEFAULT NULL,
