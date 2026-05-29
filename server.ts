@@ -95,7 +95,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     if (req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.isMaster) {
       next();
     } else {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to access admin endpoint, but role is: '${req.user.role}'`);
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to access ADMIN endpoint: ${req.originalUrl}, but role is: '${req.user.role}'`);
       res.status(400).json({ error: `Access denied. Role 'admin' or 'superadmin' is required (your role: '${req.user.role}').` });
     }
   };
@@ -675,12 +675,18 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   app.post("/api/payment/sappay/get-otp", async (req, res) => {
     try {
-      const { customer_msisdn, invoice_id, payment_processor_id } = req.body;
+      const { customer_msisdn, invoice_id, payment_processor_id, access_token } = req.body;
+      
+      const headers: any = {
+        "Content-Type": "application/json"
+      };
+      if (access_token) {
+        headers["Authorization"] = `Bearer ${access_token}`;
+      }
+
       const response = await fetch(`${SAPPAY_BASE_CHECKOUT}/get-otp/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify({
           customer_msisdn: normalizePhoneNumberSappay(customer_msisdn),
           invoice_id,
@@ -716,7 +722,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   app.post("/api/payment/sappay/perform", async (req, res) => {
     try {
-      const { invoice_id, payment_processor_id, customer_msisdn, otp, trans_id } = req.body;
+      const { invoice_id, payment_processor_id, customer_msisdn, otp, trans_id, access_token } = req.body;
       
       const payload: any = {
         invoice_id,
@@ -729,11 +735,16 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
         payload.trans_id = trans_id;
       }
 
+      const headers: any = {
+        "Content-Type": "application/json"
+      };
+      if (access_token) {
+        headers["Authorization"] = `Bearer ${access_token}`;
+      }
+
       const response = await fetch(`${SAPPAY_BASE_CHECKOUT}/perform/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 

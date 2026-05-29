@@ -1178,9 +1178,9 @@ export default function DriverDashboard() {
                     <motion.div 
                       initial={{ y: 100, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] xl:bottom-8 left-0 right-0 z-[40]"
+                      className="absolute bottom-[calc(5.5rem+env(safe-area-inset-bottom))] xl:bottom-8 left-0 right-0 z-[40] pointer-events-none"
                     >
-                      <div className="flex overflow-x-auto gap-4 px-4 pb-4 snap-x hide-scrollbar pointer-events-auto">
+                      <div className="flex overflow-x-auto gap-4 px-4 pb-4 snap-x hide-scrollbar pointer-events-auto w-full md:max-w-2xl md:mx-auto">
                         <AnimatePresence>
                           {filteredPendingJobs.map((job, index) => (
                              <motion.div 
