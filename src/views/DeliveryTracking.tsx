@@ -374,7 +374,7 @@ export default function DeliveryTracking() {
             {/* Handle Bar */}
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-4 mb-2 shrink-0" />
 
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
                 {/* PENDING APPROVAL WARNING */}
                 {delivery.paymentStatus === 'pending_approval' && (
                    <div className="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-3xl shadow-sm">

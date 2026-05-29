@@ -727,7 +727,6 @@ export default function DriverDashboard() {
           />
         </div>
       )}
-      <AnnouncementBanner userRole="driver" />
       {/* Dynamic Main Content */}
       <div className="flex-1 relative overflow-hidden bg-slate-100">
         <AnimatePresence mode="wait">
@@ -799,11 +798,11 @@ export default function DriverDashboard() {
                    </div>
                 </div>
 
-                      <div className="absolute inset-0 z-20 pointer-events-none p-4 flex flex-col justify-between">
-                   {/* Top HUD Layout */}
-                   <div className="flex justify-between items-start gap-2">
-                       {/* Left HUD: Status */}
-                       <div className="flex flex-col gap-2 max-w-[180px]">
+                      <div className="absolute inset-x-0 top-0 z-20 pointer-events-none p-2 sm:p-4 flex flex-col gap-2">
+                   {/* Top HUD Layout - Improved for Mobile */}
+                   <div className="flex flex-row justify-between items-start gap-2">
+                       {/* Left HUD: Status & Quick Actions */}
+                       <div className="flex items-center gap-2 pointer-events-auto">
                            {activeJobs.length > 0 && radarMode === 'focus' ? (
                                 <div className="bg-slate-900/90 backdrop-blur-xl p-2 rounded-2xl border border-slate-800 shadow-2xl flex items-center gap-2 pointer-events-auto">
                                    <div className="flex bg-slate-800 rounded-xl p-1 overflow-x-auto no-scrollbar">
@@ -830,12 +829,12 @@ export default function DriverDashboard() {
                                        <div>
                                           <p className={cn("text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5", profile?.status === 'online' ? "text-emerald-500" : (profile?.status === 'busy' ? "text-orange-500" : "text-slate-400"))}>
                                              <span className={cn("w-1.5 h-1.5 rounded-full", profile?.status === 'online' ? "bg-emerald-500 animate-pulse" : (profile?.status === 'busy' ? "bg-orange-500" : "bg-slate-300"))} /> 
-                                             {profile?.status === 'online' ? "En Ligne" : (profile?.status === 'busy' ? "Occupé" : "Hors Ligne")}
+                                             {profile?.status === 'online' ? "Online" : (profile?.status === 'busy' ? "Occupé" : "Offline")}
                                           </p>
-                                          <h2 className="text-xs font-black italic tracking-tight text-slate-900 mt-0.5">PANCHO EXPRESS</h2>
+                                          <h2 className="text-[10px] font-black italic tracking-tighter text-slate-900 leading-none">PANCHO</h2>
                                        </div>
                                        <button onClick={toggleOnline} className={cn("p-2 rounded-xl transition-all shadow-sm", isOnline ? "bg-slate-900 text-white" : "bg-emerald-500 text-white")}>
-                                           <Zap className="w-3.5 h-3.5" />
+                                           <Zap className="w-3 h-3" />
                                        </button>
                                     </div>
                                 </div>
@@ -847,7 +846,7 @@ export default function DriverDashboard() {
                                   initial={{ x: -20, opacity: 0 }} 
                                   animate={{ x: 0, opacity: 1 }} 
                                   onClick={() => { setCurrentTab('profile'); navigate('/driver?tab=profile'); }}
-                                  className="bg-orange-500 p-3 rounded-2xl flex items-center gap-3 shadow-lg pointer-events-auto border-2 border-white/20"
+                                  className="bg-indigo-600/95 backdrop-blur-md px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-xl pointer-events-auto border border-white/20"
                                 >
                                    <ShieldCheck className="w-4 h-4 text-white" />
                                    <div className="text-left">
@@ -858,26 +857,25 @@ export default function DriverDashboard() {
                              )}
                        </div>
 
-                       {/* Right HUD: Earnings */}
-                       <div className="pointer-events-auto shrink-0 shadow-sm mb-2">
-                         <NotificationBell lightMode={true} />
-                       </div>
-                       <div className="flex flex-col gap-3">
+                       <div className="flex flex-col gap-2 items-end">
+                            <div className="pointer-events-auto shrink-0 shadow-sm">
+                              <NotificationBell lightMode={true} />
+                            </div>
                             <motion.div 
                               initial={{ x: 20, opacity: 0 }} 
                               animate={{ x: 0, opacity: 1 }}
-                              className="bg-white/90 backdrop-blur-md border border-slate-200 p-3 px-4 rounded-2xl flex items-center gap-3 shadow-lg pointer-events-auto shadow-emerald-500/5"
+                              className="bg-white/95 backdrop-blur-md border border-slate-200 p-2 px-3 rounded-2xl flex items-center gap-3 shadow-lg h-[44px] sm:h-auto"
                             >
-                               <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                                  <DollarSign className="w-4 h-4" />
+                               <div className="w-7 h-7 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center shrink-0">
+                                  <DollarSign className="w-3.5 h-3.5" />
                                </div>
                                <div>
-                                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Gains</p>
-                                  <p className="text-sm font-black text-slate-900 leading-none">{dailyEarnings} F</p>
+                                  <p className="text-[7px] font-black uppercase tracking-widest text-slate-400 leading-none mb-0.5">Gains</p>
+                                  <p className="text-[11px] font-black text-slate-900 leading-none">{dailyEarnings} F</p>
                                </div>
-                               <div className="pl-3 border-l border-slate-100 flex flex-col items-center">
+                               <div className="pl-2 border-l border-slate-100 flex flex-col items-center shrink-0">
                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mb-0.5" />
-                                  <span className="text-[7px] font-black text-emerald-500">LIVE</span>
+                                  <span className="text-[6px] font-black text-emerald-500">LIVE</span>
                                </div>
                             </motion.div>
                        </div>
@@ -1241,21 +1239,24 @@ export default function DriverDashboard() {
 
                  {(!profile?.identityCardUrl || !profile?.guarantorName) && (
                     <motion.div 
-                       initial={{ y: 20, opacity: 0 }}
+                       initial={{ y: -20, opacity: 0 }}
                        animate={{ y: 0, opacity: 1 }}
-                       className="absolute top-24 left-6 right-6 z-[40]"
+                       className="absolute top-24 left-1/2 -translate-x-1/2 w-[90%] max-w-sm z-[40]"
                     >
-                       <div className="bg-indigo-600 p-4 rounded-2xl shadow-xl flex items-center justify-between gap-4 border border-indigo-400">
+                       <div className="bg-indigo-600/95 backdrop-blur-md p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-4 border border-white/20 ring-1 ring-indigo-500/50">
                           <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white">
-                                <ShieldCheck className="w-4 h-4" />
+                             <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center text-white shrink-0">
+                                <ShieldCheck className="w-4 h-4 shadow-sm" />
                              </div>
-                             <div>
-                                <p className="text-[10px] font-black text-white uppercase tracking-wider leading-none">Dossier incomplet</p>
-                                <p className="text-[9px] text-indigo-100 mt-1 font-bold">Complétez vos documents pour gagner en confiance.</p>
+                             <div className="overflow-hidden">
+                                <p className="text-[10px] font-black text-white uppercase tracking-wider leading-tight items-center flex gap-1.5">
+                                   Dossier Incomplet
+                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                </p>
+                                <p className="text-[8px] text-indigo-50/80 mt-0.5 font-bold truncate">Complétez vos documents pour gagner en confiance.</p>
                              </div>
                           </div>
-                          <button onClick={openVerificationModal} className="px-3 py-2 bg-white text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0">
+                          <button onClick={openVerificationModal} className="px-4 py-2 bg-white text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0 shadow-lg shadow-black/10">
                              Compléter
                           </button>
                        </div>

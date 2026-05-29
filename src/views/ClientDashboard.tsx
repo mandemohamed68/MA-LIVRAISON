@@ -213,7 +213,7 @@ export default function ClientDashboard() {
       )}
 
       {/* Main Content */}
-      <div className="relative z-10 flex-1 flex flex-col p-4 sm:p-6 max-w-lg xl:max-w-5xl mx-auto w-full">
+      <div className="relative z-10 flex-1 flex flex-col p-4 sm:p-6 lg:p-8 max-w-lg xl:max-w-5xl mx-auto w-full">
         
         {/* Header */}
         <header className="flex justify-between items-center pt-8 mb-8">

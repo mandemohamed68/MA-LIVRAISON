@@ -731,8 +731,8 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {[
                 { label: 'CLIENTS ACTIFS', value: users.filter(u => u.role === 'client').length, icon: Users, color: 'text-blue-500', trend: '+12%' },
-                { label: 'COURSES TOTALES', value: deliveries.length, icon: Package, color: 'text-orange-500', trend: '+5%' },
-                { label: 'VOLUME D\'AFFAIRES', value: `${deliveries.reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0).toLocaleString()} FCFA`, icon: DollarSign, color: 'text-emerald-500', trend: '+18%' },
+                { label: 'COURSES TOTALES', value: deliveries.filter(d => d.status !== 'cancelled').length, icon: Package, color: 'text-orange-500', trend: '+5%' },
+                { label: 'VOLUME D\'AFFAIRES', value: `${deliveries.filter(d => d.status === 'delivered' || d.isPaid).reduce((acc, curr) => acc + (curr.clientProposedPrice || curr.cost || 0), 0).toLocaleString()} FCFA`, icon: DollarSign, color: 'text-emerald-500', trend: '+18%' },
                 { label: 'ZEMS EN SERVICE', value: users.filter(u => u.role === 'driver' && u.status === 'online').length, icon: Truck, color: 'text-indigo-500', trend: 'LIVE' },
               ].map((stat) => (
                 <div key={stat.label} className="bg-white rounded-xl sm:rounded-2xl p-5 sm:p-7 shadow-sm border border-slate-100 flex flex-col justify-between relative overflow-hidden group hover:shadow-xl transition-all">
@@ -2893,7 +2893,7 @@ export default function AdminDashboard() {
           />
         </div>
       )}
-      <aside className="w-64 bg-white border-r border-slate-200 overflow-y-auto hidden lg:block scrollbar-hide">
+      <aside className="w-64 bg-white border-r border-slate-200 overflow-y-auto hidden lg:block">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
@@ -2999,7 +2999,7 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 lg:p-6 lg:p-5 lg:p-6 scrollbar-hide">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeMenu}
@@ -3043,7 +3043,7 @@ export default function AdminDashboard() {
                     <X className="w-5 h-5" />
                   </button>
                </div>
-               <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide py-[env(safe-area-inset-bottom)]">
+               <div className="flex-1 overflow-y-auto p-6 space-y-8 py-[env(safe-area-inset-bottom)]">
                   {sidebarItems.map((group) => (
                     <div key={group.group}>
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 px-3">{group.group}</h3>

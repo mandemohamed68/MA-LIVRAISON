@@ -136,7 +136,7 @@ function AppRoutes() {
 
   return (
     <div className={cn(
-      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20 bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#fef3c7]/30 relative overflow-hidden",
+      "min-h-screen font-sans text-slate-900 flex flex-col selection:bg-primary/20 bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#fef3c7]/30 relative overflow-x-hidden",
       isAdminView && "lg:h-screen lg:overflow-hidden"
     )}>
       {/* Dynamic Premium Grid Background & Glow Effects (Option 1) */}
@@ -167,7 +167,7 @@ function AppRoutes() {
         "flex-1 flex flex-col relative w-full",
         isAdminView && "h-full min-h-0",
         !isFullBleedView && "container mx-auto px-4 py-8 md:py-12",
-        "pb-[calc(6rem+env(safe-area-inset-bottom))] xl:pb-0"
+        !isAdminView && "pb-[calc(4.5rem+env(safe-area-inset-bottom))] xl:pb-0"
       )}>
         <Suspense fallback={
           <div className="flex-1 flex items-center justify-center p-8">

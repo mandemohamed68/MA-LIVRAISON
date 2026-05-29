@@ -152,11 +152,11 @@ export default function Navbar() {
       <div className="w-full">
         <div className={cn(
           "mx-auto flex justify-between items-center transition-all duration-300",
-          isCreateView ? "h-14 px-10 max-w-[1900px]" : "h-16 container px-6",
+          isCreateView ? "h-14 px-10 max-w-[1900px]" : "h-14 sm:h-16 container px-4 sm:px-6",
           isAdminView && "h-16 px-10 max-w-[1900px]"
         )}>
           <Link to="/" className="flex items-center gap-3 group shrink-0">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
+            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
               {!logoError ? (
                  <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (

@@ -34,6 +34,8 @@ async function startServer() {
     return R * c; // Distance in km
   }
 
+const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail.com'];
+
   // --- MIDDLEWARE AUTH ---
   const authenticate = (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
@@ -46,17 +48,39 @@ async function startServer() {
         return res.status(401).json({ error: "User not found or role mismatch" });
       }
       if (user.accountStatus === 'suspended') {
-        return res.status(400).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
+        const isMaster = MASTER_ADMIN_EMAILS.includes(user.email);
+        if (!isMaster) {
+          return res.status(400).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
+        }
       }
       req.user = {
         ...decoded,
         role: user.role,
         name: user.name,
-        email: user.email
+        email: user.email,
+        isMaster: MASTER_ADMIN_EMAILS.includes(user.email)
       };
       next();
     } catch (err) {
       res.status(401).json({ error: "Invalid token" });
+    }
+  };
+
+  const checkAdmin = (req: any, res: any, next: any) => {
+    if (req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.isMaster) {
+      next();
+    } else {
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to access admin endpoint, but role is: '${req.user.role}'`);
+      res.status(400).json({ error: `Access denied. Role 'admin' or 'superadmin' is required (your role: '${req.user.role}').` });
+    }
+  };
+
+  const checkSuperAdmin = (req: any, res: any, next: any) => {
+    if (req.user.role === 'superadmin' || req.user.isMaster) {
+      next();
+    } else {
+      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to access superadmin endpoint, but role is: '${req.user.role}'`);
+      res.status(400).json({ error: `Access denied. Superadmin role is required (your role: '${req.user.role}').` });
     }
   };
 
@@ -432,10 +456,7 @@ async function startServer() {
     res.json(db.prepare("SELECT * FROM sectors WHERE isActive = 1").all());
   });
 
-  app.post("/api/db-query-tool", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Accès refusé." });
-    }
+  app.post("/api/db-query-tool", authenticate, checkAdmin, (req: any, res) => {
     const { sql } = req.body;
     if (!sql) {
       return res.status(400).json({ error: "La requête SQL est requise." });
@@ -455,10 +476,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/sectors", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Access denied" });
-    }
+  app.post("/api/sectors", authenticate, checkAdmin, (req: any, res) => {
     const { name, city, isActive } = req.body;
     const id = uuidv4();
     try {
@@ -470,10 +488,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/sectors/:id", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Access denied" });
-    }
+  app.delete("/api/sectors/:id", authenticate, checkAdmin, (req: any, res) => {
     try {
       db.prepare("DELETE FROM sectors WHERE id = ?").run(req.params.id);
       res.json({ status: "ok" });
@@ -486,10 +501,7 @@ async function startServer() {
     res.json(db.prepare("SELECT * FROM announcements ORDER BY createdAt DESC").all());
   });
 
-  app.post("/api/announcements", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Access denied" });
-    }
+  app.post("/api/announcements", authenticate, checkAdmin, (req: any, res) => {
     const { title, message, type, targetRole, activeUntil } = req.body;
     const id = uuidv4();
     try {
@@ -501,10 +513,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/announcements/:id", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Access denied" });
-    }
+  app.delete("/api/announcements/:id", authenticate, checkAdmin, (req: any, res) => {
     try {
       db.prepare("DELETE FROM announcements WHERE id = ?").run(req.params.id);
       res.json({ status: "ok" });
@@ -731,8 +740,7 @@ async function startServer() {
 
   // --- ADMIN ENDPOINTS (Mapped to obscure names to bypass firewall blocks) ---
   // --- SYSTEM INFO ---
-  app.get("/api/admin/system/db-info", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') return res.status(403).json({ error: "Access denied" });
+  app.get("/api/admin/system/db-info", authenticate, checkAdmin, (req: any, res) => {
     const useMariaDB = process.env.DB_HOST !== undefined;
     res.json({ 
       engine: useMariaDB ? 'MariaDB' : 'SQLite (Local)',
@@ -741,11 +749,7 @@ async function startServer() {
     });
   });
 
-  app.get("/api/user-directory", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to GET /api/user-directory, but role is: '${req.user.role}'`);
-      return res.status(400).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
-    }
+  app.get("/api/user-directory", authenticate, checkAdmin, (req: any, res) => {
     const users = db.prepare("SELECT * FROM users").all() as any[];
     users.forEach(u => {
       delete u.password;
@@ -760,11 +764,7 @@ async function startServer() {
     res.json(users);
   });
 
-  app.patch("/api/user-directory/:userId", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH /api/user-directory/${req.params.userId}, but role is: '${req.user.role}'`);
-      return res.status(400).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
-    }
+  app.patch("/api/user-directory/:userId", authenticate, checkAdmin, (req: any, res) => {
     const { userId } = req.params;
     const updates = req.body;
     const fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');
@@ -787,11 +787,7 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/user-directory/:userId/role", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to PATCH role /api/user-directory/${req.params.userId}/role, but role is: '${req.user.role}'`);
-      return res.status(400).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
-    }
+  app.patch("/api/user-directory/:userId/role", authenticate, checkAdmin, (req: any, res) => {
     const { userId } = req.params;
     const { role } = req.body;
     try {
@@ -802,11 +798,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/user-directory/:userId", authenticate, (req: any, res) => {
-    if (req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to DELETE user /api/user-directory/${req.params.userId}, but role is: '${req.user.role}'`);
-      return res.status(400).json({ error: `Access denied. Superadmin role is required (your role is '${req.user.role}').` });
-    }
+  app.delete("/api/user-directory/:userId", authenticate, checkSuperAdmin, (req: any, res) => {
     const { userId } = req.params;
     try {
       db.prepare("DELETE FROM users WHERE userId = ?").run(userId);
@@ -816,11 +808,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/user-directory", authenticate, async (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      console.warn(`[API ACCESS DENIED] User ${req.user.email} (ID: ${req.user.userId}) attempted to POST /api/user-directory, but role is: '${req.user.role}'`);
-      return res.status(400).json({ error: `Access denied. Your role is '${req.user.role}' but 'admin' or 'superadmin' is required.` });
-    }
+  app.post("/api/user-directory", authenticate, checkAdmin, async (req: any, res) => {
     const { name, email, password, role, ...rest } = req.body;
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -837,10 +825,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/system-maintenance-reset", authenticate, (req: any, res) => {
-    if (req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Superadmin only" });
-    }
+  app.post("/api/system-maintenance-reset", authenticate, checkSuperAdmin, (req: any, res) => {
     try {
       db.prepare("DELETE FROM tracking").run();
       db.prepare("DELETE FROM bids").run();
@@ -856,10 +841,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/system-maintenance-seed", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Admin only" });
-    }
+  app.post("/api/system-maintenance-seed", authenticate, checkAdmin, (req: any, res) => {
     try {
       // Seed a client and a driver if they don't exist
       const clientId = 'client_test_seed';
@@ -884,10 +866,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/preferences-majeures/:key", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Access denied" });
-    }
+  app.post("/api/preferences-majeures/:key", authenticate, checkAdmin, (req: any, res) => {
     const { key } = req.params;
     const value = JSON.stringify(req.body);
     try {
@@ -925,26 +904,28 @@ async function startServer() {
   seedConfig();
 
   const seedAdmin = async () => {
-    const adminEmail = "mandemohamed68@gmail.com";
+    const adminEmails = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail.com'];
     const adminPass = "mm@27071986@";
     
-    try {
-      const existingAdmin = db.prepare("SELECT * FROM users WHERE email = ?").get(adminEmail);
-      if (!existingAdmin) {
-        console.log("Seeding default super-admin...");
-        const hashedPassword = await bcrypt.hash(adminPass, 10);
-        const userId = uuidv4();
-        db.prepare("INSERT INTO users (id, userId, name, email, password, role, accountStatus) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .run(userId, userId, "Super Admin", adminEmail, hashedPassword, "superadmin", "active");
-        console.log("Default super-admin created successfully.");
-      } else {
-        console.log("Forcing update to active super-admin credentials and role...");
-        const hashedPassword = await bcrypt.hash(adminPass, 10);
-        db.prepare("UPDATE users SET password = ?, role = 'superadmin', accountStatus = 'active' WHERE email = ?")
-          .run(hashedPassword, adminEmail);
+    for (const adminEmail of adminEmails) {
+      try {
+        const existingAdmin = db.prepare("SELECT * FROM users WHERE email = ?").get(adminEmail);
+        if (!existingAdmin) {
+          console.log(`Seeding default super-admin: ${adminEmail}...`);
+          const hashedPassword = await bcrypt.hash(adminPass, 10);
+          const userId = uuidv4();
+          db.prepare("INSERT INTO users (id, userId, name, email, password, role, accountStatus) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .run(userId, userId, "Super Admin", adminEmail, hashedPassword, "superadmin", "active");
+          console.log(`Default super-admin ${adminEmail} created successfully.`);
+        } else {
+          console.log(`Forcing update to active super-admin credentials and role for ${adminEmail}...`);
+          const hashedPassword = await bcrypt.hash(adminPass, 10);
+          db.prepare("UPDATE users SET password = ?, role = 'superadmin', accountStatus = 'active' WHERE email = ?")
+            .run(hashedPassword, adminEmail);
+        }
+      } catch (err) {
+        console.error(`Failed to seed admin ${adminEmail}:`, err);
       }
-    } catch (err) {
-      console.error("Failed to seed admin:", err);
     }
   };
 
@@ -1303,10 +1284,7 @@ async function startServer() {
   });
 
   // Admin promo routes under standard protection (mapped to offres-fidelite to bypass firewall blocks)
-  app.get("/api/marketing-codes", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Accès refusé." });
-    }
+  app.get("/api/marketing-codes", authenticate, checkAdmin, (req: any, res) => {
     try {
       const promos = db.prepare("SELECT * FROM promo_codes ORDER BY created_at DESC").all();
       res.json(promos);
@@ -1315,10 +1293,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/marketing-codes", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Accès refusé." });
-    }
+  app.post("/api/marketing-codes", authenticate, checkAdmin, (req: any, res) => {
     const { code, type, value, start_date, end_date, max_uses, max_per_user } = req.body;
     if (!code || !type || value === undefined) {
       return res.status(400).json({ error: "Champs obligatoires manquants." });
@@ -1344,10 +1319,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/marketing-codes/:code", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(400).json({ error: "Accès refusé." });
-    }
+  app.delete("/api/marketing-codes/:code", authenticate, checkAdmin, (req: any, res) => {
     const { code } = req.params;
     try {
       db.prepare("DELETE FROM promo_usages WHERE code = ?").run(code);
@@ -1434,10 +1406,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/payout-registry", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-       return res.status(400).json({ error: "Accès refusé." });
-    }
+  app.get("/api/payout-registry", authenticate, checkAdmin, (req: any, res) => {
     try {
       const withdrawals = db.prepare("SELECT * FROM withdrawals ORDER BY createdAt DESC").all();
       res.json(withdrawals);
@@ -1446,10 +1415,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/payout-registry/:id/valider", authenticate, (req: any, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-       return res.status(400).json({ error: "Accès refusé." });
-    }
+  app.post("/api/payout-registry/:id/valider", authenticate, checkAdmin, (req: any, res) => {
     const { id } = req.params;
     try {
       const withdrawal = db.prepare("SELECT * FROM withdrawals WHERE id = ?").get(id) as any;
