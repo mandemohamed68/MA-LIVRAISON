@@ -688,7 +688,7 @@ export default function DeliveryTracking() {
                 {delivery.status !== 'delivered' && delivery.status !== 'cancelled' && (delivery.isPaid || delivery.paymentMethod === 'cash') && (
                    <div className="bg-slate-900 rounded-3xl p-5 lg:p-6 text-white shadow-2xl relative overflow-hidden ring-1 ring-white/10">
                       <div className="absolute top-0 left-0 w-24 h-24 bg-white/5 rounded-br-[60px] -ml-8 -mt-8" />
-                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mb-6 text-center ring-1 ring-white/5 py-2 rounded-full inline-block w-full">SÉCURITÉ • CODES PANCHO</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 mb-6 text-center ring-1 ring-white/5 py-2 rounded-full inline-block w-full">SÉCURITÉ • CODES PANCHO EXPRESS</p>
                       
                       <div className="grid grid-cols-2 gap-6 relative z-10">
                           <div className="bg-white/5 rounded-3xl p-5 text-center border border-white/10 shadow-inner group">
@@ -702,7 +702,7 @@ export default function DeliveryTracking() {
                       </div>
 
                       <button 
-                        onClick={() => handleCopy(`PANCHO - Codes: ${delivery.pickupCode} | ${delivery.deliveryCode}`)} 
+                        onClick={() => handleCopy(`PANCHO EXPRESS - Codes: ${delivery.pickupCode} | ${delivery.deliveryCode}`)} 
                         className="w-full mt-6 bg-white/5 hover:bg-white/10 rounded-2xl py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all border border-white/5 active:scale-95"
                       >
                          <Copy className="w-4 h-4" /> Copier les codes

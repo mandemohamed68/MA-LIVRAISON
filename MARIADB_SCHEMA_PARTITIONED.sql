@@ -1,4 +1,4 @@
--- MariaDB Migration Schema for PANCHO LIVRAISON (PARTITIONED)
+-- MariaDB Migration Schema for PANCHO EXPRESS (PARTITIONED)
 -- WARNING: Foreign keys are not used on partitioned tables in this schema because 
 -- MariaDB does not support foreign keys on partitioned tables.
 

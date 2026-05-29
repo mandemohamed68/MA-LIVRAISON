@@ -218,7 +218,7 @@ export default function ClientDashboard() {
         {/* Header */}
         <header className="flex justify-between items-center pt-8 mb-8">
            <div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-0.5">PANCHO</p>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-0.5">PANCHO EXPRESS</p>
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">Bonjour {profile?.name?.split(' ')[0] || 'Client'}</h1>
            </div>
            <div className="flex items-center gap-3">

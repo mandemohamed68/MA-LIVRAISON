@@ -158,7 +158,7 @@ export default function Navbar() {
           <Link to="/" className="flex items-center gap-3 group shrink-0">
             <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-950/20 group-hover:scale-110 transition-all duration-500 overflow-hidden border-2 border-white/50 p-1 shrink-0">
               {!logoError ? (
-                 <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+                 <img src={logoUrl} alt="PANCHO EXPRESS Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
                  <Logo className="w-full h-full text-orange-600" />
               )}

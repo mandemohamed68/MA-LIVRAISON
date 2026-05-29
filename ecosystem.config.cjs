@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "pancho-livraison", // Nom de l'application mis à jour pour correspondre à PANCHO LIVRAISON
+      name: "pancho-express", // Nom de l'application mis à jour pour correspondre à PANCHO EXPRESS
       script: "dist/server.cjs", // Point d'entrée de notre serveur compilé en CJS
       env: {
         NODE_ENV: "production",

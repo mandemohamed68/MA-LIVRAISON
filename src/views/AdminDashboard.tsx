@@ -2338,7 +2338,7 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-3xl p-6 lg:p-5 lg:p-6 shadow-sm border border-slate-100 h-full overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Journaux du Système PANCHO</h3>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Journaux du Système PANCHO EXPRESS</h3>
                 <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Surveillance en temps réel des activités plateforme</p>
               </div>
               <div className="flex gap-2">
@@ -2739,10 +2739,10 @@ export default function AdminDashboard() {
 
               <form onSubmit={handleCreatePromo} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 items-end">
                 <div>
-                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Code (Ex: PANCHO25)</label>
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Code (Ex: pancho25)</label>
                   <input 
                     type="text" 
-                    placeholder="PANCHO20"
+                    placeholder="pancho20"
                     value={promoForm.code}
                     onChange={e => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
                     className="w-full bg-white border border-slate-200 text-slate-900 p-3 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-xs uppercase placeholder:text-slate-300"
@@ -2869,7 +2869,7 @@ export default function AdminDashboard() {
           <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-slate-100 shadow-sm text-center px-10">
             <Store className="w-24 h-24 text-slate-100 mb-8" />
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4">Module {activeMenu}</h3>
-            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest max-w-md">Ce module de suivi en temps réel de PANCHO est en cours de déploiement sécurisé.</p>
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest max-w-md">Ce module de suivi en temps réel de PANCHO EXPRESS est en cours de déploiement sécurisé.</p>
           </div>
         );
     }
@@ -2900,7 +2900,7 @@ export default function AdminDashboard() {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-black text-slate-900 text-lg tracking-tight leading-none uppercase">PANCHO</h2>
+              <h2 className="font-black text-slate-900 text-lg tracking-tight leading-none uppercase">PANCHO EXPRESS</h2>
               <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em] mt-1.5">Administration</p>
             </div>
           </div>
@@ -3037,7 +3037,7 @@ export default function AdminDashboard() {
                     <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
-                    <span className="font-black text-slate-900 uppercase">PANCHO ADMIN</span>
+                    <span className="font-black text-slate-900 uppercase">ADMIN PANCHO EXPRESS</span>
                   </div>
                   <button onClick={() => setIsSidebarOpen(false)} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center">
                     <X className="w-5 h-5" />

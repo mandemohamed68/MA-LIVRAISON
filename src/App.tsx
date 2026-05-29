@@ -146,7 +146,7 @@ function AppRoutes() {
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-orange-500/10 to-transparent rounded-full blur-[130px] pointer-events-none z-0" />
       <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-gradient-to-tr from-amber-500/10 to-transparent rounded-full blur-[130px] pointer-events-none z-0" />
       
-      {/* Giant faint overlay watermark of PANCHO Logo (Option 1) */}
+      {/* Giant faint overlay watermark of PANCHO EXPRESS Logo (Option 1) */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] opacity-[0.035] pointer-events-none z-0 select-none">
         <img src="/logo-pancho.png" alt="" className="w-full h-full object-contain filter select-none" />
       </div>

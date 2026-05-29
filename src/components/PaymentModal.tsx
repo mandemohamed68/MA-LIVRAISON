@@ -258,7 +258,7 @@ export default function PaymentModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
-          note: `COURSE PANCHO #${Math.random().toString(36).substr(2, 5)}`,
+          note: `COURSE PANCHO EXPRESS #${Math.random().toString(36).substr(2, 5)}`,
           email: 'client@pancho.app'
         })
       });
@@ -918,7 +918,7 @@ export default function PaymentModal({
                       <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-start gap-4">
                         <ShieldCheck className="w-6 h-6 text-emerald-500 shrink-0" />
                             <p className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest leading-relaxed">
-                          Transaction Sécurisée. Vos fonds sont protégés par le protocole de séquestre PANCHO.
+                          Transaction Sécurisée. Vos fonds sont protégés par le protocole de séquestre PANCHO EXPRESS.
                         </p>
                       </div>
 

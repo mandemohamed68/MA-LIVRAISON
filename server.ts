@@ -39,14 +39,37 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
   // --- MIDDLEWARE AUTH ---
   const authenticate = (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: "No token provided" });
+    if (!authHeader) {
+      console.warn(`[AUTH] No token provided for ${req.path}`);
+      return res.status(401).json({ error: "No token provided" });
+    }
     const token = authHeader.split(" ")[1];
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
-      const user = db.prepare("SELECT role, name, email, accountStatus FROM users WHERE userId = ?").get(decoded.userId) as any;
+      if (!decoded.userId) {
+        console.error(`[AUTH] Token missing userId for ${decoded.email}`);
+        return res.status(401).json({ error: "Invalid session structure" });
+      }
+
+      // Robust lookup: check both userId and id columns
+      const user = db.prepare("SELECT role, name, email, accountStatus, userId, id FROM users WHERE userId = ? OR id = ?").get(decoded.userId, decoded.userId) as any;
+      
       if (!user) {
+        // Emergency fallback for Master Admins if DB lookup fails but token is valid
+        if (MASTER_ADMIN_EMAILS.includes(decoded.email)) {
+          console.warn(`[AUTH] Master Admin ${decoded.email} authenticated via token fallback (not found in DB)`);
+          req.user = {
+            ...decoded,
+            isMaster: true,
+            role: decoded.role || 'superadmin',
+            accountStatus: 'active'
+          };
+          return next();
+        }
+        console.warn(`[AUTH] User not found for ID: ${decoded.userId}, Email: ${decoded.email}`);
         return res.status(401).json({ error: "User not found or role mismatch" });
       }
+
       if (user.accountStatus === 'suspended') {
         const isMaster = MASTER_ADMIN_EMAILS.includes(user.email);
         if (!isMaster) {
@@ -58,10 +81,12 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
         role: user.role,
         name: user.name,
         email: user.email,
+        userId: user.userId || user.id,
         isMaster: MASTER_ADMIN_EMAILS.includes(user.email)
       };
       next();
-    } catch (err) {
+    } catch (err: any) {
+      console.error(`[AUTH] JWT Error: ${err.message}`);
       res.status(401).json({ error: "Invalid token" });
     }
   };
@@ -153,7 +178,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
         return res.status(400).json({ error: "Votre compte a été suspendu par l'administrateur. Veuillez contacter le support." });
       }
       delete user.password;
-      const token = jwt.sign({ userId: user.userId, email: user.email, role: user.role }, JWT_SECRET);
+      const token = jwt.sign({ userId: user.userId || user.id, email: user.email, role: user.role }, JWT_SECRET);
       res.json({ token, user });
     } catch (error) {
       res.status(500).json({ error: "Erreur de connexion serveur." });
@@ -920,7 +945,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
         } else {
           console.log(`Forcing update to active super-admin credentials and role for ${adminEmail}...`);
           const hashedPassword = await bcrypt.hash(adminPass, 10);
-          db.prepare("UPDATE users SET password = ?, role = 'superadmin', accountStatus = 'active' WHERE email = ?")
+          db.prepare("UPDATE users SET password = ?, role = 'superadmin', accountStatus = 'active', userId = COALESCE(userId, id) WHERE email = ?")
             .run(hashedPassword, adminEmail);
         }
       } catch (err) {

@@ -1,6 +1,6 @@
-# Guide de Déploiement Complet (Débutant) - PANCHO LIVRAISON sur Debian 12
+# Guide de Déploiement Complet (Débutant) - PANCHO EXPRESS sur Debian 12
 
-Ce guide vous accompagne pas à pas pour installer l'application **PANCHO LIVRAISON** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3000**.
+Ce guide vous accompagne pas à pas pour installer l'application **PANCHO EXPRESS** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3000**.
 
 ## 1. Préparation du Serveur Debian 12
 
@@ -31,9 +31,9 @@ Vérifiez l'installation : `node -v` (doit afficher v18.x.x).
 Allez dans le dossier où vous voulez installer l'application (généralement `/var/www/`) :
 
 ```bash
-sudo mkdir -p /var/www/pancho-livraison
-sudo chown $USER:$USER /var/www/pancho-livraison
-cd /var/www/pancho-livraison
+sudo mkdir -p /var/www/pancho-express
+sudo chown $USER:$USER /var/www/pancho-express
+cd /var/www/pancho-express
 ```
 
 Clonez votre dépôt GitHub (remplacez par votre URL) :
@@ -95,7 +95,7 @@ Pour que l'application ne s'arrête pas si vous fermez votre session SSH, utilis
 
 ```bash
 sudo npm install -g pm2
-pm2 start dist/server.cjs --name "pancho-livraison"
+pm2 start dist/server.cjs --name "pancho-express"
 pm2 save
 pm2 startup
 ```
@@ -113,7 +113,7 @@ Pour accéder à votre application via `http://votre-domaine.com` (port 80) au l
 
 2. Créez la configuration :
    ```bash
-   sudo nano /etc/nginx/sites-available/pancho-livraison
+   sudo nano /etc/nginx/sites-available/pancho-express
    ```
 
 3. Collez ce contenu :
@@ -135,7 +135,7 @@ Pour accéder à votre application via `http://votre-domaine.com` (port 80) au l
 
 4. Activez et redémarrez :
    ```bash
-   sudo ln -s /etc/nginx/sites-available/pancho-livraison /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/pancho-express /etc/nginx/sites-enabled/
    sudo nginx -t
    sudo systemctl restart nginx
    ```

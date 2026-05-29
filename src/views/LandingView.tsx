@@ -312,7 +312,7 @@ export default function LandingView() {
           <div className="flex items-center gap-4 mb-12">
             <div className="w-28 h-28 rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1">
               {!logoError ? (
-                 <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+                 <img src={logoUrl} alt="PANCHO EXPRESS Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
                  <Logo className="w-full h-full text-orange-600" />
               )}
@@ -329,7 +329,7 @@ export default function LandingView() {
           <h1 className="text-[100px] xl:text-[120px] font-black text-slate-900 leading-[0.85] tracking-tighter uppercase italic select-none">
             VITESSE.<br />
             <span className="text-primary">SÉCURITÉ.</span><br />
-            PANCHO.
+            PANCHO EXPRESS.
           </h1>
 
           <div className="mt-8">
@@ -357,7 +357,7 @@ export default function LandingView() {
           <div className="text-center mb-8 flex flex-col items-center">
             <div className="w-32 h-32 sm:hidden rounded-2xl flex items-center justify-center bg-white shadow-xl shadow-orange-500/10 border-2 border-orange-100 overflow-hidden p-1 mb-4">
               {!logoError ? (
-                 <img src={logoUrl} alt="PANCHO Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
+                 <img src={logoUrl} alt="PANCHO EXPRESS Logo" onError={() => setLogoError(true)} className="w-full h-full object-contain" />
               ) : (
                  <Logo className="w-full h-full text-orange-600" />
               )}
@@ -793,7 +793,7 @@ export default function LandingView() {
                      <div>
                        <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Conditions d'utilisation</p>
                        <p className="text-[9px] font-medium text-slate-400 mt-1 leading-relaxed">
-                         En cochant cette case, vous vous engagez à respecter les conditions de service de PANCHO.
+                         En cochant cette case, vous vous engagez à respecter les conditions de service de PANCHO EXPRESS.
                        </p>
                      </div>
                   </div>
