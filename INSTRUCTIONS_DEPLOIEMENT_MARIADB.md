@@ -1,6 +1,6 @@
 # Guide Détaillé de Déploiement : Debian 12 + MariaDB + Firebase Auth
 
-Ce document rassemble **toutes les étapes pas à pas** pour un déploiement propre sur votre serveur **Debian 12**, en exposant l'App sur le port **3005**, en conservant **Firebase Auth** et en utilisant **MariaDB** pour les données locales. 
+Ce document rassemble **toutes les étapes pas à pas** pour un déploiement propre sur votre serveur **Debian 12**, en exposant l'App sur le port **3000**, en conservant **Firebase Auth** et en utilisant **MariaDB** pour les données locales. 
 
 Tous les fichiers `.example` sont déjà inclus dans la racine de ce dossier, pour que vous n'ayez que des opérations de copie à faire !
 
@@ -99,7 +99,7 @@ npm run build
 
 ## 6. Lancement en tâche de fond avec PM2
 
-On utilise le fichier `ecosystem.config.cjs.example` pour un démarrage ultra clean (spécifiant automatiquement le Port 3005 et le mode Production).
+On utilise le fichier `ecosystem.config.cjs.example` pour un démarrage ultra clean (spécifiant automatiquement le Port 3000 et le mode Production).
 
 ```bash
 sudo npm install -g pm2
@@ -114,7 +114,7 @@ pm2 startup
 
 ## 7. Configuration Nginx pour le web
 
-On redirige les requêtes Web classiques (port 80) vers notre application (port 3005).
+On redirige les requêtes Web classiques (port 80) vers notre application (port 3000).
 
 ```bash
 sudo nano /etc/nginx/sites-available/pancho-livraison
@@ -127,7 +127,7 @@ server {
     server_name votre-domaine.com; # Remplacez par l'IP de votre serveur ou nom de domaine
 
     location / {
-        proxy_pass http://localhost:3005;
+        proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

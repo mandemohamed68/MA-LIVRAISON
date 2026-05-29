@@ -1,6 +1,6 @@
 # Guide de Déploiement Complet (Débutant) - PANCHO LIVRAISON sur Debian 12
 
-Ce guide vous accompagne pas à pas pour installer l'application **PANCHO LIVRAISON** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3005**.
+Ce guide vous accompagne pas à pas pour installer l'application **PANCHO LIVRAISON** sur votre propre serveur Debian 12, en utilisant **GitHub** pour récupérer le code et en configurant le serveur pour fonctionner sur le port **3000**.
 
 ## 1. Préparation du Serveur Debian 12
 
@@ -57,7 +57,7 @@ cp .env.example .env
 nano .env
 ```
 Dans l'éditeur `nano`, modifiez les valeurs suivantes :
-- `PORT=3005` (Vérifiez qu'il est bien à 3005)
+- `PORT=3000` (Vérifiez qu'il est bien à 3000)
 - `JWT_SECRET` : Inventez une phrase très longue et aléatoire.
 - `SAPPAY_CLIENT_ID`, etc. : Remplissez avec vos clés Sappay.
 
@@ -85,7 +85,7 @@ Lancez l'application pour tester :
 ```bash
 npm start
 ```
-Si vous voyez "Server running on http://localhost:3005", tout fonctionne ! Appuyez sur `CTRL+C` pour arrêter le test.
+Si vous voyez "Server running on http://localhost:3000", tout fonctionne ! Appuyez sur `CTRL+C` pour arrêter le test.
 
 ---
 
@@ -104,7 +104,7 @@ pm2 startup
 
 ## 7. Configuration Nginx (Reverse Proxy)
 
-Pour accéder à votre application via `http://votre-domaine.com` (port 80) au lieu de `:3005` :
+Pour accéder à votre application via `http://votre-domaine.com` (port 80) au lieu de `:3000` :
 
 1. Installez Nginx :
    ```bash
@@ -123,7 +123,7 @@ Pour accéder à votre application via `http://votre-domaine.com` (port 80) au l
        server_name votre-domaine.com; # Remplacez par votre IP ou domaine
 
        location / {
-           proxy_pass http://localhost:3005;
+           proxy_pass http://localhost:3000;
            proxy_http_version 1.1;
            proxy_set_header Upgrade $http_upgrade;
            proxy_set_header Connection 'upgrade';

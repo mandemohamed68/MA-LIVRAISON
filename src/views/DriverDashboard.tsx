@@ -8,6 +8,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import { api } from '../services/apiService';
 import L from 'leaflet';
 import { cn, calculateDistance } from '../lib/utils';
+import { playNotificationSound } from '../lib/audio';
 import LoadingScreen from '../components/LoadingScreen';
 import AnnouncementBanner from '../components/AnnouncementBanner';
 import NotificationBell from '../components/NotificationBell';
@@ -115,6 +116,15 @@ export default function DriverDashboard() {
   const [pendingJobs, setPendingJobs] = useState<DeliveryRequest[]>([]);
   const [activeJobs, setActiveJobs] = useState<DeliveryRequest[]>([]);
   const [deliveredJobs, setDeliveredJobs] = useState<DeliveryRequest[]>([]);
+  
+  const prevPendingJobIds = useRef<string[]>([]);
+  useEffect(() => {
+    const newJobs = pendingJobs.filter(j => !prevPendingJobIds.current.includes(j.id));
+    if (newJobs.length > 0 && newJobs.some(j => j.status === 'pending')) {
+      playNotificationSound();
+    }
+    prevPendingJobIds.current = pendingJobs.map(j => j.id);
+  }, [pendingJobs]);
   
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
