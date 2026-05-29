@@ -1,0 +1,16 @@
+module.exports = {
+  apps: [
+    {
+      name: "pancho-express", // Nom de l'application
+      script: "dist/server.cjs", // Point d'entrée de notre serveur combiné compilé
+      env: {
+        NODE_ENV: "production",
+        PORT: 3000 // Port de l'application locale
+      },
+      instances: 1, // Changez en "max" si vous souhaitez utiliser un cluster
+      autorestart: true,
+      watch: false, // Pas de watch en production
+      max_memory_restart: "1G"
+    }
+  ]
+};
