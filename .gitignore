@@ -4,3 +4,5 @@ coverage/
 *.log
 .env*
 !.env.example
+local.db
+local.db-journal

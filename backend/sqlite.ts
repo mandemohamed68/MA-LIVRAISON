@@ -404,5 +404,10 @@ try {
 }
 
 
+  (db as any).engine = 'SQLite (Local)';
+  (db as any).config = {
+    host: 'local',
+    database: path.basename(dbPath)
+  };
   return db;
 }

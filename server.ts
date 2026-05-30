@@ -869,11 +869,10 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
   // --- ADMIN ENDPOINTS (Mapped to obscure names to bypass firewall blocks) ---
   // --- SYSTEM INFO ---
   app.get("/api/admin/system/db-info", authenticate, checkAdmin, (req: any, res) => {
-    const useMariaDB = process.env.DB_HOST !== undefined;
     res.json({ 
-      engine: useMariaDB ? 'MariaDB' : 'SQLite (Local)',
-      host: process.env.DB_HOST || 'local',
-      database: process.env.DB_NAME || 'local.db'
+      engine: db.engine || 'SQLite (Local)',
+      host: db.config?.host || 'local',
+      database: db.config?.database || 'local.db'
     });
   });
 
