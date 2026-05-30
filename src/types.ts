@@ -16,6 +16,10 @@ export interface AppConfig {
   isMoovActive?: boolean;
   isTelecelActive?: boolean;
   isCorisActive?: boolean;
+  sappayClientId?: string;
+  sappayClientSecret?: string;
+  sappayUsername?: string;
+  sappayPassword?: string;
 }
 
 export interface Sector {

@@ -591,55 +591,63 @@ export default function LandingView() {
                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Dossier Chauffeur (Optionnel)</h3>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">CNI Recto (Optionnel)</label>
-                      <div 
-                        onClick={() => document.getElementById('idCardFrontInput')?.click()}
-                        className="h-32 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 transition-all bg-white relative overflow-hidden"
-                      >
-                        {idCardFront ? (
-                          <img src={idCardFront} className="absolute inset-0 w-full h-full object-cover" alt="Recto CNI" />
-                        ) : (
-                          <>
-                            <Plus className="w-6 h-6 text-slate-300 mb-2" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Ajouter Photo</span>
-                          </>
-                        )}
-                        <input id="idCardFrontInput" type="file" accept="image/*" className="hidden" onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => setIdCardFront(reader.result as string);
-                            reader.readAsDataURL(file);
-                          }
-                        }} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">CNI Verso (Optionnel)</label>
-                      <div 
-                        onClick={() => document.getElementById('idCardBackInput')?.click()}
-                        className="h-32 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 transition-all bg-white relative overflow-hidden"
-                      >
-                        {idCardBack ? (
-                          <img src={idCardBack} className="absolute inset-0 w-full h-full object-cover" alt="Verso CNI" />
-                        ) : (
-                          <>
-                            <Plus className="w-6 h-6 text-slate-300 mb-2" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Ajouter Photo</span>
-                          </>
-                        )}
-                        <input id="idCardBackInput" type="file" accept="image/*" className="hidden" onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => setIdCardBack(reader.result as string);
-                            reader.readAsDataURL(file);
-                          }
-                        }} />
-                      </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">
+                      Photos des Documents d'identité
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                       <label className={cn(
+                         "border border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group",
+                         idCardFront ? "bg-orange-50 border-orange-500" : "border-slate-200 bg-white hover:border-orange-500"
+                       )}>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={e => handleFileChange(e, 'front')} 
+                            className="hidden" 
+                          />
+                          {idCardFront ? (
+                            <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+                              <img src={idCardFront} alt="Recto" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-orange-500/40 flex items-center justify-center text-white">
+                                <UserCheck className="w-6 h-6" />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Camera className="w-6 h-6 text-slate-300 group-hover:text-orange-500 mb-2" />
+                              <span className="text-[9px] font-black text-slate-400 uppercase">
+                                {driverType === 'company' ? 'RCCM / Statuts (Optionnel)' : 'CNIB Recto (Optionnel)'}
+                              </span>
+                            </>
+                          )}
+                       </label>
+                       <label className={cn(
+                         "border border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group",
+                         idCardBack ? "bg-orange-50 border-orange-500" : "border-slate-200 bg-white hover:border-orange-500"
+                       )}>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={e => handleFileChange(e, 'back')} 
+                            className="hidden" 
+                          />
+                          {idCardBack ? (
+                            <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+                              <img src={idCardBack} alt="Verso" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-orange-500/40 flex items-center justify-center text-white">
+                                <UserCheck className="w-6 h-6" />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Camera className="w-6 h-6 text-slate-300 group-hover:text-orange-500 mb-2" />
+                              <span className="text-[9px] font-black text-slate-400 uppercase">
+                                {driverType === 'company' ? 'NIF / IFU (Optionnel)' : 'CNIB Verso (Optionnel)'}
+                              </span>
+                            </>
+                          )}
+                       </label>
                     </div>
                   </div>
 
@@ -670,7 +678,7 @@ export default function LandingView() {
                     </p>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 pt-4 border-t border-slate-200">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Définir un Mot de Passe</label>
                     <input 
                       required
@@ -710,68 +718,8 @@ export default function LandingView() {
               </div>
 
               {role === 'driver' && (
-                <div className="mt-4 p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-5">
-                  <div className="flex items-center gap-2">
-                     <CheckSquare className="w-5 h-5 text-emerald-500" />
-                     <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest italic">Vérification Documents</h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     <label className={cn(
-                       "border border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group",
-                       idCardFront ? "bg-orange-50 border-orange-500" : "border-slate-200 bg-white hover:border-orange-500"
-                     )}>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={e => handleFileChange(e, 'front')} 
-                          className="hidden" 
-                        />
-                        {idCardFront ? (
-                          <div className="relative w-full aspect-video rounded-lg overflow-hidden">
-                            <img src={idCardFront} alt="Recto" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-orange-500/40 flex items-center justify-center text-white">
-                              <UserCheck className="w-6 h-6" />
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <Camera className="w-6 h-6 text-slate-300 group-hover:text-orange-500 mb-2" />
-                            <span className="text-[9px] font-black text-slate-400 uppercase">
-                              {driverType === 'company' ? 'RCCM / Statuts' : 'CNI Recto *'}
-                            </span>
-                          </>
-                        )}
-                     </label>
-                     <label className={cn(
-                       "border border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group",
-                       idCardBack ? "bg-orange-50 border-orange-500" : "border-slate-200 bg-white hover:border-orange-500"
-                     )}>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={e => handleFileChange(e, 'back')} 
-                          className="hidden" 
-                        />
-                        {idCardBack ? (
-                          <div className="relative w-full aspect-video rounded-lg overflow-hidden">
-                            <img src={idCardBack} alt="Verso" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-orange-500/40 flex items-center justify-center text-white">
-                              <UserCheck className="w-6 h-6" />
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <Camera className="w-6 h-6 text-slate-300 group-hover:text-orange-500 mb-2" />
-                            <span className="text-[9px] font-black text-slate-400 uppercase">
-                              {driverType === 'company' ? 'NIF / IFU' : 'CNI Verso *'}
-                            </span>
-                          </>
-                        )}
-                     </label>
-                  </div>
-
-                  <div className="space-y-1.5 pt-2">
+                <div className="mt-4 p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-4">
+                  <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 italic">Adresse / Zone d'activité</label>
                     <input 
                       type="text"

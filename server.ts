@@ -8,7 +8,15 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 
+// Configuration robuste du chargement de dotenv pour les serveurs locaux ou distants
 dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), ".env") });
+try {
+  dotenv.config({ path: path.join(__dirname, ".env") });
+  dotenv.config({ path: path.join(__dirname, "..", ".env") });
+} catch (e) {
+  console.warn("Dotenv warning on specific directory resolution:", e);
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-for-dev";
 
@@ -633,16 +641,55 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     return null;
   };
 
-  async function getSappayToken() {
-    const clientId = process.env.SAPPAY_CLIENT_ID?.trim();
-    const clientSecret = process.env.SAPPAY_CLIENT_SECRET?.trim();
-    const username = process.env.SAPPAY_USERNAME?.trim();
-    const password = process.env.SAPPAY_PASSWORD?.trim();
+  const sanitizeCredential = (val: string | undefined): string | undefined => {
+    if (!val) return val;
+    let s = val.trim();
+    // Supprime les guillemets englobants si présents
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      s = s.slice(1, -1).trim();
+    }
+    // Supprime le symbole '>' final accidentel dû à une redirection bash (ex: echo secret> .env)
+    if (s.endsWith('>')) {
+      s = s.slice(0, -1).trim();
+    }
+    return s;
+  };
 
+  async function getSappayToken() {
+    let clientId = sanitizeCredential(process.env.SAPPAY_CLIENT_ID);
+    let clientSecret = sanitizeCredential(process.env.SAPPAY_CLIENT_SECRET);
+    let username = sanitizeCredential(process.env.SAPPAY_USERNAME);
+    let password = sanitizeCredential(process.env.SAPPAY_PASSWORD);
+
+    // Fallback à la base de données si non renseigné dans le fichier d'environnement .env
     if (!clientId || !clientSecret || !username || !password) {
-      throw new Error("Missing or empty Sappay credentials in Secrets (ID, SECRET, USERNAME, or PASSWORD)");
+      try {
+        const row = db.prepare("SELECT value FROM config WHERE key = 'app_config'").get() as any;
+        if (row && row.value) {
+          const appConfig = JSON.parse(row.value);
+          if (!clientId && appConfig.sappayClientId?.trim()) {
+            clientId = sanitizeCredential(appConfig.sappayClientId);
+          }
+          if (!clientSecret && appConfig.sappayClientSecret?.trim()) {
+            clientSecret = sanitizeCredential(appConfig.sappayClientSecret);
+          }
+          if (!username && appConfig.sappayUsername?.trim()) {
+            username = sanitizeCredential(appConfig.sappayUsername);
+          }
+          if (!password && appConfig.sappayPassword?.trim()) {
+            password = sanitizeCredential(appConfig.sappayPassword);
+          }
+        }
+      } catch (dbErr) {
+        console.error("Impossible de récupérer la config Sappay de la base de données SQLite :", dbErr);
+      }
     }
 
+    if (!clientId || !clientSecret || !username || !password) {
+      throw new Error(`SAPPAY AUTHENTICATION FAILED: Identifiants incomplets. Veuillez renseigner SAPPAY_CLIENT_ID, SAPPAY_CLIENT_SECRET, SAPPAY_USERNAME et SAPPAY_PASSWORD dans votre fichier .env ou dans l'espace "Paramètres Sappay" de votre panneau d'administration.`);
+    }
+
+    console.log(`[DEBUG] Attempting Sappay auth. ClientID: ${clientId.substring(0, 5)}..., Username: ${username}`);
     const response = await fetch(`${SAPPAY_BASE_PUBLIC}/authentication/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -656,7 +703,8 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     });
 
     if (!response.ok) {
-      throw new Error(`Sappay Authentication Failed: ${response.status}`);
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`SAPPAY AUTHENTICATION FAILED: ${response.status} (Veuillez ré-examiner vos identifiants d'API Moov/Orange/Telecel Sappay dans votre fichier .env ou sur l'onglet d'administration. Réponse brute : ${errorText})`);
     }
     const data = await response.json();
     return data.access_token;
@@ -881,10 +929,36 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
   app.delete("/api/user-directory/:userId", authenticate, checkSuperAdmin, (req: any, res) => {
     const { userId } = req.params;
     try {
+      // 1. Delete tracking info for deliveries belonging to this client/driver
+      db.prepare("DELETE FROM tracking WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
+      
+      // 2. Delete messages in deliveries belonging to this user, plus messages sent by this user
+      db.prepare("DELETE FROM messages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
+      db.prepare("DELETE FROM messages WHERE senderId = ?").run(userId);
+      
+      // 3. Delete bids on deliveries belonging to this user, plus bids made by this user
+      db.prepare("DELETE FROM bids WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
+      db.prepare("DELETE FROM bids WHERE driverId = ?").run(userId);
+      
+      // 4. Delete promo usages on deliveries belonging to this user, plus promo usages by this user
+      db.prepare("DELETE FROM promo_usages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
+      db.prepare("DELETE FROM promo_usages WHERE userId = ?").run(userId);
+      
+      // 5. Delete notifications, withdrawals, and gains history
+      db.prepare("DELETE FROM notifications WHERE userId = ?").run(userId);
+      db.prepare("DELETE FROM withdrawals WHERE driverId = ?").run(userId);
+      db.prepare("DELETE FROM historique_gains WHERE driverId = ?").run(userId);
+      
+      // 6. Delete deliveries where user is client or driver
+      db.prepare("DELETE FROM deliveries WHERE clientId = ? OR driverId = ?").run(userId, userId);
+      
+      // 7. Finally delete the user account
       db.prepare("DELETE FROM users WHERE userId = ?").run(userId);
+      
       res.json({ status: "ok" });
-    } catch (err) {
-      res.status(500).json({ error: "Delete failed" });
+    } catch (err: any) {
+      console.error("Failed to delete user completely:", err);
+      res.status(500).json({ error: "Échec de la suppression intégrale.", details: err?.message });
     }
   });
 

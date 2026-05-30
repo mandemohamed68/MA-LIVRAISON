@@ -2010,6 +2010,74 @@ export default function AdminDashboard() {
                   </div>
                </div>
 
+                {/* Configuration de la Passerelle Sappay */}
+                <div className="mt-8 p-6 lg:p-8 bg-slate-50 rounded-[32px] border border-slate-100">
+                   <div className="flex items-center gap-5 mb-8">
+                      <div className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-200">
+                         <CreditCard className="w-6 h-6" />
+                      </div>
+                      <div>
+                         <h4 className="font-black text-slate-900 uppercase text-lg tracking-tight">Identifiants Sappay (Paiement Direct/OTP)</h4>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configurez l'API de paiement automatique Moov/Orange/Telecel</p>
+                      </div>
+                   </div>
+
+                   <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 mb-8 flex gap-4 items-start">
+                     <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center shrink-0">
+                       <Zap className="w-4 h-4" />
+                     </div>
+                     <div>
+                       <h5 className="text-[10px] font-black text-emerald-900 uppercase tracking-widest mb-1">Priorité des Identifiants</h5>
+                       <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+                         Les valeurs définies dans votre fichier <span className="font-bold">.env</span> local sont utilisées en priorité. Si elles sont absentes ou vides, l'application utilisera les valeurs saisies ci-dessous.
+                       </p>
+                     </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-2">Sappay Client ID</label>
+                         <input 
+                            type="text"
+                            placeholder="Entrez votre Sappay Client ID..."
+                            value={configForm?.sappayClientId || ''}
+                            onChange={(e) => setConfigForm({ ...configForm!, sappayClientId: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500"
+                         />
+                      </div>
+                      <div>
+                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-2">Sappay Client Secret</label>
+                         <input 
+                            type="password"
+                            placeholder="Entrez votre Sappay Client Secret..."
+                            value={configForm?.sappayClientSecret || ''}
+                            onChange={(e) => setConfigForm({ ...configForm!, sappayClientSecret: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500"
+                         />
+                      </div>
+                      <div>
+                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-2">Identifiant de Connexion (Username)</label>
+                         <input 
+                            type="text"
+                            placeholder="Entrez l'identifiant pour Sappay..."
+                            value={configForm?.sappayUsername || ''}
+                            onChange={(e) => setConfigForm({ ...configForm!, sappayUsername: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500"
+                         />
+                      </div>
+                      <div>
+                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-2">Mot de Passe (Password)</label>
+                         <input 
+                            type="password"
+                            placeholder="Entrez le mot de passe pour Sappay..."
+                            value={configForm?.sappayPassword || ''}
+                            onChange={(e) => setConfigForm({ ...configForm!, sappayPassword: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500"
+                         />
+                      </div>
+                   </div>
+                </div>
+
                <div className="mt-8 p-6 lg:p-8 bg-slate-50 rounded-[32px] border border-slate-100">
                   <div className="flex items-center gap-5 mb-8">
                      <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
@@ -3439,7 +3507,7 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-2 gap-3">
                        {/* Identity Recto */}
                        <div className="space-y-1">
-                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">ID (Recto/Statuts)</p>
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">CNIB (Recto/Statuts)</p>
                           {(selectedUser.identityCardUrl || selectedUser.idCardFront) ? (
                             <button className="w-full relative group" onClick={() => window.open((selectedUser.identityCardUrl || selectedUser.idCardFront)!, '_blank')}>
                               <img src={selectedUser.identityCardUrl || selectedUser.idCardFront} alt="ID Front" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />
@@ -3454,7 +3522,7 @@ export default function AdminDashboard() {
 
                        {/* Identity Verso */}
                        <div className="space-y-1">
-                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">ID (Verso / Complément)</p>
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">CNIB (Verso / Complément)</p>
                           {(selectedUser.identityCardBackUrl || selectedUser.idCardBack) ? (
                             <button className="w-full relative group" onClick={() => window.open((selectedUser.identityCardBackUrl || selectedUser.idCardBack)!, '_blank')}>
                               <img src={selectedUser.identityCardBackUrl || selectedUser.idCardBack} alt="ID Back" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />
@@ -3484,7 +3552,7 @@ export default function AdminDashboard() {
 
                        {/* CNI Garant */}
                        <div className="space-y-1">
-                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">CNI du Garant / Autre</p>
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">CNIB du Garant / Autre</p>
                           {selectedUser.guarantorCniUrl ? (
                             <button className="w-full relative group" onClick={() => window.open(selectedUser.guarantorCniUrl!, '_blank')}>
                               <img src={selectedUser.guarantorCniUrl} alt="Guarantor CNI" className="w-full aspect-video object-cover rounded-2xl border border-slate-200 shadow-sm" />

@@ -1603,7 +1603,7 @@ export default function DriverDashboard() {
 
                     <div className="grid grid-cols-2 gap-4">
                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">ID (Recto)</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">CNIB (Recto)</label>
                           <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.cniFront ? 'border-indigo-500' : '')}>
                              {verificationForm.cniFront ? (
                                 <img src={verificationForm.cniFront} className="w-full h-full object-cover" />
@@ -1626,7 +1626,7 @@ export default function DriverDashboard() {
                           </div>
                        </div>
                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">ID (Verso)</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">CNIB (Verso)</label>
                           <div className={cn("relative h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden", verificationForm.cniBack ? 'border-indigo-500' : '')}>
                              {verificationForm.cniBack ? (
                                 <img src={verificationForm.cniBack} className="w-full h-full object-cover" />
