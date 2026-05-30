@@ -86,7 +86,7 @@ export default function initMariaDB() {
   // MIGRATION: Auto-add withdrawalPhone column if missing
   try {
     // Force character set for existing tables
-    const tablesToFix = ['users', 'deliveries', 'notifications', 'announcements', 'sectors', 'bids', 'withdrawals', 'config'];
+    const tablesToFix = ['users', 'deliveries', 'notifications', 'announcements', 'sectors', 'bids', 'withdrawals', 'config', 'tracking', 'messages', 'promo_codes', 'promo_usages', 'historique_gains'];
     for (const t of tablesToFix) {
       try { connection.query(`ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`); } catch(e) {}
     }
