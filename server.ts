@@ -239,6 +239,10 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
       if (f === 'password' && typeof val === 'string' && val.trim() !== '') {
         return await bcrypt.hash(val, 10);
       }
+      if (typeof val === 'string' && val.includes('T') && val.endsWith('Z')) {
+        // Convert ISO string to MariaDB datetime format: 'YYYY-MM-DD HH:MM:SS'
+        val = val.slice(0, 19).replace('T', ' ');
+      }
       if (typeof val === 'boolean') return val ? 1 : 0;
       if (typeof val === 'object' && val !== null) return JSON.stringify(val);
       return val;
@@ -426,6 +430,9 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     const setClause = fields.map(f => `${f} = ?`).join(", ");
     const values = fields.map(f => {
       let val = updates[f];
+      if (typeof val === 'string' && val.includes('T') && val.endsWith('Z')) {
+        val = val.slice(0, 19).replace('T', ' ');
+      }
       if (typeof val === 'boolean') return val ? 1 : 0;
       if (typeof val === 'object' && val !== null) return JSON.stringify(val);
       return val;
@@ -900,6 +907,9 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     const setClause = fields.map(f => `${f} = ?`).join(", ");
     const values = fields.map(f => {
       let val = updates[f];
+      if (typeof val === 'string' && val.includes('T') && val.endsWith('Z')) {
+        val = val.slice(0, 19).replace('T', ' ');
+      }
       if (typeof val === 'boolean') return val ? 1 : 0;
       if (typeof val === 'object' && val !== null) return JSON.stringify(val);
       return val;
