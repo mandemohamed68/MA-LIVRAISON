@@ -155,7 +155,17 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
       }
       if (updates.length > 0) {
         params.push(userId);
-        db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE userId = ?`).run(...params);
+        try {
+          db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE userId = ?`).run(...params);
+        } catch (updateErr: any) {
+          // Annuler la création (supprimer l'utilisateur partiel)
+          db.prepare("DELETE FROM users WHERE userId = ?").run(userId);
+          
+          if (updateErr.message && updateErr.message.includes("ER_DATA_TOO_LONG")) {
+            return res.status(400).json({ error: "Image trop volumineuse, veuillez en choisir une autre (ex: compacter la photo de carte d'identité)." });
+          }
+          throw updateErr;
+        }
       }
 
       // Fetch the full registered user profile to return to the frontend
@@ -1002,7 +1012,11 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
       stmt.run(...values);
       res.json({ userId, name, email, role });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      if (error && error.message && error.message.includes("ER_DATA_TOO_LONG")) {
+        res.status(400).json({ error: "Une ou plusieurs images sont trop volumineuses. Veuillez réduire leur taille." });
+      } else {
+        res.status(500).json({ error: error.message });
+      }
     }
   });
 

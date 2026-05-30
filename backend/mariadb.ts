@@ -87,6 +87,11 @@ export default function initMariaDB() {
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorCniUrl text DEFAULT NULL AFTER guarantorPhone");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS criminalRecordUrl text DEFAULT NULL AFTER guarantorCniUrl");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS verificationStatus varchar(50) DEFAULT 'unverified'");
+    try { connection.query("ALTER TABLE users MODIFY COLUMN identityCardUrl LONGTEXT"); } catch(e){}
+    try { connection.query("ALTER TABLE users MODIFY COLUMN criminalRecordUrl LONGTEXT"); } catch(e){}
+    try { connection.query("ALTER TABLE users MODIFY COLUMN guarantorCniUrl LONGTEXT"); } catch(e){}
+    try { connection.query("ALTER TABLE users MODIFY COLUMN idCardFront LONGTEXT"); } catch(e){}
+    try { connection.query("ALTER TABLE users MODIFY COLUMN idCardBack LONGTEXT"); } catch(e){}
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS termsAcceptedAt datetime DEFAULT NULL");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS driverType varchar(50) DEFAULT 'freelance'");
     connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
@@ -97,8 +102,9 @@ export default function initMariaDB() {
         id varchar(255) PRIMARY KEY,
         title varchar(255) NOT NULL,
         message text NOT NULL,
-        image_url varchar(1024),
-        is_active tinyint(1) DEFAULT 1,
+        type varchar(50) DEFAULT 'info',
+        targetRole varchar(50) DEFAULT 'all',
+        activeUntil datetime DEFAULT NULL,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP
       )
