@@ -547,16 +547,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
   const handleDeleteUser = async (userId: string) => {
-    if (!isSuperAdmin) return;
+    if (!isSuperAdmin || isDeleting) return;
+    setIsDeleting(true);
     try {
       await api.admin.users.delete(userId);
       alert('Utilisateur supprimé.');
       setConfirmingDeleteUserId(null);
       setSelectedUser(null);
-    } catch (err) {
-      console.error(err);
-      alert('Erreur lors de la suppression.');
+      await fetchData();
+    } catch (err: any) {
+      console.error("Delete user error:", err);
+      const detail = err.response?.data?.error || err.response?.data?.details || err.message || 'Erreur inconnue';
+      alert(`Erreur lors de la suppression : ${detail}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -3710,9 +3716,10 @@ export default function AdminDashboard() {
                         onClick={async () => {
                           await handleDeleteUser(selectedUser.userId);
                         }}
-                        className="flex-1 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all"
+                        disabled={isDeleting}
+                        className="flex-1 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all disabled:opacity-50"
                       >
-                        Sûr ! Supprimer
+                        {isDeleting ? 'Suppression...' : 'Sûr ! Supprimer'}
                       </button>
                       <button
                         onClick={() => setConfirmingDeleteUserId(null)}

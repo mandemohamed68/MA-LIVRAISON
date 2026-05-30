@@ -951,37 +951,54 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   app.delete("/api/user-directory/:userId", authenticate, checkSuperAdmin, (req: any, res) => {
     const { userId } = req.params;
+    const currentUserId = req.user.userId;
+
+    if (userId === currentUserId) {
+      return res.status(400).json({ error: "Vous ne pouvez pas supprimer votre propre compte admin." });
+    }
+
+    console.log(`[DELETE USER] Attempting to delete user: ${userId} by admin: ${currentUserId}`);
+    
     try {
-      // 1. Delete tracking info for deliveries belonging to this client/driver
-      db.prepare("DELETE FROM tracking WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
+      const deleteTransaction = db.transaction((targetId: string) => {
+        // 1. Delete tracking info
+        db.prepare("DELETE FROM tracking WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        
+        // 2. Delete messages
+        db.prepare("DELETE FROM messages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        db.prepare("DELETE FROM messages WHERE senderId = ?").run(targetId);
+        
+        // 3. Delete bids
+        db.prepare("DELETE FROM bids WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        db.prepare("DELETE FROM bids WHERE driverId = ?").run(targetId);
+        
+        // 4. Delete promo usages
+        db.prepare("DELETE FROM promo_usages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        db.prepare("DELETE FROM promo_usages WHERE userId = ?").run(targetId);
+        
+        // 5. Delete notifications, withdrawals, and gains history
+        db.prepare("DELETE FROM notifications WHERE userId = ?").run(targetId);
+        db.prepare("DELETE FROM withdrawals WHERE driverId = ?").run(targetId);
+        db.prepare("DELETE FROM historique_gains WHERE driverId = ?").run(targetId);
+        
+        // 6. Delete deliveries
+        db.prepare("DELETE FROM deliveries WHERE clientId = ? OR driverId = ?").run(targetId, targetId);
+        
+        // 7. Finally delete the user account
+        const result = db.prepare("DELETE FROM users WHERE userId = ?").run(targetId);
+        
+        if (result.changes === 0) {
+          throw new Error("Utilisateur non trouvé dans la base de données.");
+        }
+      });
+
+      deleteTransaction(userId);
       
-      // 2. Delete messages in deliveries belonging to this user, plus messages sent by this user
-      db.prepare("DELETE FROM messages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
-      db.prepare("DELETE FROM messages WHERE senderId = ?").run(userId);
-      
-      // 3. Delete bids on deliveries belonging to this user, plus bids made by this user
-      db.prepare("DELETE FROM bids WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
-      db.prepare("DELETE FROM bids WHERE driverId = ?").run(userId);
-      
-      // 4. Delete promo usages on deliveries belonging to this user, plus promo usages by this user
-      db.prepare("DELETE FROM promo_usages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(userId, userId);
-      db.prepare("DELETE FROM promo_usages WHERE userId = ?").run(userId);
-      
-      // 5. Delete notifications, withdrawals, and gains history
-      db.prepare("DELETE FROM notifications WHERE userId = ?").run(userId);
-      db.prepare("DELETE FROM withdrawals WHERE driverId = ?").run(userId);
-      db.prepare("DELETE FROM historique_gains WHERE driverId = ?").run(userId);
-      
-      // 6. Delete deliveries where user is client or driver
-      db.prepare("DELETE FROM deliveries WHERE clientId = ? OR driverId = ?").run(userId, userId);
-      
-      // 7. Finally delete the user account
-      db.prepare("DELETE FROM users WHERE userId = ?").run(userId);
-      
+      console.log(`[DELETE USER] Successfully deleted user: ${userId}`);
       res.json({ status: "ok" });
     } catch (err: any) {
-      console.error("Failed to delete user completely:", err);
-      res.status(500).json({ error: "Échec de la suppression intégrale.", details: err?.message });
+      console.error("[DELETE USER] Failed to delete user completely:", err);
+      res.status(500).json({ error: "Échec de la suppression intégrale.", details: err?.message || "Erreur SQL interne" });
     }
   });
 

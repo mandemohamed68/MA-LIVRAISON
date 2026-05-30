@@ -83,22 +83,22 @@ export default function AnnouncementBanner({ userRole }: { userRole?: string }) 
           exit={{ height: 0, opacity: 0 }}
           className={cn("w-full relative z-50 overflow-hidden", getColors(current.type))}
         >
-          <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="shrink-0">
+          <div className="container mx-auto px-4 py-3 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div className="shrink-0 mt-0.5">
                 {getIcon(current.type)}
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-70 leading-none mb-1">
                   {current.title}
                 </p>
-                <p className="text-sm font-bold truncate tracking-tight">
+                <p className="text-sm font-bold tracking-tight">
                   {current.message}
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 mt-0.5">
               {announcements.length > 1 && (
                 <span className="text-[9px] font-black px-2 py-1 bg-white/20 rounded-full">
                   {currentIndex + 1}/{announcements.length}
