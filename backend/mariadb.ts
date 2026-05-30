@@ -94,9 +94,8 @@ export default function initMariaDB() {
     try { connection.query("ALTER TABLE users MODIFY COLUMN idCardBack LONGTEXT"); } catch(e){}
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS termsAcceptedAt datetime DEFAULT NULL");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS driverType varchar(50) DEFAULT 'freelance'");
-    connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
     
-    // Create announcements table if it doesn't exist
+    // Ensure announcements table has all required columns
     connection.query(`
       CREATE TABLE IF NOT EXISTS announcements (
         id varchar(255) PRIMARY KEY,
@@ -105,11 +104,20 @@ export default function initMariaDB() {
         type varchar(50) DEFAULT 'info',
         targetRole varchar(50) DEFAULT 'all',
         activeUntil datetime DEFAULT NULL,
+        image_url LONGTEXT,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
+    
+    // Update existing announcements table columns if they were created with old schema
+    try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS type varchar(50) DEFAULT 'info'"); } catch(e){}
+    try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS targetRole varchar(50) DEFAULT 'all'"); } catch(e){}
+    try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS activeUntil datetime DEFAULT NULL"); } catch(e){}
+    try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url LONGTEXT DEFAULT NULL"); } catch(e){}
+    
+    connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
+    
     // Create sectors table if it doesn't exist
     connection.query(`
       CREATE TABLE IF NOT EXISTS sectors (

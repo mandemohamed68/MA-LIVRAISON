@@ -596,9 +596,13 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
   });
 
   app.post("/api/announcements", authenticate, checkAdmin, (req: any, res) => {
-    const { title, message, type, targetRole, activeUntil } = req.body;
+    let { title, message, type, targetRole, activeUntil } = req.body;
     const id = uuidv4();
     try {
+      if (typeof activeUntil === 'string' && activeUntil.includes('T') && activeUntil.endsWith('Z')) {
+        // Convert ISO string to MariaDB datetime format: 'YYYY-MM-DD HH:MM:SS'
+        activeUntil = activeUntil.slice(0, 19).replace('T', ' ');
+      }
       db.prepare("INSERT INTO announcements (id, title, message, type, targetRole, activeUntil) VALUES (?, ?, ?, ?, ?, ?)")
         .run(id, title, message, type || 'info', targetRole || 'all', activeUntil || null);
       res.json({ id, title });
@@ -1503,8 +1507,8 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
         cleanCode, 
         type, 
         value, 
-        start_date || null, 
-        end_date || null, 
+        start_date && typeof start_date === 'string' && start_date.includes('T') ? start_date.slice(0, 19).replace('T', ' ') : (start_date || null), 
+        end_date && typeof end_date === 'string' && end_date.includes('T') ? end_date.slice(0, 19).replace('T', ' ') : (end_date || null), 
         max_uses !== undefined && max_uses !== '' ? Number(max_uses) : null, 
         max_per_user !== undefined && max_per_user !== '' ? Number(max_per_user) : 1
       );
