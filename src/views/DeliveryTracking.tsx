@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Chat } from '../components/Chat';
 import PaymentModal from '../components/PaymentModal';
 import { cn, calculateDistance } from '../lib/utils';
+import { playNotificationSound } from '../lib/audio';
 import LoadingScreen from '../components/LoadingScreen';
 import L from 'leaflet';
 
@@ -76,6 +77,8 @@ export default function DeliveryTracking() {
   const [enteredCode, setEnteredCode] = useState('');
   const [isValidatingCode, setIsValidatingCode] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [lastMessageSeenAt, setLastMessageSeenAt] = useState<string | null>(null);
 
   const handleVerifyCode = async () => {
     if (!delivery || !showKeypadFor) return;
@@ -126,6 +129,14 @@ export default function DeliveryTracking() {
       try {
         const found = await api.deliveries.get(deliveryId);
         if (found) {
+          // Check for new messages
+          if (found.lastMessageAt && found.lastMessageAt !== deliveryRef.current?.lastMessageAt) {
+            if (!chatOpenRef.current) {
+              setHasUnreadMessages(true);
+              playNotificationSound();
+            }
+          }
+          
           setDelivery(found);
           if (found.driverId) {
             try {
@@ -160,9 +171,21 @@ export default function DeliveryTracking() {
     return () => clearInterval(interval);
   }, [deliveryId]);
 
-  const getDriverInfo = async (driverId: string) => {
-    // Already handled in fetchData loop for consistency
-  };
+  const chatOpenRef = React.useRef(chatOpen);
+  useEffect(() => {
+    chatOpenRef.current = chatOpen;
+    if (chatOpen) {
+      setHasUnreadMessages(false);
+      if (delivery?.lastMessageAt) {
+        setLastMessageSeenAt(delivery.lastMessageAt);
+      }
+    }
+  }, [chatOpen, delivery?.lastMessageAt]);
+
+  const deliveryRef = React.useRef(delivery);
+  useEffect(() => {
+    deliveryRef.current = delivery;
+  }, [delivery]);
 
   const handlePayBid = async (method: string, transactionId?: string, isVerified?: boolean) => {
     if (!delivery) return;
@@ -559,6 +582,7 @@ export default function DeliveryTracking() {
                          </div>
                          <div>
                             <p className="font-black text-sm text-slate-900 tracking-tight">{driver.name}</p>
+                             <p className="text-[10px] font-bold text-slate-400 mt-0.5">{driver.phone || 'Pas de numéro'}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">En ligne</p>
@@ -571,6 +595,9 @@ export default function DeliveryTracking() {
                          </button>
                          <button onClick={() => setChatOpen(true)} className="w-12 h-12 bg-slate-50 text-slate-600 rounded-2xl flex items-center justify-center hover:bg-indigo-50 hover:text-indigo-600 transition-all active:scale-90 border border-slate-100/50">
                              <MessageSquare className="w-5 h-5" />
+                              {hasUnreadMessages && (
+                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full animate-bounce" />
+                              )}
                          </button>
                       </div>
                    </div>

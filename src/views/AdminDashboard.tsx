@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { playNotificationSound } from '../lib/audio';
 import { cn } from '../lib/utils';
 import LoadingScreen from '../components/LoadingScreen';
 import { useAuth, ADMIN_EMAILS } from '../context/AuthContext';
@@ -447,7 +448,28 @@ export default function AdminDashboard() {
 
   const sidebarItems = allSidebarItems.filter(group => group.items.length > 0);
 
-  const [selectedChatDeliveryId, setSelectedChatDeliveryId] = useState<string | null>(null);
+  useEffect(() => {
+    // Check for new chat messages
+    deliveries.forEach(d => {
+      if (d.lastMessageAt && d.lastMessageAt !== prevDeliveriesRef.current[d.id]) {
+        if (activeMenu !== 'Support Chat' || selectedChatDeliveryId !== d.id) {
+          setUnreadChats(prev => new Set(prev).add(d.id));
+          playNotificationSound();
+        }
+      }
+      prevDeliveriesRef.current[d.id] = d.lastMessageAt || '';
+    });
+  }, [deliveries, activeMenu, selectedChatDeliveryId]);
+
+  useEffect(() => {
+    if (activeMenu === 'Support Chat' && selectedChatDeliveryId) {
+      setUnreadChats(prev => {
+        const next = new Set(prev);
+        next.delete(selectedChatDeliveryId);
+        return next;
+      });
+    }
+  }, [activeMenu, selectedChatDeliveryId]);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [adminMessage, setAdminMessage] = useState('');
   
@@ -707,9 +729,21 @@ export default function AdminDashboard() {
                      </div>
                      <p className="font-medium text-sm leading-tight">Le livreur a déclenché une alerte. Merci de le contacter immédiatement.</p>
                      <div className="flex gap-2 mt-2">
-                        <a href={`tel:${alert.driverId}`} className="px-4 py-2 bg-white text-red-600 rounded-xl text-xs font-black uppercase tracking-widest text-center flex-1">
-                          Appeler Livreur
-                        </a>
+                        {(() => {
+                           const driver = users.find(u => u.userId === alert.driverId);
+                           return (
+                             <a 
+                               href={`tel:${driver?.phone || ''}`} 
+                               onClick={(e) => !driver?.phone && e.preventDefault()}
+                               className={cn(
+                                 "px-4 py-2 bg-white text-red-600 rounded-xl text-xs font-black uppercase tracking-widest text-center flex-1",
+                                 !driver?.phone && "opacity-50 cursor-not-allowed"
+                               )}
+                             >
+                                {driver?.phone ? `Appeler Livreur (${driver.phone})` : "Tel. Livreur Inconnu"}
+                             </a>
+                           );
+                        })()}
                      </div>
                   </div>
                 ))}
@@ -720,9 +754,18 @@ export default function AdminDashboard() {
                         <span className="font-bold">Course {alert.id.slice(0,4)}</span>
                      </div>
                      <p className="font-medium text-sm leading-tight">Le livreur s'est abrité en raison de la pluie. L'expéditeur a été notifié.</p>
-                     <button className="px-4 py-2 bg-white text-blue-600 rounded-xl text-xs font-black uppercase tracking-widest text-center">
-                        Contacter Expéditeur
-                     </button>
+                     <div className="flex gap-2 mt-2">
+                        <a 
+                          href={`tel:${alert.senderPhone || ''}`}
+                          onClick={(e) => !alert.senderPhone && e.preventDefault()}
+                          className={cn(
+                            "px-4 py-2 bg-white text-blue-600 rounded-xl text-xs font-black uppercase tracking-widest text-center flex-1",
+                            !alert.senderPhone && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                           {alert.senderPhone ? `Appeler Expéditeur (${alert.senderPhone})` : "Tel. Expéditeur Inconnu"}
+                        </a>
+                     </div>
                   </div>
                 ))}
               </div>
@@ -2314,6 +2357,7 @@ export default function AdminDashboard() {
                         </div>
                         <div className="min-w-0">
                            <p className="text-[10px] font-black text-slate-900 truncate">Course #{d.id?.slice(0, 8) || 'N/A'}</p>
+                            {unreadChats.has(d.id) && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full animate-pulse" />}
                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">{d.clientName || 'Inconnu'} & {d.driverName || 'En attente'}</p>
                         </div>
                      </button>

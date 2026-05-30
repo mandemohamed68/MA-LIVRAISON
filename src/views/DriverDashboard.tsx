@@ -135,6 +135,8 @@ export default function DriverDashboard() {
   
   const [commissionSettings, setCommissionSettings] = useState<CommissionSettings | null>(null);
   const [toastMessage, setToastMessage] = useState('');
+  const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
+  const prevDeliveriesRef = useRef<Record<string, string>>({});
   const isOnline = profile ? (profile.status === 'online' || profile.status === 'busy') : false;
 
   const filteredPendingJobs = useMemo(() => {
@@ -166,8 +168,28 @@ export default function DriverDashboard() {
     }
   }, [activeJobs.length, profile?.status, commissionSettings]);
 
-  // Radar State
-  const [radarMode, setRadarMode] = useState<'search' | 'focus'>('search');
+  useEffect(() => {
+    // Check for new chat messages in active jobs
+    activeJobs.forEach(job => {
+      if (job.lastMessageAt && job.lastMessageAt !== prevDeliveriesRef.current[job.id]) {
+        if (!chatOpen || chatDeliveryId !== job.id) {
+          setUnreadChats(prev => new Set(prev).add(job.id));
+          playNotificationSound();
+        }
+      }
+      prevDeliveriesRef.current[job.id] = job.lastMessageAt || '';
+    });
+  }, [activeJobs, chatOpen, chatDeliveryId]);
+
+  useEffect(() => {
+    if (chatOpen && chatDeliveryId) {
+      setUnreadChats(prev => {
+        const next = new Set(prev);
+        next.delete(chatDeliveryId);
+        return next;
+      });
+    }
+  }, [chatOpen, chatDeliveryId]);
   const [isListView, setIsListView] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
@@ -917,6 +939,17 @@ export default function DriverDashboard() {
                                         </div>
                                      </div>
                                      <div className="flex gap-2">
+                                     <a 
+                                        href={`tel:${focusedJob.senderPhone || ''}`}
+                                        onClick={(e) => !focusedJob.senderPhone && e.preventDefault()}
+                                        className={cn(
+                                          "w-12 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center hover:bg-emerald-100 transition-all active:scale-95",
+                                          !focusedJob.senderPhone && "opacity-50 cursor-not-allowed"
+                                        )}
+                                        title={focusedJob.senderPhone ? `Appeler Expéditeur (${focusedJob.senderPhone})` : "Tel. Expéditeur Inconnu"}
+                                     >
+                                        <Phone className="w-5 h-5" />
+                                     </a>
                                     <button 
                                        onClick={() => {
                                           setChatDeliveryId(focusedJob.id);
@@ -926,6 +959,9 @@ export default function DriverDashboard() {
                                        title="Chat avec client"
                                     >
                                        <MessageSquare className="w-5 h-5" />
+                                        {unreadChats.has(focusedJob.id) && (
+                                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full animate-bounce" />
+                                        )}
                                     </button>
                                     {(focusedJob.isPaid || focusedJob.paymentMethod === 'cash') ? (
                                       <button onClick={() => setShowKeypadFor('pickup')} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
@@ -966,7 +1002,18 @@ export default function DriverDashboard() {
                                               <span>📍 {focusedJob.to.precision}</span>
                                            </div>
                                         )}
-                                        <a href={`tel:${focusedJob.recipientPhone}`} className="text-[10px] font-bold text-slate-500 mt-1 line-clamp-1 hover:text-indigo-600 transition-colors">📞 {focusedJob.recipientPhone || 'Inconnu'}</a>
+                                        <div className="flex gap-2 items-center">
+                                            <a 
+                                              href={`tel:${focusedJob.recipientPhone || ''}`} 
+                                              onClick={(e) => !focusedJob.recipientPhone && e.preventDefault()}
+                                              className={cn(
+                                                  "px-3 py-1 bg-indigo-100 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 hover:bg-indigo-200 transition-colors",
+                                                  !focusedJob.recipientPhone && "opacity-50 cursor-not-allowed"
+                                              )}
+                                            >
+                                              <Phone className="w-3 h-3" /> {focusedJob.recipientPhone || 'Inconnu'}
+                                            </a>
+                                         </div>
                                      </div>
                                      <div className="bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black italic shadow-md shrink-0 ml-2">
                                         {focusedJob.cost} F

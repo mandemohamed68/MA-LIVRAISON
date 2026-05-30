@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `currentLocation` text DEFAULT NULL,
   `balance` double DEFAULT 0,
   `earnings` double DEFAULT 0,
+  `totalWithdrawn` double DEFAULT 0,
   `walletBalance` double DEFAULT 0,
   `phone` varchar(50) DEFAULT NULL,
   `withdrawalPhone` varchar(50) DEFAULT NULL,
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS `deliveries` (
   `urgentFee` double DEFAULT 0,
   `boostAmount` double DEFAULT 0,
   `cancelReason` text DEFAULT NULL,
+  `lastMessageAt` datetime DEFAULT NULL,
   `createdAt` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`, `createdAt`)

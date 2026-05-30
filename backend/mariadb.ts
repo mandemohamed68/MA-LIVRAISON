@@ -58,11 +58,18 @@ export default function initMariaDB() {
         password: candidate,
         database,
         port,
-        multipleStatements: true
+        multipleStatements: true,
+        charset: 'utf8mb4'
       });
       // Test de la connexion avec une requête simple
       conn.query("SELECT 1");
       connection = conn;
+      
+      // Ensure database itself is utf8mb4
+      try {
+        conn.query(`ALTER DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+      } catch (e) {}
+
       console.log(`MariaDB: Connexion réussie à la tentative ${i + 1}/${candidates.length} (Longueur MDP utilisée: ${candidate.length}) !`);
       break;
     } catch (err: any) {
@@ -78,6 +85,12 @@ export default function initMariaDB() {
 
   // MIGRATION: Auto-add withdrawalPhone column if missing
   try {
+    // Force character set for existing tables
+    const tablesToFix = ['users', 'deliveries', 'notifications', 'announcements', 'sectors', 'bids', 'withdrawals', 'config'];
+    for (const t of tablesToFix) {
+      try { connection.query(`ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`); } catch(e) {}
+    }
+
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawalPhone varchar(50) DEFAULT NULL AFTER phone");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS rib varchar(255) DEFAULT NULL AFTER withdrawalPhone");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS idCardFront text DEFAULT NULL AFTER rib");
@@ -87,6 +100,7 @@ export default function initMariaDB() {
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantorCniUrl text DEFAULT NULL AFTER guarantorPhone");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS criminalRecordUrl text DEFAULT NULL AFTER guarantorCniUrl");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS verificationStatus varchar(50) DEFAULT 'unverified'");
+    connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS totalWithdrawn double DEFAULT 0 AFTER earnings");
     try { connection.query("ALTER TABLE users MODIFY COLUMN identityCardUrl LONGTEXT"); } catch(e){}
     try { connection.query("ALTER TABLE users MODIFY COLUMN criminalRecordUrl LONGTEXT"); } catch(e){}
     try { connection.query("ALTER TABLE users MODIFY COLUMN guarantorCniUrl LONGTEXT"); } catch(e){}
@@ -107,7 +121,7 @@ export default function initMariaDB() {
         image_url LONGTEXT,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP
-      )
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
     
     // Update existing announcements table columns if they were created with old schema
@@ -118,6 +132,11 @@ export default function initMariaDB() {
     try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url LONGTEXT DEFAULT NULL"); } catch(e){}
     
     connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
+    
+    // Add missing columns to deliveries table
+    try { connection.query("ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS lastMessageAt datetime DEFAULT NULL"); } catch(e){
+      console.error("Failed to add lastMessageAt to deliveries:", e.message);
+    }
     
     // Create sectors table if it doesn't exist
     connection.query(`
@@ -130,7 +149,7 @@ export default function initMariaDB() {
         image_url LONGTEXT DEFAULT NULL,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
     
     // Update existing sectors table
@@ -153,7 +172,7 @@ export default function initMariaDB() {
         attempts int DEFAULT 1,
         createdAt datetime DEFAULT CURRENT_TIMESTAMP,
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
 
     // Create tracking table if it doesn't exist
@@ -164,7 +183,7 @@ export default function initMariaDB() {
         lat double NOT NULL,
         lng double NOT NULL,
         timestamp datetime DEFAULT CURRENT_TIMESTAMP
-      )
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
     
     console.log("MariaDB: Vérification/Ajout des colonnes de profil et système réussie.");
