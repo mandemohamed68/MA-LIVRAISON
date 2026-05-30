@@ -220,7 +220,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   app.patch("/api/profile", authenticate, async (req: any, res) => {
     const updates = req.body;
-    let fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id');
+    let fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'createdAt' && k !== 'updatedAt');
     
     // Dynamic schema validation to filter out any fields that are not actual database columns
     try {
@@ -419,7 +419,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
   app.patch("/api/deliveries/:id", authenticate, (req: any, res) => {
     const { id } = req.params;
     const updates = req.body;
-    const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'clientId');
+    const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'clientId' && k !== 'updatedAt' && k !== 'createdAt');
     
     if (fields.length === 0) return res.json({ status: "no changes" });
 
@@ -894,7 +894,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
   app.patch("/api/user-directory/:userId", authenticate, checkAdmin, (req: any, res) => {
     const { userId } = req.params;
     const updates = req.body;
-    const fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password');
+    const fields = Object.keys(updates).filter(k => k !== 'userId' && k !== 'id' && k !== 'password' && k !== 'createdAt' && k !== 'updatedAt');
     if (fields.length === 0) return res.json({ status: "no changes" });
 
     const setClause = fields.map(f => `${f} = ?`).join(", ");

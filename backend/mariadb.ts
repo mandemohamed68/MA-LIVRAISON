@@ -114,8 +114,24 @@ export default function initMariaDB() {
       database
     },
     prepare: (sql: string) => {
-      // Ignore SQLite pragmas
+      // Ignore SQLite pragmas or translate them
       if (sql.trim().toUpperCase().startsWith('PRAGMA')) {
+         const pragmaMatch = sql.trim().match(/PRAGMA table_info\((.*?)\)/i);
+         if (pragmaMatch && pragmaMatch[1]) {
+           const tableName = pragmaMatch[1];
+           return {
+             get: () => ({}),
+             all: () => {
+               try {
+                 const cols = connection.query(`SHOW COLUMNS FROM ${tableName}`);
+                 return cols.map((c: any) => ({ name: c.Field }));
+               } catch (e) {
+                 return [];
+               }
+             },
+             run: () => ({ changes: 0 })
+           };
+         }
          return { get: () => ({}), all: () => ([]), run: () => ({ changes: 0 }) };
       }
       
