@@ -59,8 +59,8 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
         return res.status(401).json({ error: "Invalid session structure" });
       }
 
-      // Robust lookup: check both userId and id columns
-      const user = db.prepare("SELECT role, name, email, accountStatus, userId, id FROM users WHERE userId = ? OR id = ?").get(decoded.userId, decoded.userId) as any;
+      // Robust lookup: check userId, id, and email columns
+      const user = db.prepare("SELECT role, name, email, accountStatus, userId, id FROM users WHERE userId = ? OR id = ? OR email = ?").get(decoded.userId, decoded.userId, decoded.email) as any;
       
       if (!user) {
         // Emergency fallback for Master Admins if DB lookup fails but token is valid
