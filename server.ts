@@ -976,9 +976,27 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const userId = uuidv4();
-      const fields = ['id', 'userId', 'name', 'email', 'password', 'role', ...Object.keys(rest)];
+      
+      // Filter out auto-managed dates
+      const safeRest = Object.entries(rest).reduce((acc: any, [k, v]) => {
+         if (k !== 'createdAt' && k !== 'updatedAt') {
+           acc[k] = v;
+         }
+         return acc;
+      }, {});
+
+      const fields = ['id', 'userId', 'name', 'email', 'password', 'role', ...Object.keys(safeRest)];
       const placeholders = fields.map(() => '?').join(', ');
-      const values = [userId, userId, name, email, hashedPassword, role, ...Object.values(rest).map(v => typeof v === 'object' ? JSON.stringify(v) : v)];
+      
+      const values = [userId, userId, name, email, hashedPassword, role, ...Object.values(safeRest).map((v: any) => {
+         if (typeof v === 'string' && v.includes('T') && v.endsWith('Z')) {
+            return v.slice(0, 19).replace('T', ' ');
+         }
+         if (typeof v === 'object' && v !== null) {
+            return JSON.stringify(v);
+         }
+         return v;
+      })];
       
       const stmt = db.prepare(`INSERT INTO users (${fields.join(', ')}) VALUES (${placeholders})`);
       stmt.run(...values);
@@ -1077,7 +1095,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
           console.log(`Seeding default super-admin: ${adminEmail}...`);
           const hashedPassword = await bcrypt.hash(adminPass, 10);
           const userId = uuidv4();
-          db.prepare("INSERT INTO users (id, userId, name, email, password, role, accountStatus) VALUES (?, ?, ?, ?, ?, ?, ?)")
+          db.prepare("INSERT OR IGNORE INTO users (id, userId, name, email, password, role, accountStatus) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .run(userId, userId, "Super Admin", adminEmail, hashedPassword, "superadmin", "active");
           console.log(`Default super-admin ${adminEmail} created successfully.`);
         } else {

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `neighborhood` varchar(255) DEFAULT NULL,
   `verificationStatus` varchar(50) DEFAULT 'unverified',
   `termsAcceptedAt` datetime DEFAULT NULL,
+  `driverType` varchar(50) DEFAULT 'freelance',
   `identityCardUrl` text DEFAULT NULL,
   `criminalRecordUrl` text DEFAULT NULL,
   `currentLocation` text DEFAULT NULL,
