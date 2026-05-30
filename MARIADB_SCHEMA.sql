@@ -174,4 +174,28 @@ CREATE TABLE IF NOT EXISTS `config` (
   `value` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ----------------------------
+-- Table structure for sectors
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `sectors` (
+  `id` varchar(255) PRIMARY KEY,
+  `name` varchar(255) NOT NULL,
+  `city` varchar(255) NOT NULL,
+  `isActive` tinyint(1) DEFAULT 1,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------
+-- Table structure for announcements
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `announcements` (
+  `id` varchar(255) PRIMARY KEY,
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `image_url` varchar(1024) DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -102,6 +102,17 @@ export default function initMariaDB() {
         updatedAt datetime DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Create sectors table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS sectors (
+        id varchar(255) PRIMARY KEY,
+        name varchar(255) NOT NULL,
+        city varchar(255) NOT NULL,
+        isActive tinyint(1) DEFAULT 1,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     
     console.log("MariaDB: Vérification/Ajout des colonnes de profil et système réussie.");
   } catch (err: any) {
