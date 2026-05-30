@@ -88,6 +88,20 @@ export default function initMariaDB() {
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS criminalRecordUrl text DEFAULT NULL AFTER guarantorCniUrl");
     connection.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS verificationStatus varchar(50) DEFAULT 'unverified'");
     connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
+    
+    // Create announcements table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id varchar(255) PRIMARY KEY,
+        title varchar(255) NOT NULL,
+        message text NOT NULL,
+        image_url varchar(1024),
+        is_active tinyint(1) DEFAULT 1,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP,
+        updatedAt datetime DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     console.log("MariaDB: Vérification/Ajout des colonnes de profil et système réussie.");
   } catch (err: any) {
     console.warn("Migration MariaDB (profil) ignorée ou échouée:", err.message);
