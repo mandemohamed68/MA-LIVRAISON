@@ -261,7 +261,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     
     try {
       // Get commission config
-      const commRow = db.prepare("SELECT value FROM config WHERE key = 'commissions'").get() as any;
+      const commRow = db.prepare("SELECT value FROM config WHERE `key` = 'commissions'").get() as any;
       const comm = commRow ? JSON.parse(commRow.value) : { minDeliveryCost: 500, tarifKm: 150, fraisFixes: 500 };
 
       let calculatedCost = d.cost;
@@ -525,7 +525,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   // --- CONFIG / SECTORS ---
   app.get("/api/preferences-majeures/:key", (req, res) => {
-    const row = db.prepare("SELECT value FROM config WHERE key = ?").get(req.params.key) as any;
+    const row = db.prepare("SELECT value FROM config WHERE `key` = ?").get(req.params.key) as any;
     res.json(row ? JSON.parse(row.value) : {});
   });
 
@@ -664,7 +664,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     // Fallback à la base de données si non renseigné dans le fichier d'environnement .env
     if (!clientId || !clientSecret || !username || !password) {
       try {
-        const row = db.prepare("SELECT value FROM config WHERE key = 'app_config'").get() as any;
+        const row = db.prepare("SELECT value FROM config WHERE `key` = 'app_config'").get() as any;
         if (row && row.value) {
           const appConfig = JSON.parse(row.value);
           if (!clientId && appConfig.sappayClientId?.trim()) {
@@ -1023,7 +1023,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     const { key } = req.params;
     const value = JSON.stringify(req.body);
     try {
-      db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)").run(key, value);
+      db.prepare("REPLACE INTO config (`key`, value) VALUES (?, ?)").run(key, value);
       res.json({ status: "ok" });
     } catch (err) {
       res.status(500).json({ error: "Failed to update config" });
@@ -1032,18 +1032,18 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   // Initial Seeding
   const seedConfig = () => {
-    const hasConfig = db.prepare("SELECT key FROM config WHERE key = 'app_config'").get();
+    const hasConfig = db.prepare("SELECT `key` FROM config WHERE `key` = 'app_config'").get();
     if (!hasConfig) {
-      db.prepare("INSERT INTO config (key, value) VALUES (?, ?)").run('app_config', JSON.stringify({
+      db.prepare("INSERT INTO config (`key`, value) VALUES (?, ?)").run('app_config', JSON.stringify({
         mode: 'prod',
         isMaintenanceMode: false,
         updatedAt: new Date().toISOString()
       }));
     }
     
-    const hasCommissions = db.prepare("SELECT key FROM config WHERE key = 'commissions'").get();
+    const hasCommissions = db.prepare("SELECT `key` FROM config WHERE `key` = 'commissions'").get();
     if (!hasCommissions) {
-      db.prepare("INSERT INTO config (key, value) VALUES (?, ?)").run('commissions', JSON.stringify({
+      db.prepare("INSERT INTO config (`key`, value) VALUES (?, ?)").run('commissions', JSON.stringify({
         platformFeePercent: 15,
         driverSharePercent: 85,
         minDeliveryCost: 500,
