@@ -168,6 +168,37 @@ CREATE TABLE IF NOT EXISTS `promo_usages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
+-- Table structure for bids
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `bids` (
+  `id` varchar(255) PRIMARY KEY,
+  `deliveryId` varchar(255) NOT NULL,
+  `driverId` varchar(255) NOT NULL,
+  `driverName` varchar(255) DEFAULT NULL,
+  `price` double NOT NULL,
+  `proposedTime` int DEFAULT NULL,
+  `reason` text DEFAULT NULL,
+  `status` varchar(50) DEFAULT 'pending',
+  `attempts` int DEFAULT 1,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`deliveryId`) REFERENCES `deliveries` (`id`),
+  FOREIGN KEY (`driverId`) REFERENCES `users` (`userId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------
+-- Table structure for tracking
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `tracking` (
+  `id` varchar(255) PRIMARY KEY,
+  `deliveryId` varchar(255) NOT NULL,
+  `lat` double NOT NULL,
+  `lng` double NOT NULL,
+  `timestamp` datetime DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`deliveryId`) REFERENCES `deliveries` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------
 -- Table structure for config
 -- ----------------------------
 CREATE TABLE IF NOT EXISTS `config` (
@@ -183,7 +214,10 @@ CREATE TABLE IF NOT EXISTS `sectors` (
   `name` varchar(255) NOT NULL,
   `city` varchar(255) NOT NULL,
   `isActive` tinyint(1) DEFAULT 1,
-  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP
+  `is_active` tinyint(1) DEFAULT 1,
+  `image_url` LONGTEXT DEFAULT NULL,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
@@ -196,8 +230,10 @@ CREATE TABLE IF NOT EXISTS `announcements` (
   `type` varchar(50) DEFAULT 'info',
   `targetRole` varchar(50) DEFAULT 'all',
   `activeUntil` datetime DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `image_url` LONGTEXT DEFAULT NULL,
   `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

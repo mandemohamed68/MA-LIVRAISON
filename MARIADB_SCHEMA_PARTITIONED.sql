@@ -258,7 +258,10 @@ CREATE TABLE IF NOT EXISTS `sectors` (
   `name` varchar(255) NOT NULL,
   `city` varchar(255) NOT NULL,
   `isActive` tinyint(1) DEFAULT 1,
-  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP
+  `is_active` tinyint(1) DEFAULT 1,
+  `image_url` LONGTEXT DEFAULT NULL,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------
@@ -271,8 +274,10 @@ CREATE TABLE IF NOT EXISTS `announcements` (
   `type` varchar(50) DEFAULT 'info',
   `targetRole` varchar(50) DEFAULT 'all',
   `activeUntil` datetime DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `image_url` LONGTEXT DEFAULT NULL,
   `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

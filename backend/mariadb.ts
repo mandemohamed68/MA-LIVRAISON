@@ -114,6 +114,7 @@ export default function initMariaDB() {
     try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS type varchar(50) DEFAULT 'info'"); } catch(e){}
     try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS targetRole varchar(50) DEFAULT 'all'"); } catch(e){}
     try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS activeUntil datetime DEFAULT NULL"); } catch(e){}
+    try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS is_active tinyint(1) DEFAULT 1"); } catch(e){}
     try { connection.query("ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url LONGTEXT DEFAULT NULL"); } catch(e){}
     
     connection.query("ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS withdrawalInfo text DEFAULT NULL");
@@ -125,7 +126,44 @@ export default function initMariaDB() {
         name varchar(255) NOT NULL,
         city varchar(255) NOT NULL,
         isActive tinyint(1) DEFAULT 1,
-        createdAt datetime DEFAULT CURRENT_TIMESTAMP
+        is_active tinyint(1) DEFAULT 1,
+        image_url LONGTEXT DEFAULT NULL,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP,
+        updatedAt datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Update existing sectors table
+    try { connection.query("ALTER TABLE sectors ADD COLUMN IF NOT EXISTS isActive tinyint(1) DEFAULT 1"); } catch(e){}
+    try { connection.query("ALTER TABLE sectors ADD COLUMN IF NOT EXISTS is_active tinyint(1) DEFAULT 1"); } catch(e){}
+    try { connection.query("ALTER TABLE sectors ADD COLUMN IF NOT EXISTS image_url LONGTEXT DEFAULT NULL"); } catch(e){}
+    try { connection.query("ALTER TABLE sectors ADD COLUMN IF NOT EXISTS updatedAt datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"); } catch(e){}
+
+    // Create bids table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS bids (
+        id varchar(255) PRIMARY KEY,
+        deliveryId varchar(255) NOT NULL,
+        driverId varchar(255) NOT NULL,
+        driverName varchar(255) DEFAULT NULL,
+        price double NOT NULL,
+        proposedTime int DEFAULT NULL,
+        reason text DEFAULT NULL,
+        status varchar(50) DEFAULT 'pending',
+        attempts int DEFAULT 1,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP,
+        updatedAt datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create tracking table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS tracking (
+        id varchar(255) PRIMARY KEY,
+        deliveryId varchar(255) NOT NULL,
+        lat double NOT NULL,
+        lng double NOT NULL,
+        timestamp datetime DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
@@ -165,14 +203,14 @@ export default function initMariaDB() {
       const execute = (args: any[]) => {
          let formattedSql = sql;
          // SQLite to MariaDB translations
-         formattedSql = formattedSql.replace(/^INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT IGNORE INTO');
-         formattedSql = formattedSql.replace(/^INSERT\s+OR\s+REPLACE\s+INTO/i, 'REPLACE INTO');
+         formattedSql = formattedSql.replace(/INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT IGNORE INTO');
+         formattedSql = formattedSql.replace(/INSERT\s+OR\s+REPLACE\s+INTO/i, 'REPLACE INTO');
 
          // better-sqlite3 boolean param logic
          const processedArgs = args.map(arg => typeof arg === 'boolean' ? (arg ? 1 : 0) : arg);
          
          if (processedArgs && processedArgs.length > 0) {
-            formattedSql = mysql2.format(sql, processedArgs);
+            formattedSql = mysql2.format(formattedSql, processedArgs);
          }
          try {
            const result = connection.query(formattedSql);
