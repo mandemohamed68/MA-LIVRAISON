@@ -216,7 +216,7 @@ export default function AdminDashboard() {
       }
     }
     prevPendingCount.current = totalPendingCount;
-  }, [deliveries, users]);
+  }, [deliveries, withdrawals]);
 
   const fetchData = async () => {
     try {
@@ -447,6 +447,10 @@ export default function AdminDashboard() {
   ];
 
   const sidebarItems = allSidebarItems.filter(group => group.items.length > 0);
+
+  const [selectedChatDeliveryId, setSelectedChatDeliveryId] = useState<string | null>(null);
+  const [unreadChats, setUnreadChats] = useState<Set<string>>(new Set());
+  const prevDeliveriesRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     // Check for new chat messages

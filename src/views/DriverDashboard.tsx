@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DeliveryRequest, CommissionSettings } from '../types';
-import { Compass, History as HistoryIcon, Wallet, User, Navigation, Package, DollarSign, Zap, CheckCircle, ShieldCheck, MapPin, X, ArrowRight, ArrowLeft, ChevronRight, Menu, List, Check, Info, Camera, Target, FileText, FileCheck, MessageSquare } from 'lucide-react';
+import { Compass, History as HistoryIcon, Wallet, User, Navigation, Package, DollarSign, Zap, CheckCircle, ShieldCheck, MapPin, X, ArrowRight, ArrowLeft, ChevronRight, Menu, List, Check, Info, Camera, Target, FileText, FileCheck, MessageSquare, Phone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import { api } from '../services/apiService';
@@ -190,6 +190,8 @@ export default function DriverDashboard() {
       });
     }
   }, [chatOpen, chatDeliveryId]);
+
+  const [radarMode, setRadarMode] = useState<'search' | 'focus'>('search');
   const [isListView, setIsListView] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
