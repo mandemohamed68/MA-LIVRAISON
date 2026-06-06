@@ -20,6 +20,26 @@ export default function Navbar() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [logoUrl, setLogoUrl] = useState(logoImg);
   const [logoError, setLogoError] = useState(false);
+  const [availCount, setAvailCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!profile || profile.role !== 'driver') return;
+
+    const fetchCount = async () => {
+      try {
+        const jobs = await api.deliveries.list();
+        const pending = jobs.filter((j: any) => j.status === 'pending');
+        const filtered = pending.filter((j: any) => !j.rejectedBy?.includes(profile.userId));
+        setAvailCount(filtered.length);
+      } catch (e) {
+        // quiet fail
+      }
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 15000); // refresh every 15s
+    return () => clearInterval(interval);
+  }, [profile]);
 
   const handleRoleChangeInNavbar = async (role: any) => {
     try {
@@ -56,19 +76,22 @@ export default function Navbar() {
     { code: 'en', label: 'English', flag: '🇬🇧' }
   ];
 
-  const NavLink = ({ to, icon: Icon, children, exact = false, onClick }: { to: string, icon: any, children: React.ReactNode, exact?: boolean, onClick?: () => void }) => {
+  const NavLink = ({ to, icon: Icon, children, exact = false, onClick, badge }: { to: string, icon: any, children: React.ReactNode, exact?: boolean, onClick?: () => void, badge?: React.ReactNode }) => {
     const isActive = exact ? location.pathname === to : location.pathname.startsWith(to);
     return (
       <Link 
         to={to} 
         onClick={onClick}
         className={cn(
-          "px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest w-full lg:w-auto",
+          "px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest w-full lg:w-auto relative",
           isActive ? "bg-white text-orange-600 shadow-lg" : "text-white/70 hover:text-white hover:bg-orange-600/50"
         )}
       >
-        <Icon className="h-4 w-4" />
-        <span>{children}</span>
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4" />
+          <span>{children}</span>
+          {badge}
+        </div>
       </Link>
     );
   };
@@ -87,7 +110,19 @@ export default function Navbar() {
       {/* Driver Specific Menus */}
       {profile?.role === 'driver' && (
         <>
-          <NavLink to="/driver" exact icon={MapPin} onClick={onClick}>{t('missions')}</NavLink>
+          <NavLink 
+            to="/driver" 
+            exact 
+            icon={MapPin} 
+            onClick={onClick}
+            badge={availCount > 0 ? (
+              <span className="bg-orange-600 text-white font-black text-[9px] h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center animate-pulse shadow-md border border-white shrink-0">
+                {availCount}
+              </span>
+            ) : null}
+          >
+            {t('missions')}
+          </NavLink>
           <NavLink to="/driver/history" icon={CheckCircle} onClick={onClick}>{t('history')}</NavLink>
         </>
       )}

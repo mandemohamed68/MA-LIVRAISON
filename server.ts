@@ -526,8 +526,13 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
 
   // --- NOTIFICATIONS ---
   app.get("/api/app-notifications", authenticate, (req: any, res) => {
-    const notifications = db.prepare("SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50").all(req.user.userId);
-    res.json(notifications);
+    try {
+      const notifications = db.prepare("SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50").all(req.user.userId);
+      res.json(notifications);
+    } catch (err: any) {
+      console.error("[API] Failed to fetch notifications:", err);
+      res.status(500).json({ error: "Échec de la récupération des notifications.", details: err.message });
+    }
   });
 
   app.get("/api/drivers/status", (req, res) => {
@@ -962,30 +967,30 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
     try {
       const deleteTransaction = db.transaction((targetId: string) => {
         // 1. Delete tracking info
-        db.prepare("DELETE FROM tracking WHERE deliveryId IN (SELECT id COLLATE utf8mb4_unicode_ci FROM deliveries WHERE clientId = ? COLLATE utf8mb4_unicode_ci OR driverId = ? COLLATE utf8mb4_unicode_ci)").run(targetId, targetId);
+        db.prepare("DELETE FROM tracking WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
         
         // 2. Delete messages
-        db.prepare("DELETE FROM messages WHERE deliveryId IN (SELECT id COLLATE utf8mb4_unicode_ci FROM deliveries WHERE clientId = ? COLLATE utf8mb4_unicode_ci OR driverId = ? COLLATE utf8mb4_unicode_ci)").run(targetId, targetId);
-        db.prepare("DELETE FROM messages WHERE senderId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
+        db.prepare("DELETE FROM messages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        db.prepare("DELETE FROM messages WHERE senderId = ?").run(targetId);
         
         // 3. Delete bids
-        db.prepare("DELETE FROM bids WHERE deliveryId IN (SELECT id COLLATE utf8mb4_unicode_ci FROM deliveries WHERE clientId = ? COLLATE utf8mb4_unicode_ci OR driverId = ? COLLATE utf8mb4_unicode_ci)").run(targetId, targetId);
-        db.prepare("DELETE FROM bids WHERE driverId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
+        db.prepare("DELETE FROM bids WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        db.prepare("DELETE FROM bids WHERE driverId = ?").run(targetId);
         
         // 4. Delete promo usages
-        db.prepare("DELETE FROM promo_usages WHERE deliveryId IN (SELECT id COLLATE utf8mb4_unicode_ci FROM deliveries WHERE clientId = ? COLLATE utf8mb4_unicode_ci OR driverId = ? COLLATE utf8mb4_unicode_ci)").run(targetId, targetId);
-        db.prepare("DELETE FROM promo_usages WHERE userId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
+        db.prepare("DELETE FROM promo_usages WHERE deliveryId IN (SELECT id FROM deliveries WHERE clientId = ? OR driverId = ?)").run(targetId, targetId);
+        db.prepare("DELETE FROM promo_usages WHERE userId = ?").run(targetId);
         
         // 5. Delete notifications, withdrawals, and gains history
-        db.prepare("DELETE FROM notifications WHERE userId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
-        db.prepare("DELETE FROM withdrawals WHERE driverId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
-        db.prepare("DELETE FROM historique_gains WHERE driverId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
+        db.prepare("DELETE FROM notifications WHERE userId = ?").run(targetId);
+        db.prepare("DELETE FROM withdrawals WHERE driverId = ?").run(targetId);
+        db.prepare("DELETE FROM historique_gains WHERE driverId = ?").run(targetId);
         
         // 6. Delete deliveries
-        db.prepare("DELETE FROM deliveries WHERE clientId = ? COLLATE utf8mb4_unicode_ci OR driverId = ? COLLATE utf8mb4_unicode_ci").run(targetId, targetId);
+        db.prepare("DELETE FROM deliveries WHERE clientId = ? OR driverId = ?").run(targetId, targetId);
         
         // 7. Finally delete the user account
-        const result = db.prepare("DELETE FROM users WHERE userId = ? COLLATE utf8mb4_unicode_ci").run(targetId);
+        const result = db.prepare("DELETE FROM users WHERE userId = ?").run(targetId);
         
         if (result.changes === 0) {
           throw new Error("Utilisateur non trouvé dans la base de données.");
@@ -1154,6 +1159,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
       db.prepare("UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?").run(req.params.id, req.user.userId);
       res.json({ status: "ok" });
     } catch (err) {
+      console.error("[API] Failed to mark notification as read:", err);
       res.status(500).json({ error: "Update notification failed" });
     }
   });
@@ -1163,6 +1169,7 @@ const MASTER_ADMIN_EMAILS = ['mandemohamed68@gmail.com', 'mandemohamed6868@gmail
       db.prepare("DELETE FROM notifications WHERE id = ? AND userId = ?").run(req.params.id, req.user.userId);
       res.json({ status: "ok" });
     } catch (err) {
+      console.error("[API] Failed to delete notification:", err);
       res.status(500).json({ error: "Delete notification failed" });
     }
   });

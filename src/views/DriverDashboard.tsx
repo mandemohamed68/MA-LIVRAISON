@@ -830,7 +830,7 @@ export default function DriverDashboard() {
                    {/* Top HUD Layout - Improved for Mobile */}
                    <div className="flex flex-row justify-between items-start gap-2">
                        {/* Left HUD: Status & Quick Actions */}
-                       <div className="flex items-center gap-2 pointer-events-auto">
+                       <div className="flex flex-col items-start gap-2 pointer-events-auto">
                            {activeJobs.length > 0 && radarMode === 'focus' ? (
                                 <div className="bg-slate-900/90 backdrop-blur-xl p-2 rounded-2xl border border-slate-800 shadow-2xl flex items-center gap-2 pointer-events-auto">
                                    <div className="flex bg-slate-800 rounded-xl p-1 overflow-x-auto no-scrollbar">
@@ -868,6 +868,44 @@ export default function DriverDashboard() {
                                 </div>
                              )}
                              
+                             {/* Available Missions Indicator */}
+                             {isOnline && (
+                                <motion.div 
+                                  key={`avail-${filteredPendingJobs.length}`}
+                                  initial={{ x: -20, opacity: 0 }} 
+                                  animate={{ x: 0, opacity: 1 }} 
+                                  className={cn(
+                                    "px-4 py-2.5 rounded-2xl flex items-center gap-2.5 shadow-xl pointer-events-auto border select-none transition-all duration-300",
+                                    filteredPendingJobs.length > 0 
+                                      ? "bg-gradient-to-r from-orange-600 to-amber-500 text-white border-white/20" 
+                                      : "bg-slate-900/90 backdrop-blur-xl text-slate-300 border-slate-800"
+                                  )}
+                                >
+                                   {filteredPendingJobs.length > 0 ? (
+                                      <div className="relative flex h-2 w-2">
+                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                      </div>
+                                   ) : (
+                                      <div className="relative flex h-2 w-2">
+                                         <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-500/50 opacity-75"></span>
+                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                      </div>
+                                   )}
+                                   <div className="text-left font-sans">
+                                      <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none", filteredPendingJobs.length > 0 ? "text-orange-100" : "text-slate-400")}>
+                                         {filteredPendingJobs.length > 0 ? "Missions Dispo." : "Radar de course"}
+                                      </p>
+                                      <p className={cn("text-[11px] font-black mt-0.5 leading-none", filteredPendingJobs.length > 0 ? "text-white" : "text-slate-200")}>
+                                         {filteredPendingJobs.length > 0 
+                                            ? `${filteredPendingJobs.length} ${filteredPendingJobs.length > 1 ? 'disponibles' : 'disponible'}`
+                                            : "0 mission disponible"
+                                         }
+                                      </p>
+                                   </div>
+                                </motion.div>
+                             )}
+
                              {/* Verification Warning Floating below status */}
                              {profile?.verificationStatus !== 'verified' && (
                                 <motion.button 
@@ -1319,7 +1357,7 @@ export default function DriverDashboard() {
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             </h4>
                             <p className="text-[9px] text-slate-400 mt-0.5 leading-normal">
-                              Recherche de commandes à proximité de votre position...
+                              0 mission disponible • Recherche de commandes en cours...
                             </p>
                           </div>
                         </div>

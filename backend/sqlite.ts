@@ -7,9 +7,24 @@ export default function initSQLiteDB() {
   let db: any;
   let isCorrupted = false;
 
+  const registerCompatCollations = (d: any) => {
+    try {
+      const compare = (a: string, b: string) => {
+        if (a < b) return -1;
+        if (a > b) return 1;
+        return 0;
+      };
+      d.collation('utf8mb4_unicode_ci', compare);
+      d.collation('utf8mb4_general_ci', compare);
+    } catch (e) {
+      console.warn("Failed to register compatibility collations:", e);
+    }
+  };
+
 // Attempt to open and run a health check
 try {
   db = new Database(dbPath);
+  registerCompatCollations(db);
   
   // Integrity check
   const integrity = db.prepare("PRAGMA integrity_check").get() as any;
@@ -48,6 +63,7 @@ if (isCorrupted) {
   }
   // Open fresh database
   db = new Database(dbPath);
+  registerCompatCollations(db);
 }
 
 // Initialize schema under safety checks

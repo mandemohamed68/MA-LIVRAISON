@@ -1,12 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Home, Package, User, Wallet, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { api } from '../services/apiService';
 
 export default function BottomNav() {
   const { profile, isMasterAdmin } = useAuth();
   const location = useLocation();
+  const [availCount, setAvailCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!profile || profile.role !== 'driver') return;
+
+    const fetchCount = async () => {
+      try {
+        const jobs = await api.deliveries.list();
+        const pending = jobs.filter((j: any) => j.status === 'pending');
+        const filtered = pending.filter((j: any) => !j.rejectedBy?.includes(profile.userId));
+        setAvailCount(filtered.length);
+      } catch (e) {
+        // quiet fail
+      }
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 15000); // refresh every 15s
+    return () => clearInterval(interval);
+  }, [profile]);
 
   if (!profile) return null;
   if (location.pathname.startsWith('/admin')) return null;
@@ -48,7 +69,14 @@ export default function BottomNav() {
               isActive ? "text-[#5542F6]" : "text-slate-400 hover:text-slate-600"
             )}
           >
-            <item.icon className={cn("w-6 h-6 mb-1", isActive ? "stroke-[2.5px] text-[#5542F6]" : "stroke-2")} />
+            <div className="relative">
+              <item.icon className={cn("w-6 h-6 mb-1", isActive ? "stroke-[2.5px] text-[#5542F6]" : "stroke-2")} />
+              {item.label === 'ACCUEIL' && isDriver && availCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-orange-600 text-white font-black text-[8px] h-4 min-w-[16px] px-1 flex items-center justify-center rounded-full select-none animate-pulse shadow-md border border-white">
+                  {availCount}
+                </span>
+              )}
+            </div>
             <span className={cn("text-[9px] font-black tracking-[0.1em]", isActive ? "text-[#5542F6]" : "text-slate-400")}>
               {item.label}
             </span>

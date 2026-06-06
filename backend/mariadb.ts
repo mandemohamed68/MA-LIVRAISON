@@ -65,6 +65,11 @@ export default function initMariaDB() {
       conn.query("SELECT 1");
       connection = conn;
       
+      // Ensure session collation matches the database collation to avoid mix of collations errors
+      try {
+        conn.query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+      } catch (e) {}
+
       // Ensure database itself is utf8mb4
       try {
         conn.query(`ALTER DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
@@ -183,6 +188,70 @@ export default function initMariaDB() {
         lat double NOT NULL,
         lng double NOT NULL,
         timestamp datetime DEFAULT CURRENT_TIMESTAMP
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    // Create notifications table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id varchar(255) PRIMARY KEY,
+        userId varchar(255) NOT NULL,
+        title varchar(255) NOT NULL,
+        message text NOT NULL,
+        type varchar(50) DEFAULT 'info',
+        link text,
+        isRead tinyint(1) DEFAULT 0,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    // Create historique_gains table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS historique_gains (
+        id varchar(255) PRIMARY KEY,
+        driverId varchar(255) NOT NULL,
+        type varchar(50) NOT NULL,
+        amount double NOT NULL,
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    // Create message table if it doesn't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id varchar(255) PRIMARY KEY,
+        deliveryId varchar(255) NOT NULL,
+        text text NOT NULL,
+        senderId varchar(255) NOT NULL,
+        senderName varchar(255),
+        senderRole varchar(50),
+        createdAt datetime DEFAULT CURRENT_TIMESTAMP
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    // Create promo tables if they don't exist
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        code varchar(255) PRIMARY KEY,
+        type varchar(50) NOT NULL,
+        value double NOT NULL,
+        start_date varchar(255),
+        end_date varchar(255),
+        max_uses int,
+        uses_count int DEFAULT 0,
+        max_per_user int DEFAULT 1,
+        is_active tinyint(1) DEFAULT 1,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    connection.query(`
+      CREATE TABLE IF NOT EXISTS promo_usages (
+        id varchar(255) PRIMARY KEY,
+        code varchar(255) NOT NULL,
+        userId varchar(255) NOT NULL,
+        deliveryId varchar(255),
+        used_at datetime DEFAULT CURRENT_TIMESTAMP
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
     
